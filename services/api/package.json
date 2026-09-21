@@ -27,7 +27,8 @@
     "test": "vitest run",
     "typecheck": "tsc --noEmit -p tsconfig.check.json",
     "dev": "tsx src/server.ts",
-    "start": "node dist/server.js"
+    "start": "node dist/server.js",
+    "audio:generate": "tsx scripts/generate-dev-audio.ts"
   },
   "type": "module",
   "version": "0.1.0"

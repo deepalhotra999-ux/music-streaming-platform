@@ -10,8 +10,24 @@ export interface RateLimitConfig {
   logout: number;
   /** general API routes (all Phase 4 endpoints) */
   api: number;
+  /** HLS manifest/segment delivery — generous: a player fetches many segments */
+  streaming: number;
   /** window length in milliseconds */
   windowMs: number;
+}
+
+/** Where audio bytes come from. Only 'local' is implemented in Phase 7;
+ *  's3' is the reserved seam for AWS S3 + CloudFront (selecting it throws
+ *  a clear startup error until the provider is implemented). */
+export type AudioStorageDriver = 'local' | 's3';
+
+export interface StreamingConfig {
+  audioStorageDriver: AudioStorageDriver;
+  /** Local driver: directory holding per-track HLS packages. Relative paths
+   *  resolve from the API process working directory. */
+  audioStorageDir: string;
+  /** Lifetime of a playback session token, in seconds. */
+  playbackSessionTtlSeconds: number;
 }
 
 export interface Config {
@@ -24,6 +40,7 @@ export interface Config {
   accessTokenTtlSeconds: number;
   refreshTokenTtlSeconds: number;
   rateLimits: RateLimitConfig;
+  streaming: StreamingConfig;
 }
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
@@ -69,7 +86,21 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       refresh: int(env, 'RATE_LIMIT_REFRESH', 60),
       logout: int(env, 'RATE_LIMIT_LOGOUT', 60),
       api: int(env, 'RATE_LIMIT_API', 300),
+      streaming: int(env, 'RATE_LIMIT_STREAMING', 600),
       windowMs: int(env, 'RATE_LIMIT_WINDOW_MS', 60_000),
     },
+    streaming: {
+      audioStorageDriver: parseAudioStorageDriver(env.AUDIO_STORAGE_DRIVER),
+      audioStorageDir: env.AUDIO_STORAGE_DIR ?? './storage/audio',
+      playbackSessionTtlSeconds: int(env, 'PLAYBACK_SESSION_TTL_SECONDS', 900), // 15 min
+    },
   };
+}
+
+function parseAudioStorageDriver(raw: string | undefined): AudioStorageDriver {
+  if (raw === undefined || raw === '' || raw === 'local') return 'local';
+  if (raw === 's3') return 's3';
+  throw new Error(
+    `AUDIO_STORAGE_DRIVER must be "local" or "s3", got "${raw}".`,
+  );
 }

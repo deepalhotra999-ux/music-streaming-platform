@@ -69,6 +69,8 @@ model User {
   listeningHistory   ListeningHistory[]
   subscriptions      Subscription[]
   refreshTokens      RefreshToken[]
+  playbackSessions   PlaybackSession[]
+  playEvents         PlayEvent[]
 
   @@index([role])
   @@map("users")
@@ -156,6 +158,7 @@ model Track {
   playlistItems    PlaylistTrack[]
   likes            Like[]
   listeningHistory ListeningHistory[]
+  playbackSessions PlaybackSession[]
 
   @@index([artistId])
   @@index([albumId, trackNumber])
@@ -294,4 +297,52 @@ model RefreshToken {
 
   @@index([userId])
   @@map("refresh_tokens")
+}
+
+// Phase 7 — streaming. Playback sessions gate every audio byte: manifests
+// and segments are served only with a valid, unexpired session token, so the
+// API never exposes permanent public audio URLs. Tokens are opaque; only the
+// SHA-256 hash is stored (same pattern as Phase 3 refresh tokens).
+model PlaybackSession {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trackId   String   @map("track_id") @db.Uuid
+  track     Track    @relation(fields: [trackId], references: [id], onDelete: Restrict)
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  playEvents PlayEvent[]
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("playback_sessions")
+}
+
+// Phase 7 — streaming. Append-only stream telemetry (START / HEARTBEAT /
+// COMPLETE / ERROR). This is the raw material for royalty reporting and
+// fraud detection in later phases; it stays separate from the user-facing
+// listening_history. Partition by month when volume demands it.
+enum PlayEventType {
+  START
+  HEARTBEAT
+  COMPLETE
+  ERROR
+}
+
+model PlayEvent {
+  id         String        @id @default(uuid()) @db.Uuid
+  sessionId  String        @map("session_id") @db.Uuid
+  session    PlaybackSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId     String        @map("user_id") @db.Uuid
+  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trackId    String        @map("track_id") @db.Uuid
+  eventType  PlayEventType @map("event_type")
+  positionMs Int?          @map("position_ms")
+  createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([sessionId, createdAt])
+  @@index([trackId, createdAt])
+  @@map("play_events")
 }

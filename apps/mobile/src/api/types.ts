@@ -197,3 +197,15 @@ export interface PlaylistListItem {
 export interface PlaylistDetail extends PlaylistListItem {
   items: PlaylistItem[];
 }
+
+/** Phase 7 — playback session. `token` is shown once; `hlsUrl` is a
+ *  short-lived, session-scoped HLS master playlist URL (never permanent). */
+export interface PlaybackSession {
+  id: string;
+  token: string;
+  expiresAt: string;
+  hlsUrl: string;
+}
+
+/** Phase 7 — stream telemetry event types (append-only, royalty foundation). */
+export type PlayEventType = 'START' | 'HEARTBEAT' | 'COMPLETE' | 'ERROR';

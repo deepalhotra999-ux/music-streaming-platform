@@ -10,6 +10,10 @@ coverage/
 # Environment — never commit real secrets
 .env
 
+# Phase 7 — generated dev audio (HLS packages). Regenerate with:
+#   npm run audio:generate   (from services/api)
+services/api/storage/
+
 # OS / editor
 .DS_Store
 *.local

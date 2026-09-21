@@ -19,6 +19,7 @@ import { playlistsRoutes } from '../modules/playlists/routes.js';
 import { likesRoutes } from '../modules/likes/routes.js';
 import { followsRoutes } from '../modules/follows/routes.js';
 import { historyRoutes } from '../modules/history/routes.js';
+import { streamingRoutes } from '../modules/streaming/routes.js';
 
 export async function buildApp(config: Config): Promise<FastifyInstance> {
   const app = Fastify({
@@ -95,6 +96,7 @@ export async function buildApp(config: Config): Promise<FastifyInstance> {
     await likesRoutes(instance, config);
     await followsRoutes(instance, config);
     await historyRoutes(instance, config);
+    await streamingRoutes(instance, config);
   });
 
   return app;

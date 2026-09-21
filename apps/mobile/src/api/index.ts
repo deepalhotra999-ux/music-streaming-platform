@@ -3,6 +3,7 @@ export { getApiBaseUrl } from './config';
 export { ApiClient, ApiError, apiErrorMessage } from './client';
 export type { ApiClientOptions, HttpMethod, RequestOptions } from './client';
 export { getMe, login, logout, refreshTokens, register } from './auth';
+export { createPlaybackSession, reportPlayEvent } from './playback';
 export {
   getAlbum,
   getArtist,
@@ -29,6 +30,8 @@ export type {
   LoginInput,
   Page,
   PageInfo,
+  PlaybackSession,
+  PlayEventType,
   PlaylistDetail,
   PlaylistItem,
   PlaylistListItem,
