@@ -1,0 +1,28 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Test output
+coverage/
+
+# Environment — never commit real secrets
+.env
+
+# OS / editor
+.DS_Store
+*.local
+
+# Native app build dirs (Phase 9+)
+apps/ios/DerivedData/
+apps/ios/build/
+apps/android/.gradle/
+apps/android/build/
+
+# Runtime-owned (not part of the project)
+cron.d/
+onboarding_tour/
+scheduler/
+self_improvement/
+spaces/

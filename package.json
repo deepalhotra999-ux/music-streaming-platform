@@ -1,0 +1,33 @@
+{
+  "devDependencies": {
+    "@eslint/js": "^9.18.0",
+    "@types/node": "^22.10.0",
+    "eslint": "^9.18.0",
+    "prettier": "^3.4.0",
+    "typescript": "^5.7.0",
+    "typescript-eslint": "^8.18.0",
+    "vitest": "^3.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "name": "music-streaming-platform",
+  "packageManager": "npm@10.9.4",
+  "private": true,
+  "scripts": {
+    "dev:services": "docker compose up -d",
+    "dev:services:down": "docker compose down",
+    "format": "prettier --check .",
+    "format:write": "prettier --write .",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "type": "module",
+  "version": "0.1.0",
+  "workspaces": [
+    "services/*",
+    "workers/*",
+    "packages/*"
+  ]
+}
