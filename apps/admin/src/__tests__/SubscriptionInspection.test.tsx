@@ -26,9 +26,12 @@ function subscriptionDetail(): AdminSubscriptionDetail {
       plan: { id: 'premium_family', name: 'Premium Family', planType: 'FAMILY', active: true },
       provider: 'APPLE',
       status: 'PAST_DUE',
+      storeProductId: 'com.waveform.test.premium.family',
       currentPeriodStart: '2026-09-01T00:00:00.000Z',
       currentPeriodEnd: '2026-10-01T00:00:00.000Z',
       canceledAt: null,
+      verificationStatus: 'VERIFIED',
+      lastVerifiedAt: '2026-09-20T12:00:00.000Z',
       createdAt: '2026-09-01T00:00:00.000Z',
       updatedAt: '2026-09-01T00:00:00.000Z',
     },
@@ -55,6 +58,13 @@ function subscriptionDetail(): AdminSubscriptionDetail {
         createdAt: '2026-09-20T00:00:00.000Z',
       },
     ],
+    latestEvent: {
+      id: 'evt-2',
+      eventType: 'PAYMENT_FAILED',
+      statusFrom: 'ACTIVE',
+      statusTo: 'PAST_DUE',
+      createdAt: '2026-09-20T00:00:00.000Z',
+    },
   };
 }
 
@@ -98,6 +108,16 @@ describe('admin subscription inspection', () => {
     expect(screen.getByText('Entitled')).toBeInTheDocument();
   });
 
+  it('renders Phase 19 store fields: product id, verification, latest event', async () => {
+    await openDetail();
+    // Store product id resolved from the plan mapping.
+    expect(screen.getByText('com.waveform.test.premium.family')).toBeInTheDocument();
+    // Verification badge.
+    expect(screen.getByText('Verified')).toBeInTheDocument();
+    // Latest event at a glance (appears in the detail grid and the history table).
+    expect(screen.getAllByText(/PAYMENT_FAILED/).length).toBeGreaterThan(0);
+  });
+
   it('renders the append-only event history', async () => {
     await openDetail();
     expect(screen.getByText('Event history (2)')).toBeInTheDocument();
@@ -116,6 +136,7 @@ describe('admin subscription inspection', () => {
         reason: 'no_subscription',
       },
       events: [],
+      latestEvent: null,
     });
     expect(await screen.findByText('Leo Listener')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'View' }));

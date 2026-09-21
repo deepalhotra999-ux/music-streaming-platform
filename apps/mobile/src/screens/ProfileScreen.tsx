@@ -1,12 +1,18 @@
 // Phase 5 — Profile placeholder: account summary + sign out.
 // Phase 18 — adds the subscription section (server-reported state only).
+// Phase 19 — adds the store purchase sheet (expo-iap + server verification).
 
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Modal, StyleSheet, Text, View } from 'react-native';
 import { apiErrorMessage } from '../api';
 import { useAuth } from '../auth';
 import { Button, Screen } from '../components';
-import { SubscriptionCard, useSubscription } from '../subscriptions';
+import {
+  PurchaseSheet,
+  SubscriptionCard,
+  usePurchaseFlow,
+  useSubscription,
+} from '../subscriptions';
 import { colors, fontSize, fontWeight, radii, spacing } from '../theme';
 
 export function ProfileScreen() {
@@ -14,6 +20,13 @@ export function ProfileScreen() {
   const subscription = useSubscription(api);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
+  // Phase 19 — purchase sheet visibility.
+  const [purchaseVisible, setPurchaseVisible] = useState(false);
+  const purchaseFlow = usePurchaseFlow(api, () => {
+    // After the backend verifies a purchase, refresh server state.
+    // Entitlement is read from the server, never set locally.
+    subscription.retry();
+  });
 
   const handleSignOut = async () => {
     setSignOutError(null);
@@ -27,6 +40,13 @@ export function ProfileScreen() {
       setSigningOut(false);
     }
   };
+
+  // Show the subscribe button only when there is no active subscription.
+  const hasActiveSubscription =
+    subscription.data?.subscription != null &&
+    (subscription.data.subscription.status === 'ACTIVE' ||
+      subscription.data.subscription.status === 'TRIALING' ||
+      subscription.data.subscription.status === 'PAST_DUE');
 
   return (
     <Screen testID="profile-screen">
@@ -58,6 +78,27 @@ export function ProfileScreen() {
         error={subscription.state === 'error' ? subscription.error : null}
         onRetry={subscription.retry}
       />
+
+      {!hasActiveSubscription && subscription.state === 'ready' && (
+        <View style={styles.subscribeRow}>
+          <Button
+            title="Subscribe to Premium"
+            testID="subscribe-button"
+            onPress={() => setPurchaseVisible(true)}
+          />
+        </View>
+      )}
+
+      <Modal
+        visible={purchaseVisible}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setPurchaseVisible(false)}
+      >
+        <Screen testID="purchase-modal">
+          <PurchaseSheet flow={purchaseFlow} onClose={() => setPurchaseVisible(false)} />
+        </Screen>
+      </Modal>
 
       <View style={styles.signOut}>
         <Button
@@ -125,4 +166,5 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   signOut: { marginTop: spacing.xl },
+  subscribeRow: { marginTop: spacing.md },
 });

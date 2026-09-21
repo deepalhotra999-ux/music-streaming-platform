@@ -355,6 +355,40 @@ function UserDetail({
                 <p className="detail-value">{subscription.subscription.provider}</p>
               </div>
               <div className="detail-item">
+                <p className="detail-label">Store product</p>
+                <p className="detail-value mono">
+                  {subscription.subscription.storeProductId ?? '—'}
+                </p>
+              </div>
+              <div className="detail-item">
+                <p className="detail-label">Verification</p>
+                <p className="detail-value">
+                  {subscription.subscription.verificationStatus === 'VERIFIED' ? (
+                    <span className="badge badge-green">Verified</span>
+                  ) : (
+                    <span className="badge badge-gray">Unverified</span>
+                  )}
+                </p>
+              </div>
+              <div className="detail-item">
+                <p className="detail-label">Last verified</p>
+                <p className="detail-value">
+                  {subscription.subscription.lastVerifiedAt
+                    ? formatDate(subscription.subscription.lastVerifiedAt)
+                    : '—'}
+                </p>
+              </div>
+              {subscription.latestEvent && (
+                <div className="detail-item">
+                  <p className="detail-label">Latest event</p>
+                  <p className="detail-value mono">
+                    {subscription.latestEvent.eventType}
+                    {' · '}
+                    {formatDate(subscription.latestEvent.createdAt)}
+                  </p>
+                </div>
+              )}
+              <div className="detail-item">
                 <p className="detail-label">Playback entitlement</p>
                 <p className="detail-value">
                   {subscription.entitlement.entitled ? (

@@ -370,3 +370,30 @@ export interface MySubscription {
   subscription: Subscription | null;
   entitlement: Entitlement;
 }
+
+/** Phase 19 — a purchasable store product derived from the plan table. */
+export interface StoreProduct {
+  planCode: string;
+  planName: string;
+  planType: 'INDIVIDUAL' | 'FAMILY' | 'STUDENT';
+  appleProductId: string | null;
+  googleProductId: string | null;
+}
+
+/** Phase 19 — GET /v1/subscriptions/products response. */
+export interface StoreProductsResponse {
+  products: StoreProduct[];
+  appleConfigured: boolean;
+  googleConfigured: boolean;
+}
+
+/** Phase 19 — POST /v1/subscriptions/verify-purchase response. */
+export interface VerifyPurchaseResponse {
+  subscription: {
+    id: string;
+    planId: string;
+    provider: string;
+    status: string;
+  };
+  created: boolean;
+}

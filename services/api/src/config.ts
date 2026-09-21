@@ -2,6 +2,8 @@
 // Fail fast on missing/invalid values so misconfiguration surfaces at boot,
 // not on the first login attempt.
 
+import { readFileSync } from 'node:fs';
+
 export interface RateLimitConfig {
   /** requests per window, per IP */
   login: number;
@@ -55,6 +57,49 @@ export interface SubscriptionsConfig {
    * endpoint. Must never be true in production — loadConfig throws.
    */
   devEnabled: boolean;
+  /** Phase 19 — Apple App Store server integration. */
+  apple: AppleStoreConfig;
+  /** Phase 19 — Google Play server integration. */
+  google: GooglePlayConfig;
+}
+
+/**
+ * Phase 19 — Apple App Store server integration config. All values come
+ * from the environment (see .env.example); nothing is hard-coded. The
+ * integration is disabled unless every required value is present, so
+ * developers without store credentials can still run the project.
+ */
+export interface AppleStoreConfig {
+  /** True when all required Apple credentials are configured. */
+  enabled: boolean;
+  /** 'sandbox' (default) or 'production' — selects the App Store Server API host. */
+  environment: 'sandbox' | 'production';
+  /** App's bundle ID (e.g. com.musicstreaming.waveform). */
+  bundleId: string | null;
+  /** App Store Connect API key ID (10-char). */
+  keyId: string | null;
+  /** App Store Connect API issuer ID (UUID). */
+  issuerId: string | null;
+  /** ES256 private key PEM for App Store Server API JWTs. Never logged. */
+  privateKeyPem: string | null;
+}
+
+/**
+ * Phase 19 — Google Play server integration config. All values come from
+ * the environment; the integration is disabled unless configured.
+ */
+export interface GooglePlayConfig {
+  /** True when the service account and package name are configured. */
+  enabled: boolean;
+  /** Android application package (e.g. com.musicstreaming.waveform). */
+  packageName: string | null;
+  /** Service-account JSON (inline or file path). Never logged. */
+  serviceAccountJson: string | null;
+  /**
+   * Shared secret appended as ?token= to the Pub/Sub push endpoint URL.
+   * Google echoes it back so the endpoint can reject forged pushes.
+   */
+  pubsubVerificationToken: string | null;
 }
 
 export interface Config {
@@ -133,6 +178,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     },
     subscriptions: {
       devEnabled: parseDevSubscriptions(env),
+      apple: parseAppleStore(env),
+      google: parseGooglePlay(env),
     },
   };
 }
@@ -153,4 +200,56 @@ function parseAudioStorageDriver(raw: string | undefined): AudioStorageDriver {
   if (raw === undefined || raw === '' || raw === 'local') return 'local';
   if (raw === 's3') return 's3';
   throw new Error(`AUDIO_STORAGE_DRIVER must be "local" or "s3", got "${raw}".`);
+}
+
+/**
+ * Phase 19 — Apple App Store server config. The private key may be given
+ * inline (APPLE_PRIVATE_KEY, with literal \n escapes) or as a file path
+ * (APPLE_PRIVATE_KEY_PATH). Missing values disable the integration rather
+ * than failing startup, so developers without store credentials can run.
+ */
+function parseAppleStore(env: NodeJS.ProcessEnv): AppleStoreConfig {
+  const environment = env.APPLE_ENVIRONMENT ?? 'sandbox';
+  if (environment !== 'sandbox' && environment !== 'production') {
+    throw new Error(`APPLE_ENVIRONMENT must be "sandbox" or "production", got "${environment}".`);
+  }
+  const bundleId = env.APPLE_BUNDLE_ID ?? null;
+  const keyId = env.APPLE_KEY_ID ?? null;
+  const issuerId = env.APPLE_ISSUER_ID ?? null;
+  let privateKeyPem: string | null = null;
+  if (env.APPLE_PRIVATE_KEY) {
+    privateKeyPem = env.APPLE_PRIVATE_KEY.replace(/\\n/g, '\n');
+  } else if (env.APPLE_PRIVATE_KEY_PATH) {
+    // Read lazily at startup; a missing file disables the integration.
+    try {
+      privateKeyPem = readFileSync(env.APPLE_PRIVATE_KEY_PATH, 'utf8');
+    } catch {
+      privateKeyPem = null;
+    }
+  }
+  const enabled = Boolean(bundleId && keyId && issuerId && privateKeyPem);
+  return { enabled, environment, bundleId, keyId, issuerId, privateKeyPem };
+}
+
+/**
+ * Phase 19 — Google Play server config. The service account may be given
+ * inline (GOOGLE_SERVICE_ACCOUNT_JSON) or as a file path
+ * (GOOGLE_SERVICE_ACCOUNT_JSON_PATH). Missing values disable the
+ * integration rather than failing startup.
+ */
+function parseGooglePlay(env: NodeJS.ProcessEnv): GooglePlayConfig {
+  const packageName = env.GOOGLE_PACKAGE_NAME ?? null;
+  let serviceAccountJson: string | null = null;
+  if (env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+    serviceAccountJson = env.GOOGLE_SERVICE_ACCOUNT_JSON;
+  } else if (env.GOOGLE_SERVICE_ACCOUNT_JSON_PATH) {
+    try {
+      serviceAccountJson = readFileSync(env.GOOGLE_SERVICE_ACCOUNT_JSON_PATH, 'utf8');
+    } catch {
+      serviceAccountJson = null;
+    }
+  }
+  const pubsubVerificationToken = env.GOOGLE_PUBSUB_VERIFICATION_TOKEN ?? null;
+  const enabled = Boolean(packageName && serviceAccountJson);
+  return { enabled, packageName, serviceAccountJson, pubsubVerificationToken };
 }

@@ -66,8 +66,19 @@ async function scopedClean(): Promise<void> {
   const userWhere = { user: { email: { endsWith: TEST_DOMAIN } } };
   await prisma.playEvent.deleteMany({ where: userWhere });
   await prisma.playbackSession.deleteMany({ where: userWhere });
-  await prisma.subscriptionEvent.deleteMany({ where: { subscription: userWhere } });
-  await prisma.subscription.deleteMany({ where: userWhere });
+  // subscription_events is append-only (Phase 18 trigger rejects DELETE).
+  // Disable the trigger for test cleanup only, then re-enable it.
+  await prisma.$executeRawUnsafe(
+    'ALTER TABLE "subscription_events" DISABLE TRIGGER "subscription_events_no_delete"',
+  );
+  try {
+    await prisma.subscriptionEvent.deleteMany({ where: { subscription: userWhere } });
+    await prisma.subscription.deleteMany({ where: userWhere });
+  } finally {
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE "subscription_events" ENABLE TRIGGER "subscription_events_no_delete"',
+    );
+  }
   await prisma.refreshToken.deleteMany({ where: userWhere });
   await prisma.user.deleteMany({ where: { email: { endsWith: TEST_DOMAIN } } });
 }

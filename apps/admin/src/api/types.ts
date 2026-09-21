@@ -27,12 +27,12 @@ export interface AdminUser {
 /** Phase 17 — admin-only user detail: account status + owned artists. */
 export interface AdminUserDetail extends AdminUser {
   updatedAt: string;
-  ownedArtists: Array<{
+  ownedArtists: {
     id: string;
     name: string;
     verified: boolean;
     createdAt: string;
-  }>;
+  }[];
 }
 
 /** Phase 18 — subscription status values the admin console may display. */
@@ -45,6 +45,10 @@ export type SubscriptionProvider = 'APPLE' | 'GOOGLE' | 'DEV';
  * Phase 18 — admin subscription inspection. Read-only: status, plan,
  * provider, period, and the server-computed entitlement state. No payment
  * management surface exists.
+ *
+ * Phase 19 — adds the store product id (resolved from the plan mapping),
+ * the verification status (UNVERIFIED/VERIFIED), the last verification
+ * timestamp, and the latest event for at-a-glance inspection.
  */
 export interface AdminSubscriptionDetail {
   subscription: {
@@ -54,9 +58,12 @@ export interface AdminSubscriptionDetail {
     plan: { id: string; name: string; planType: string; active: boolean };
     provider: SubscriptionProvider;
     status: SubscriptionStatus;
+    storeProductId: string | null;
     currentPeriodStart: string | null;
     currentPeriodEnd: string | null;
     canceledAt: string | null;
+    verificationStatus: 'UNVERIFIED' | 'VERIFIED';
+    lastVerifiedAt: string | null;
     createdAt: string;
     updatedAt: string;
   } | null;
@@ -74,6 +81,13 @@ export interface AdminSubscriptionDetail {
     statusTo: SubscriptionStatus | null;
     createdAt: string;
   }[];
+  latestEvent: {
+    id: string;
+    eventType: string;
+    statusFrom: SubscriptionStatus | null;
+    statusTo: SubscriptionStatus | null;
+    createdAt: string;
+  } | null;
 }
 
 export type ModerationTargetType = 'ARTIST' | 'ALBUM' | 'TRACK';

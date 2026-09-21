@@ -45,7 +45,8 @@
           "recordAudioAndroid": false
         }
       ],
-      "expo-asset"
+      "expo-asset",
+      "expo-iap"
     ],
     "scheme": "waveform",
     "slug": "waveform",

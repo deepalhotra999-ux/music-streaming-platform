@@ -4,7 +4,12 @@ export { ApiClient, ApiError, apiErrorMessage } from './client';
 export type { ApiClientOptions, HttpMethod, RequestOptions } from './client';
 export { getMe, login, logout, refreshTokens, register } from './auth';
 export { createPlaybackSession, reportPlayEvent } from './playback';
-export { getMyEntitlement, getMySubscription } from './subscriptions';
+export {
+  getMyEntitlement,
+  getMySubscription,
+  getStoreProducts,
+  verifyPurchase,
+} from './subscriptions';
 export { getAudioStatus, retryTrackAudio, uploadTrackAudio } from './ingestion';
 export type { AudioStatus, UploadableAudio } from './ingestion';
 export {
@@ -117,6 +122,9 @@ export type {
   SubscriptionStatus,
   Entitlement,
   MySubscription,
+  StoreProduct,
+  StoreProductsResponse,
+  VerifyPurchaseResponse,
   TokenPair,
   TrackDetail,
   TrackGenreRef,

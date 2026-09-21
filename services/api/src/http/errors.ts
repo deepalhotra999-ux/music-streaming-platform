@@ -89,6 +89,14 @@ export const subscriptionRequired = (detail: string) =>
     type: 'https://api.music-streaming.local/problems/subscription-required',
   });
 
+// Phase 19 — 503 for store integrations that are not configured (or store
+// API outages). Failing closed: verification is impossible without the
+// integration, so the client can retry after the operator configures it.
+export const serviceUnavailable = (detail: string) =>
+  new HttpProblem(503, 'Service Unavailable', detail, {
+    type: 'https://api.music-streaming.local/problems/service-unavailable',
+  });
+
 function sendProblem(reply: FastifyReply, problem: Problem): FastifyReply {
   return reply.code(problem.status).type('application/problem+json').send(problem);
 }
