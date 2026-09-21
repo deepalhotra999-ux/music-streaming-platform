@@ -1,0 +1,9 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    // Explicit so jest globals are always typed, regardless of how the base
+    // config evolves or how typeRoots resolve from an extended config.
+    "types": ["jest", "node"]
+  }
+}

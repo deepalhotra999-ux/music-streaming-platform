@@ -34,7 +34,7 @@ npm run dev:services   # start PostgreSQL + Redis via Docker
 ## Layout
 
 ```
-apps/        ios, android — native projects (Phase 9+)
+apps/        ios, android — native projects (Phase 9+); mobile — Expo RN app (Phase 5+)
 services/    api — backend modular monolith (Phase 2+)
 workers/     transcoder — audio pipeline worker (Phase 4+)
 packages/    contracts — OpenAPI specs, shared types (Phase 2+)
@@ -56,9 +56,10 @@ tests/       repo-level toolchain tests
 - Phase 2: Prisma 6 + PostgreSQL 16 data model (13 tables), migration, idempotent seed.
 - Phase 3: authentication — register/login/logout, Argon2id passwords, HS256 access JWT + rotating opaque refresh tokens, `GET /v1/me`, JSON Schema validation, RFC 7807 errors, per-IP rate limits. See `docs/PHASE-3-REPORT.md`.
 - Phase 4: backend API — users, artists (+profiles), albums, tracks, genres, playlists (+items), likes, follows, listening history. Public catalog reads, ARTIST/ADMIN publishing, playlist visibility (public/unlisted/private), shared `?page=&limit=` pagination, Swagger/OpenAPI at `/docs`. See `docs/PHASE-4-REPORT.md` and `docs/adr/004-phase4-api-authorization-model.md`.
+- Phase 5: mobile foundation — Expo (React Native + TypeScript) app in `apps/mobile`: Expo Router navigation (splash, auth stack, bottom tabs), design-system foundation, Splash/Login/Register + Home/Search/Library/Profile placeholders, reusable API client, secure (Keychain/Keystore) session persistence, real auth against the Phase 4 API. See `docs/PHASE-5-REPORT.md` and `docs/adr/005-mobile-stack-expo-react-native.md`. Phase 6 not started.
 
 ## What's intentionally not here yet
 
 Audio streaming, HLS/CDN, subscriptions, payments, artist payouts,
-recommendations, mobile UI (later phases). Placeholders mark where each
+recommendations, mobile player/search/playlists (later phases). Placeholders mark where each
 phase's code will land.
