@@ -3,7 +3,7 @@
 
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import type { ReactNode } from 'react';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, type Edge } from 'react-native-safe-area-context';
 import { colors, spacing } from '../theme';
 
 interface ScreenProps {
@@ -12,17 +12,20 @@ interface ScreenProps {
   scrollable?: boolean;
   /** Horizontal padding (default md). */
   padded?: boolean;
+  /** Safe-area edges. Screens under a native header pass ['bottom'] to avoid
+   * double top inset; tab screens keep the default ['top', 'bottom']. */
+  edges?: Edge[];
   testID?: string;
 }
 
-export function Screen({ children, scrollable = true, padded = true, testID }: ScreenProps) {
+export function Screen({ children, scrollable = true, padded = true, edges, testID }: ScreenProps) {
   const content = (
     <View style={[styles.inner, padded && styles.padded]} testID={testID}>
       {children}
     </View>
   );
   return (
-    <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+    <SafeAreaView style={styles.safe} edges={edges ?? ['top', 'bottom']}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}

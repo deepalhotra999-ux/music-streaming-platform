@@ -52,3 +52,148 @@ export interface LoginInput {
   email: string;
   password: string;
 }
+
+// ---------------------------------------------------------------------------
+// Phase 6 — catalog contract types.
+// Mirror the Phase 4 backend JSON shapes
+// (services/api/src/modules/{artists,albums,tracks,genres,playlists}/schemas.ts).
+// Plain interfaces only; screens never depend on fetch details.
+// ---------------------------------------------------------------------------
+
+/** Standard `{ data, pagination }` envelope on every list endpoint. */
+export interface PageInfo {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+}
+
+export interface Page<T> {
+  data: T[];
+  pagination: PageInfo;
+}
+
+export interface ArtistListItem {
+  id: string;
+  name: string;
+  verified: boolean;
+  followerCount: number;
+  createdAt: string;
+}
+
+export interface ArtistProfile {
+  bio: string | null;
+  imageUrl: string | null;
+  bannerUrl: string | null;
+  website: string | null;
+  socialLinks: unknown;
+}
+
+export interface ArtistDetail {
+  id: string;
+  name: string;
+  verified: boolean;
+  createdAt: string;
+  updatedAt: string;
+  profile: ArtistProfile | null;
+  counts: { albums: number; tracks: number; followers: number };
+}
+
+export type AlbumType = 'ALBUM' | 'SINGLE' | 'EP' | 'COMPILATION';
+
+export interface AlbumListItem {
+  id: string;
+  title: string;
+  artistId: string;
+  artistName: string;
+  albumType: AlbumType;
+  releaseDate: string | null;
+  coverArtUrl: string | null;
+  trackCount: number;
+  createdAt: string;
+}
+
+export interface AlbumTrack {
+  id: string;
+  title: string;
+  durationMs: number;
+  trackNumber: number | null;
+  discNumber: number;
+  status: string;
+}
+
+export interface AlbumDetail extends AlbumListItem {
+  tracks: AlbumTrack[];
+}
+
+export type TrackStatus = 'PROCESSING' | 'READY' | 'FAILED' | 'TAKEDOWN';
+
+export interface TrackListItem {
+  id: string;
+  title: string;
+  artistId: string;
+  artistName: string;
+  albumId: string | null;
+  albumTitle: string | null;
+  durationMs: number;
+  trackNumber: number | null;
+  discNumber: number;
+  status: TrackStatus;
+  playCount: number;
+  createdAt: string;
+}
+
+export interface TrackGenreRef {
+  id: string;
+  name: string;
+}
+
+export interface TrackDetail extends TrackListItem {
+  isrc: string | null;
+  genres: TrackGenreRef[];
+  likeCount: number;
+}
+
+export interface Genre {
+  id: string;
+  name: string;
+  description: string | null;
+  trackCount: number;
+}
+
+export type PlaylistVisibility = 'PRIVATE' | 'PUBLIC' | 'UNLISTED';
+
+export interface TrackSummary {
+  id: string;
+  title: string;
+  durationMs: number;
+  status: string;
+  artistId: string;
+  artistName: string;
+  albumId: string | null;
+  albumTitle: string | null;
+}
+
+export interface PlaylistItem {
+  id: string;
+  position: number;
+  addedAt: string;
+  track: TrackSummary;
+}
+
+export interface PlaylistListItem {
+  id: string;
+  title: string;
+  description: string | null;
+  coverArtUrl: string | null;
+  visibility: PlaylistVisibility;
+  ownerUserId: string;
+  ownerDisplayName: string;
+  trackCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PlaylistDetail extends PlaylistListItem {
+  items: PlaylistItem[];
+}

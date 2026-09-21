@@ -1,5 +1,5 @@
 // Phase 5 — main bottom tabs (authenticated area).
-// Tab content is intentionally placeholder; real features land in later phases.
+// Home is the Phase 6 catalog; Search/Library are placeholders for later phases.
 
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';

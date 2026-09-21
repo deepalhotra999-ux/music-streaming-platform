@@ -33,6 +33,7 @@ function RootNavigator() {
         </Stack.Protected>
         <Stack.Protected guard={isAuthenticated}>
           <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="(catalog)" />
         </Stack.Protected>
       </Stack>
     </>

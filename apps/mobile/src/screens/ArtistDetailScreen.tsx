@@ -1,0 +1,243 @@
+// Phase 6 — artist detail: profile header plus the artist's albums and
+// top tracks. The artist drives the full-screen states; related rails
+// degrade to inline errors so one failing request never hides the profile.
+
+import { useCallback, useEffect, useState } from 'react';
+import { FlatList, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
+import { Stack, useRouter } from 'expo-router';
+import type {
+  AlbumListItem,
+  ApiClient,
+  ArtistDetail,
+  TrackListItem,
+} from '../api';
+import { apiErrorMessage, getArtist, listAlbums, listTracks } from '../api';
+import { useAuth } from '../auth';
+import {
+  AlbumCard,
+  ArtworkImage,
+  TrackRow,
+  formatAlbumCount,
+  formatFollowerCount,
+  formatTrackCount,
+} from '../catalog';
+import { EmptyState, ErrorState, LoadingState, Screen } from '../components';
+import { colors, fontSize, fontWeight, spacing } from '../theme';
+
+interface ArtistDetailData {
+  artist: ArtistDetail;
+  albums: AlbumListItem[];
+  tracks: TrackListItem[];
+  relatedError: unknown;
+}
+
+async function loadArtistDetail(api: ApiClient, artistId: string): Promise<ArtistDetailData> {
+  const artist = await getArtist(api, artistId);
+  const [albumsResult, tracksResult] = await Promise.allSettled([
+    listAlbums(api, { artistId, limit: 10 }).then((p) => p.data),
+    listTracks(api, { artistId, limit: 5 }).then((p) => p.data),
+  ]);
+  return {
+    artist,
+    albums: albumsResult.status === 'fulfilled' ? albumsResult.value : [],
+    tracks: tracksResult.status === 'fulfilled' ? tracksResult.value : [],
+    relatedError:
+      albumsResult.status === 'rejected'
+        ? albumsResult.reason
+        : tracksResult.status === 'rejected'
+          ? tracksResult.reason
+          : null,
+  };
+}
+
+export function ArtistDetailScreen({ artistId }: { artistId: string }) {
+  const { api } = useAuth();
+  const router = useRouter();
+  const [data, setData] = useState<ArtistDetailData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<unknown>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      setData(await loadArtistDetail(api, artistId));
+    } catch (err) {
+      setError(err);
+    } finally {
+      setLoading(false);
+    }
+  }, [api, artistId]);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  if (loading) {
+    return (
+      <Screen scrollable={false} padded={false} edges={['bottom']} testID="artist-detail-screen">
+        <LoadingState message="Loading artist…" />
+      </Screen>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <Screen scrollable={false} padded={false} edges={['bottom']} testID="artist-detail-screen">
+        <ErrorState message={apiErrorMessage(error)} onRetry={load} />
+      </Screen>
+    );
+  }
+
+  const { artist } = data;
+  const profile = artist.profile;
+
+  return (
+    <Screen scrollable={false} padded={false} edges={['bottom']} testID="artist-detail-screen">
+      <Stack.Screen options={{ title: artist.name }} />
+      <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.header}>
+          <ArtworkImage
+            uri={profile?.imageUrl}
+            title={artist.name}
+            seed={artist.id}
+            size={120}
+            shape="circle"
+          />
+          <View style={styles.nameRow}>
+            <Text style={styles.name}>{artist.name}</Text>
+            {artist.verified ? (
+              <Ionicons name="checkmark-circle" size={fontSize.lg} color={colors.primary} />
+            ) : null}
+          </View>
+          <Text style={styles.counts}>
+            {formatAlbumCount(artist.counts.albums)} • {formatTrackCount(artist.counts.tracks)} •{' '}
+            {formatFollowerCount(artist.counts.followers)}
+          </Text>
+          {profile?.bio ? <Text style={styles.bio}>{profile.bio}</Text> : null}
+        </View>
+
+        {data.relatedError ? (
+          <Text style={styles.inlineError}>{apiErrorMessage(data.relatedError)}</Text>
+        ) : null}
+
+        {data.albums.length > 0 ? (
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Albums</Text>
+            <FlatList
+              horizontal
+              data={data.albums}
+              keyExtractor={(a) => a.id}
+              renderItem={({ item }) => (
+                <AlbumCard album={item} onPress={() => router.push(`/album/${item.id}`)} />
+              )}
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.railContent}
+            />
+          </View>
+        ) : null}
+
+        <View style={styles.section}>
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionTitleBare}>Tracks</Text>
+            {data.tracks.length > 0 ? (
+              <Text
+                style={styles.seeAll}
+                onPress={() =>
+                  router.push({
+                    pathname: '/tracks',
+                    params: { artistId: artist.id, artistName: artist.name },
+                  })
+                }
+              >
+                See all
+              </Text>
+            ) : null}
+          </View>
+          {data.tracks.length === 0 ? (
+            <EmptyState title="No tracks yet" message="This artist hasn't released any tracks." />
+          ) : (
+            data.tracks.map((track, i) => (
+              <TrackRow
+                key={track.id}
+                track={track}
+                index={i + 1}
+                onPress={() =>
+                  router.push(track.albumId ? `/album/${track.albumId}` : `/artist/${artist.id}`)
+                }
+              />
+            ))
+          )}
+        </View>
+      </ScrollView>
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  content: { paddingBottom: spacing.xxl },
+  header: {
+    alignItems: 'center',
+    paddingHorizontal: spacing.lg,
+    paddingTop: spacing.lg,
+    paddingBottom: spacing.md,
+  },
+  nameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  name: {
+    color: colors.text,
+    fontSize: fontSize.xxl,
+    fontWeight: fontWeight.bold,
+    textAlign: 'center',
+  },
+  counts: {
+    color: colors.textMuted,
+    fontSize: fontSize.sm,
+    marginTop: spacing.xs,
+  },
+  bio: {
+    color: colors.textMuted,
+    fontSize: fontSize.sm,
+    lineHeight: fontSize.sm * 1.6,
+    textAlign: 'center',
+    marginTop: spacing.md,
+  },
+  inlineError: {
+    color: colors.error,
+    fontSize: fontSize.sm,
+    textAlign: 'center',
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  section: { marginTop: spacing.xl },
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  sectionTitle: {
+    color: colors.text,
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.semibold,
+    paddingHorizontal: spacing.lg,
+    marginBottom: spacing.sm,
+  },
+  sectionTitleBare: {
+    color: colors.text,
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.semibold,
+  },
+  seeAll: {
+    color: colors.primary,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
+  },
+  railContent: { paddingHorizontal: spacing.lg },
+});

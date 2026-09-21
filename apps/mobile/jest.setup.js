@@ -7,13 +7,29 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: jest.fn(async () => undefined),
 }));
 
-jest.mock('expo-router', () => {
-  const React = require('react');
+// Vector icons pull in expo-font/expo-asset native deps in tests; a stub keeps
+// component tests focused on UI structure.
+jest.mock('@expo/vector-icons', () => {
+  const Stub = () => null;
+  return {
+    __esModule: true,
+    Ionicons: Stub,
+    MaterialIcons: Stub,
+    default: Stub,
+  };
+});
+
+jest.mock('expo-router', () => {  const React = require('react');
+  const routerMock = { push: jest.fn(), replace: jest.fn(), back: jest.fn() };
   return {
     __esModule: true,
     Link: ({ asChild, children }) =>
       asChild ? children : React.createElement(React.Fragment, null, children),
-    useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn() }),
+    Stack: { Screen: () => null },
+    router: routerMock,
+    useRouter: () => routerMock,
+    useNavigation: () => ({ setOptions: jest.fn(), goBack: jest.fn() }),
+    useLocalSearchParams: () => ({}),
     useSegments: () => [],
     usePathname: () => '/',
   };
