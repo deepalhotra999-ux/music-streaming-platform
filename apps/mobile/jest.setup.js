@@ -25,6 +25,25 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: jest.fn(async () => undefined),
 }));
 
+// AsyncStorage backs recent searches; an in-memory double keeps search
+// tests hermetic. Individual recents tests inject their own storage.
+jest.mock('@react-native-async-storage/async-storage', () => {
+  const store = new Map();
+  return {
+    __esModule: true,
+    default: {
+      getItem: jest.fn(async (key) => (store.has(key) ? store.get(key) : null)),
+      setItem: jest.fn(async (key, value) => {
+        store.set(key, value);
+      }),
+      removeItem: jest.fn(async (key) => {
+        store.delete(key);
+      }),
+      __reset: () => store.clear(),
+    },
+  };
+});
+
 // Vector icons pull in expo-font/expo-asset native deps in tests; a stub keeps
 // component tests focused on UI structure.
 jest.mock('@expo/vector-icons', () => {
