@@ -26,11 +26,26 @@ the product profile.
 - `id` (uuid, pk)
 - `auth_subject` (text, unique) — OIDC `sub` claim; the join key to the provider
 - `email` (citext, unique), `email_verified` (bool)
+- `password_hash` (text, nullable) — Argon2id hash; null for passwordless
+  (future social-login) accounts. Added in Phase 3.
 - `display_name` (text), `avatar_url` (text, nullable)
 - `role` (enum: `listener`, `artist`, `admin`) — default `listener`; a user can
   be both listener and artist
 - `country_code` (char(2)) — for licensing/catalog availability later
 - `deleted_at` (timestamptz, nullable)
+
+### refresh_tokens (Phase 3)
+
+Server-side session rows for opaque refresh tokens. Only the SHA-256 hash is
+stored — a database read never yields a usable token.
+
+- `id` (uuid, pk)
+- `user_id` (fk → users, cascade on user delete)
+- `token_hash` (text, unique) — hex SHA-256 of the opaque token
+- `expires_at` (timestamptz) — 30 days from issuance
+- `revoked_at` (timestamptz, nullable) — set on rotation, logout, or reuse detection
+- `replaced_at` (timestamptz, nullable) — set when revoked _by rotation_; a
+  reused rotated token triggers family-wide revocation (suspected theft)
 
 ### artists
 

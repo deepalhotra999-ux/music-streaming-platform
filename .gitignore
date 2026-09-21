@@ -29,6 +29,7 @@ spaces/
 
 # Local Prisma engine mirror (dev-environment workaround, see Phase 2 notes)
 .prisma-mirror/
+.pgdata/
 
 # Build / runtime
 *.tsbuildinfo

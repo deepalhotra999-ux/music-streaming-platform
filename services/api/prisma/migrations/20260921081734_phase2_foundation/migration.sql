@@ -1,3 +1,7 @@
+-- Required for the CITEXT email columns below. (Added 2026-09-21: the original
+-- migration assumed the extension already existed in the target database.)
+CREATE EXTENSION IF NOT EXISTS citext;
+
 -- CreateEnum
 CREATE TYPE "UserRole" AS ENUM ('LISTENER', 'ARTIST', 'ADMIN');
 
