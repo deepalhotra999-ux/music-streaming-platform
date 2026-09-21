@@ -51,5 +51,54 @@ export const userListQuery = {
     limit: { type: 'string', pattern: '^[1-9][0-9]*$' },
     q: { type: 'string', minLength: 1, maxLength: 100 },
     role: { type: 'string', enum: ['LISTENER', 'ARTIST', 'ADMIN'] },
+    // Phase 17 — admin-only (the list route is ADMIN-only). Lets operators
+    // see soft-deleted accounts. Accepts 'true'/'false' strings.
+    includeDeleted: { type: 'string', enum: ['true', 'false'] },
+  },
+} as const;
+
+/**
+ * Phase 17 — admin-only user detail for the operations console: account
+ * status (deletedAt) plus the artists the user owns. Never includes
+ * credentials; the service select is explicit.
+ */
+export const adminUserDetailSchema = {
+  type: 'object',
+  required: [
+    'id',
+    'email',
+    'displayName',
+    'avatarUrl',
+    'role',
+    'emailVerified',
+    'countryCode',
+    'createdAt',
+    'updatedAt',
+    'ownedArtists',
+  ],
+  properties: {
+    id: { type: 'string', format: 'uuid' },
+    email: { type: 'string' },
+    displayName: { type: 'string' },
+    avatarUrl: { type: ['string', 'null'] },
+    role: { type: 'string', enum: ['LISTENER', 'ARTIST', 'ADMIN'] },
+    emailVerified: { type: 'boolean' },
+    countryCode: { type: ['string', 'null'] },
+    createdAt: { type: 'string', format: 'date-time' },
+    updatedAt: { type: 'string', format: 'date-time' },
+    deletedAt: { type: ['string', 'null'], format: 'date-time' },
+    ownedArtists: {
+      type: 'array',
+      items: {
+        type: 'object',
+        required: ['id', 'name', 'verified', 'createdAt'],
+        properties: {
+          id: { type: 'string', format: 'uuid' },
+          name: { type: 'string' },
+          verified: { type: 'boolean' },
+          createdAt: { type: 'string', format: 'date-time' },
+        },
+      },
+    },
   },
 } as const;

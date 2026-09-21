@@ -8,3 +8,4 @@ export * as artistsApi from './artists';
 export * as catalogApi from './catalog';
 export * as analyticsApi from './analytics';
 export * as auditApi from './audit';
+export * as moderationApi from './moderation';

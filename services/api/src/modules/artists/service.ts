@@ -249,6 +249,7 @@ export async function deleteArtist(id: string, actor: AuthUser, db: Db = prisma)
     where: { id, deletedAt: null },
     select: {
       id: true,
+      name: true,
       ownerUserId: true,
       _count: {
         select: {
@@ -268,6 +269,20 @@ export async function deleteArtist(id: string, actor: AuthUser, db: Db = prisma)
     throw conflict("Remove the artist's albums and tracks first.");
   }
   await db.artist.update({ where: { id }, data: { deletedAt: new Date() } });
+  // Phase 17 — admin deletions are audited. Owner deletions are not admin
+  // actions, so they write no audit row.
+  if (isAdmin(actor)) {
+    await recordAuditEvent(
+      {
+        actorId: actor.id,
+        action: 'artist.deleted',
+        targetType: 'artist',
+        targetId: id,
+        metadata: { name: existing.name },
+      },
+      db,
+    );
+  }
 }
 
 export async function getArtistProfile(

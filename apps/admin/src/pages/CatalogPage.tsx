@@ -15,6 +15,7 @@ import {
   getTrack,
   listAlbums,
   listTracks,
+  updateTrackStatus,
 } from '../api/catalog';
 import { listArtists } from '../api/artists';
 import type {
@@ -559,9 +560,12 @@ function TrackDetailView({
   onDelete: (track: TrackListItem) => Promise<void>;
 }): React.ReactNode {
   const { client } = useAuth();
+  const { confirm, dialog } = useConfirm();
   const [track, setTrack] = useState<TrackDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -579,6 +583,44 @@ function TrackDetailView({
     void load();
   }, [load]);
 
+  async function handleTakedown(): Promise<void> {
+    if (!track) return;
+    setActionError(null);
+    const confirmed = await confirm({
+      title: 'Take down this track?',
+      message: `“${track.title}” will be removed from the public catalog immediately (status → TAKEDOWN). The track is not deleted. This action is recorded in the audit log.`,
+      confirmLabel: 'Take down',
+    });
+    if (!confirmed) return;
+    setSaving(true);
+    try {
+      setTrack(await updateTrackStatus(client, track.id, 'TAKEDOWN'));
+    } catch (err) {
+      setActionError(apiErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRestore(): Promise<void> {
+    if (!track) return;
+    setActionError(null);
+    const confirmed = await confirm({
+      title: 'Restore this track?',
+      message: `“${track.title}” will return to PROCESSING and become eligible for re-ingestion (only the audio pipeline may mark a track READY). This action is recorded in the audit log.`,
+      confirmLabel: 'Restore',
+    });
+    if (!confirmed) return;
+    setSaving(true);
+    try {
+      setTrack(await updateTrackStatus(client, track.id, 'PROCESSING'));
+    } catch (err) {
+      setActionError(apiErrorMessage(err));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (loading) return <LoadingState label="Loading track…" />;
   if (error) return <ErrorState error={error} onRetry={() => void load()} />;
   if (!track) return <EmptyState message="Track not found." />;
@@ -588,6 +630,11 @@ function TrackDetailView({
       <button type="button" className="link-button back-link" onClick={onBack}>
         ← Back to tracks
       </button>
+      {actionError && (
+        <div className="form-error" role="alert">
+          {actionError}
+        </div>
+      )}
       <div className="card">
         <h2>{track.title}</h2>
         <div className="detail-grid">
@@ -637,6 +684,20 @@ function TrackDetailView({
           </div>
         </div>
         <div className="toolbar" style={{ marginTop: 16 }}>
+          {track.status === 'TAKEDOWN' ? (
+            <button type="button" className="btn btn-primary" disabled={saving} onClick={() => void handleRestore()}>
+              {saving ? 'Restoring…' : 'Restore track'}
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-outline-danger"
+              disabled={saving}
+              onClick={() => void handleTakedown()}
+            >
+              {saving ? 'Taking down…' : 'Take down'}
+            </button>
+          )}
           <button
             type="button"
             className="btn btn-outline-danger"
@@ -645,7 +706,13 @@ function TrackDetailView({
             Delete track
           </button>
         </div>
+        <p className="muted" style={{ fontSize: 13 }}>
+          Takedown hides the track from the public catalog without deleting it. Delete is a
+          soft delete (the track is hidden and recoverable). Both actions are recorded in the
+          audit log.
+        </p>
       </div>
+      {dialog}
     </div>
   );
 }

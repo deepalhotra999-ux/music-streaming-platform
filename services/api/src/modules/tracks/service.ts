@@ -4,9 +4,10 @@
 
 import { Prisma, type PrismaClient, type TrackStatus, type AudioIngestStatus } from '@prisma/client';
 import { prisma } from '../../db.js';
+import { recordAuditEvent } from '../audit/service.js';
 import { badRequest, conflict, forbidden, notFound, unprocessableEntity } from '../../http/errors.js';
 import type { AuthUser } from '../../http/auth.js';
-import { canManageArtist } from '../../http/authorization.js';
+import { canManageArtist, isAdmin } from '../../http/authorization.js';
 import {
   pageEnvelope,
   parsePagination,
@@ -253,6 +254,8 @@ export async function updateTrack(
     where: { id, deletedAt: null },
     select: {
       id: true,
+      title: true,
+      status: true,
       artistId: true,
       artist: { select: { id: true, ownerUserId: true } },
     },
@@ -287,6 +290,20 @@ export async function updateTrack(
       },
       include: detailInclude,
     });
+    // Phase 17 — admin status changes (takedown/restore) are audited. Owner
+    // edits are not admin actions, so they write no audit row.
+    if (isAdmin(actor) && input.status !== undefined && input.status !== existing.status) {
+      await recordAuditEvent(
+        {
+          actorId: actor.id,
+          action: 'track.status.changed',
+          targetType: 'track',
+          targetId: id,
+          metadata: { title: existing.title, oldStatus: existing.status, newStatus: row.status },
+        },
+        db,
+      );
+    }
     return toDetail(row);
   } catch (err) {
     if (isUniqueViolation(err)) {
@@ -299,7 +316,11 @@ export async function updateTrack(
 export async function deleteTrack(id: string, actor: AuthUser, db: Db = prisma): Promise<void> {
   const existing = await db.track.findFirst({
     where: { id, deletedAt: null },
-    select: { id: true, artist: { select: { id: true, ownerUserId: true } } },
+    select: {
+      id: true,
+      title: true,
+      artist: { select: { id: true, ownerUserId: true } },
+    },
   });
   if (!existing) {
     throw notFound('Track not found.');
@@ -312,4 +333,18 @@ export async function deleteTrack(id: string, actor: AuthUser, db: Db = prisma):
     throw conflict('Track is in playlists; remove it from playlists first.');
   }
   await db.track.update({ where: { id }, data: { deletedAt: new Date() } });
+  // Phase 17 — admin deletions are audited. Owner deletions are not admin
+  // actions, so they write no audit row.
+  if (isAdmin(actor)) {
+    await recordAuditEvent(
+      {
+        actorId: actor.id,
+        action: 'track.deleted',
+        targetType: 'track',
+        targetId: id,
+        metadata: { title: existing.title },
+      },
+      db,
+    );
+  }
 }

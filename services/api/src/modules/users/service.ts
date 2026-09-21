@@ -25,6 +25,7 @@ interface UserRow {
   emailVerified: boolean;
   countryCode: string | null;
   createdAt: Date;
+  deletedAt: Date | null;
 }
 
 export interface PublicUserDto {
@@ -36,6 +37,7 @@ export interface PublicUserDto {
   emailVerified: boolean;
   countryCode: string | null;
   createdAt: Date;
+  deletedAt: Date | null;
 }
 
 function toPublicUser(row: UserRow): PublicUserDto {
@@ -48,10 +50,11 @@ function toPublicUser(row: UserRow): PublicUserDto {
     emailVerified: row.emailVerified,
     countryCode: row.countryCode,
     createdAt: row.createdAt,
+    deletedAt: row.deletedAt,
   };
 }
 
-export interface UserProfileDto extends Omit<PublicUserDto, 'email' | 'emailVerified'> {
+export interface UserProfileDto extends Omit<PublicUserDto, 'email' | 'emailVerified' | 'deletedAt'> {
   email?: string;
 }
 
@@ -74,6 +77,9 @@ function toProfile(row: UserRow, viewer: AuthUser): UserProfileDto {
 export interface ListUsersQuery extends PaginationQuery {
   q?: string;
   role?: UserRole;
+  // Phase 17 — admin-only. The /v1/users list route is ADMIN-only, so this
+  // flag is safe here: it lets operators see soft-deleted accounts.
+  includeDeleted?: boolean;
 }
 
 export async function listUsers(
@@ -82,7 +88,7 @@ export async function listUsers(
 ): Promise<PageEnvelope<PublicUserDto>> {
   const p = parsePagination(query);
   const where = {
-    deletedAt: null,
+    ...(query.includeDeleted ? {} : { deletedAt: null }),
     ...(query.role ? { role: query.role } : {}),
     ...(query.q
       ? {
@@ -115,6 +121,64 @@ export async function getUserProfile(
     throw notFound('User not found.');
   }
   return toProfile(row, viewer);
+}
+
+export interface AdminUserDetailDto extends PublicUserDto {
+  updatedAt: Date;
+  ownedArtists: Array<{
+    id: string;
+    name: string;
+    verified: boolean;
+    createdAt: Date;
+  }>;
+}
+
+/**
+ * Phase 17 — admin-only user detail for the operations console. Includes
+ * account status (deletedAt) and the artists the user owns. Never includes
+ * credentials: the select below is explicit and excludes passwordHash,
+ * tokens, and secrets by construction.
+ */
+export async function getAdminUserDetail(
+  id: string,
+  db: Db = prisma,
+): Promise<AdminUserDetailDto> {
+  const row = await db.user.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      email: true,
+      displayName: true,
+      avatarUrl: true,
+      role: true,
+      emailVerified: true,
+      countryCode: true,
+      createdAt: true,
+      updatedAt: true,
+      deletedAt: true,
+      artists: {
+        where: { deletedAt: null },
+        select: { id: true, name: true, verified: true, createdAt: true },
+        orderBy: { createdAt: 'desc' },
+      },
+    },
+  });
+  if (!row) {
+    throw notFound('User not found.');
+  }
+  return {
+    id: row.id,
+    email: row.email,
+    displayName: row.displayName,
+    avatarUrl: row.avatarUrl,
+    role: row.role,
+    emailVerified: row.emailVerified,
+    countryCode: row.countryCode,
+    createdAt: row.createdAt,
+    deletedAt: row.deletedAt,
+    updatedAt: row.updatedAt,
+    ownedArtists: row.artists,
+  };
 }
 
 export interface UpdateMeInput {

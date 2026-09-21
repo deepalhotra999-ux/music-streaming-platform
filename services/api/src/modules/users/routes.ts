@@ -8,6 +8,7 @@ import { pageOf, type PaginationQuery } from '../../http/pagination.js';
 import { requireRole } from '../../http/authorization.js';
 import { apiRateLimit } from '../../http/limits.js';
 import {
+  adminUserDetailSchema,
   publicUserSchema,
   updateMeBody,
   updateRoleBody,
@@ -15,10 +16,12 @@ import {
   userProfileSchema,
 } from './schemas.js';
 import {
+  getAdminUserDetail,
   getUserProfile,
   listUsers,
   updateMe,
   updateUserRole,
+  type AdminUserDetailDto,
   type ListUsersQuery,
   type UpdateMeInput,
 } from './service.js';
@@ -37,14 +40,16 @@ const idParams = {
 export async function usersRoutes(app: FastifyInstance, config: Config): Promise<void> {
   const limit = apiRateLimit(config);
 
-  app.get<{ Querystring: PaginationQuery & { q?: string; role?: UserRole } }>(
+  app.get<{ Querystring: PaginationQuery & { q?: string; role?: UserRole; includeDeleted?: string } }>(
     '/v1/users',
     {
       preHandler: [app.authenticate, requireRole('ADMIN')],
       schema: {
         tags: ['Users'],
         summary: 'List users',
-        description: 'Admin-only paginated user listing. Supports text search and role filter.',
+        description:
+          'Admin-only paginated user listing. Supports text search, role filter, ' +
+          'and includeDeleted=true to surface soft-deleted accounts.',
         security: [{ bearerAuth: [] }],
         querystring: userListQuery,
         response: {
@@ -56,8 +61,43 @@ export async function usersRoutes(app: FastifyInstance, config: Config): Promise
       config: { rateLimit: limit },
     },
     async (req, reply) => {
-      const query = req.query as ListUsersQuery;
+      const raw = req.query as PaginationQuery & {
+        q?: string;
+        role?: UserRole;
+        includeDeleted?: string;
+      };
+      const query: ListUsersQuery = {
+        ...raw,
+        includeDeleted: raw.includeDeleted === 'true',
+      };
       return reply.code(200).send(await listUsers(query));
+    },
+  );
+
+  app.get<{ Params: IdParams }>(
+    '/v1/admin/users/:id',
+    {
+      preHandler: [app.authenticate, requireRole('ADMIN')],
+      schema: {
+        tags: ['Admin'],
+        summary: 'Get admin user detail',
+        description:
+          'Admin-only. Full user record for the operations console: account ' +
+          'status (deletedAt) and owned artists. Never includes credentials.',
+        security: [{ bearerAuth: [] }],
+        params: idParams,
+        response: {
+          200: adminUserDetailSchema,
+          401: problemSchema,
+          403: problemSchema,
+          404: problemSchema,
+        },
+      },
+      config: { rateLimit: limit },
+    },
+    async (req, reply) => {
+      const detail: AdminUserDetailDto = await getAdminUserDetail(req.params.id);
+      return reply.code(200).send(detail);
     },
   );
 

@@ -63,6 +63,20 @@ export function getTrack(client: ApiClient, id: string): Promise<TrackDetail> {
   return client.get<TrackDetail>(`/v1/tracks/${id}`);
 }
 
+/**
+ * Phase 17 — admin takedown/restore. Sets track status to TAKEDOWN (removes
+ * from public catalog) or back to PROCESSING (draft; the ingestion pipeline
+ * alone may mark READY). Every change is audited server-side. Callers must
+ * confirm first.
+ */
+export function updateTrackStatus(
+  client: ApiClient,
+  id: string,
+  status: 'TAKEDOWN' | 'PROCESSING',
+): Promise<TrackDetail> {
+  return client.patch<TrackDetail>(`/v1/tracks/${id}`, { status });
+}
+
 /** Deletes a track (soft delete server-side). Callers must confirm first. */
 export function deleteTrack(client: ApiClient, id: string): Promise<unknown> {
   return client.delete<unknown>(`/v1/tracks/${id}`);

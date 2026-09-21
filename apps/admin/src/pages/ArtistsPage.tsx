@@ -1,12 +1,16 @@
 // Phase 16 — artist management: search, verified filter, paginated table,
 // detail view, and verify/unverify behind explicit confirmation.
+// Phase 17 — detail view adds verification history (from the audit log) and
+// a 28-day analytics summary (server-computed, displayed verbatim).
 
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { apiErrorMessage } from '../api/client';
 import { getArtist, listArtists, setArtistVerified } from '../api/artists';
-import type { ArtistDetail } from '../api/types';
+import { getArtistOverview } from '../api/analytics';
+import { listAuditLogs } from '../api/audit';
+import type { ArtistDetail, AuditLog, PlatformOverview } from '../api/types';
 import type { ArtistListQuery } from '../api/artists';
 import { useApiList } from '../hooks/useApiList';
 import { EmptyState, ErrorState, LoadingState } from '../components/DataStates';
@@ -152,6 +156,9 @@ function ArtistDetailView({
   const { client } = useAuth();
   const { confirm, dialog } = useConfirm();
   const [artist, setArtist] = useState<ArtistDetail | null>(null);
+  const [verificationHistory, setVerificationHistory] = useState<AuditLog[]>([]);
+  const [analytics, setAnalytics] = useState<PlatformOverview | null>(null);
+  const [analyticsError, setAnalyticsError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -160,8 +167,26 @@ function ArtistDetailView({
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setAnalyticsError(false);
     try {
-      setArtist(await getArtist(client, id));
+      const [fetched, history, overview] = await Promise.all([
+        getArtist(client, id),
+        listAuditLogs(client, { targetType: 'artist', targetId: id, limit: 50 }).catch(
+          () => ({ data: [] as AuditLog[], pagination: null }) as never,
+        ),
+        getArtistOverview(client, id, '28d').catch(() => null),
+      ]);
+      setArtist(fetched);
+      setVerificationHistory(
+        (history.data as AuditLog[]).filter((e) =>
+          ['artist.verified', 'artist.unverified'].includes(e.action),
+        ),
+      );
+      if (overview) {
+        setAnalytics(overview);
+      } else {
+        setAnalyticsError(true);
+      }
     } catch (err) {
       setError(err);
     } finally {
@@ -265,6 +290,64 @@ function ArtistDetailView({
         </div>
         <p className="muted" style={{ fontSize: 13 }}>
           Verification changes are recorded in the audit log.
+        </p>
+        {verificationHistory.length > 0 && (
+          <>
+            <h3 style={{ fontSize: 14, marginTop: 16 }}>Verification history</h3>
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Action</th>
+                    <th>When</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {verificationHistory.map((entry) => (
+                    <tr key={entry.id}>
+                      <td className="mono" style={{ fontSize: 12 }}>
+                        {entry.action}
+                      </td>
+                      <td>{formatDate(entry.createdAt)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
+        )}
+      </div>
+      <div className="card">
+        <h2>Analytics — last 28 days</h2>
+        {analyticsError || !analytics ? (
+          <p className="muted" style={{ fontSize: 13 }}>
+            Analytics unavailable for this artist.
+          </p>
+        ) : (
+          <div className="detail-grid">
+            <div className="detail-item">
+              <p className="detail-label">Streams</p>
+              <p className="detail-value">{formatNumber(analytics.streams)}</p>
+            </div>
+            <div className="detail-item">
+              <p className="detail-label">Starts</p>
+              <p className="detail-value">{formatNumber(analytics.starts)}</p>
+            </div>
+            <div className="detail-item">
+              <p className="detail-label">Unique listeners</p>
+              <p className="detail-value">{formatNumber(analytics.uniqueListeners)}</p>
+            </div>
+            <div className="detail-item">
+              <p className="detail-label">Listening time</p>
+              <p className="detail-value">
+                {formatNumber(Math.round(analytics.listeningTimeMs / 60000))} min
+              </p>
+            </div>
+          </div>
+        )}
+        <p className="muted" style={{ fontSize: 13 }}>
+          Server-computed from the play events stream. A stream is a session with a completed
+          play.
         </p>
       </div>
       {dialog}

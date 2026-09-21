@@ -15,7 +15,7 @@ import {
   type PaginationQuery,
 } from '../../http/pagination.js';
 
-type Db = PrismaClient;
+type Db = PrismaClient | Prisma.TransactionClient;
 
 export interface RecordAuditEventInput {
   /** Admin who performed the action. Null when actor is unknown/system. */

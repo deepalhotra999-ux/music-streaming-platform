@@ -20,6 +20,36 @@ export interface AdminUser {
   emailVerified: boolean;
   countryCode: string | null;
   createdAt: string;
+  /** Phase 17 — null = active account; non-null = soft-deleted. */
+  deletedAt: string | null;
+}
+
+/** Phase 17 — admin-only user detail: account status + owned artists. */
+export interface AdminUserDetail extends AdminUser {
+  updatedAt: string;
+  ownedArtists: Array<{
+    id: string;
+    name: string;
+    verified: boolean;
+    createdAt: string;
+  }>;
+}
+
+export type ModerationTargetType = 'ARTIST' | 'ALBUM' | 'TRACK';
+export type ModerationStatus = 'OPEN' | 'UNDER_REVIEW' | 'RESOLVED' | 'DISMISSED';
+
+/** Phase 17 — one moderation report. History lives in the audit log. */
+export interface ModerationReport {
+  id: string;
+  targetType: ModerationTargetType;
+  targetId: string;
+  reason: string;
+  details: string | null;
+  status: ModerationStatus;
+  createdById: string | null;
+  reviewedById: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface TokenPair {

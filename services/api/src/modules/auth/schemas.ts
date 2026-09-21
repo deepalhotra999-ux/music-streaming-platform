@@ -58,6 +58,8 @@ export const publicUserSchema = {
     emailVerified: { type: 'boolean' },
     countryCode: { type: ['string', 'null'] },
     createdAt: { type: 'string', format: 'date-time' },
+    // Phase 17 — account status for the admin console. Null = active.
+    deletedAt: { type: ['string', 'null'], format: 'date-time' },
   },
 } as const;
 

@@ -4,9 +4,10 @@
 
 import { Prisma, type PrismaClient, type AlbumType } from '@prisma/client';
 import { prisma } from '../../db.js';
+import { recordAuditEvent } from '../audit/service.js';
 import { conflict, forbidden, notFound } from '../../http/errors.js';
 import type { AuthUser } from '../../http/auth.js';
-import { canManageArtist } from '../../http/authorization.js';
+import { canManageArtist, isAdmin } from '../../http/authorization.js';
 import {
   pageEnvelope,
   parsePagination,
@@ -248,6 +249,7 @@ export async function deleteAlbum(id: string, actor: AuthUser, db: Db = prisma):
     where: { id, deletedAt: null },
     select: {
       id: true,
+      title: true,
       artist: { select: { id: true, ownerUserId: true } },
       _count: { select: { tracks: { where: { deletedAt: null } } } },
     },
@@ -262,4 +264,18 @@ export async function deleteAlbum(id: string, actor: AuthUser, db: Db = prisma):
     throw conflict("Remove the album's tracks first.");
   }
   await db.album.update({ where: { id }, data: { deletedAt: new Date() } });
+  // Phase 17 — admin deletions are audited. Owner deletions are not admin
+  // actions, so they write no audit row.
+  if (isAdmin(actor)) {
+    await recordAuditEvent(
+      {
+        actorId: actor.id,
+        action: 'album.deleted',
+        targetType: 'album',
+        targetId: id,
+        metadata: { title: existing.title },
+      },
+      db,
+    );
+  }
 }

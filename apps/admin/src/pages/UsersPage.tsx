@@ -6,13 +6,13 @@ import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { apiErrorMessage } from '../api/client';
-import { getUser, listUsers, updateUserRole } from '../api/users';
-import type { AdminUser, UserRole } from '../api/types';
+import { getAdminUserDetail, listUsers, updateUserRole } from '../api/users';
+import type { AdminUserDetail, UserRole } from '../api/types';
 import type { UserListQuery } from '../api/users';
 import { useApiList } from '../hooks/useApiList';
 import { EmptyState, ErrorState, LoadingState } from '../components/DataStates';
 import { Pagination } from '../components/Pagination';
-import { RoleBadge } from '../components/Badges';
+import { AccountStatusBadge, RoleBadge } from '../components/Badges';
 import { useConfirm } from '../components/ConfirmDialog';
 import { formatDate } from '../utils/format';
 
@@ -23,6 +23,7 @@ export function UsersPage(): React.ReactNode {
   const { client } = useAuth();
   const [searchInput, setSearchInput] = useState('');
   const [roleInput, setRoleInput] = useState<UserRole | ''>('');
+  const [includeDeletedInput, setIncludeDeletedInput] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const fetcher = useCallback(
@@ -33,13 +34,18 @@ export function UsersPage(): React.ReactNode {
 
   function handleSearch(event: FormEvent): void {
     event.preventDefault();
-    list.setQuery({ q: searchInput.trim() || undefined, role: roleInput || undefined });
+    list.setQuery({
+      q: searchInput.trim() || undefined,
+      role: roleInput || undefined,
+      includeDeleted: includeDeletedInput || undefined,
+    });
   }
 
   function clearFilters(): void {
     setSearchInput('');
     setRoleInput('');
-    list.setQuery({ q: undefined, role: undefined });
+    setIncludeDeletedInput(false);
+    list.setQuery({ q: undefined, role: undefined, includeDeleted: undefined });
   }
 
   return (
@@ -77,6 +83,17 @@ export function UsersPage(): React.ReactNode {
                 ))}
               </select>
             </div>
+            <div className="field checkbox-field">
+              <label htmlFor="users-include-deleted">
+                <input
+                  id="users-include-deleted"
+                  type="checkbox"
+                  checked={includeDeletedInput}
+                  onChange={(event) => setIncludeDeletedInput(event.target.checked)}
+                />{' '}
+                Include deleted
+              </label>
+            </div>
             <button type="submit" className="btn">
               Search
             </button>
@@ -100,6 +117,7 @@ export function UsersPage(): React.ReactNode {
                       <th>Display name</th>
                       <th>Email</th>
                       <th>Role</th>
+                      <th>Status</th>
                       <th>Verified</th>
                       <th>Created</th>
                       <th>Actions</th>
@@ -112,6 +130,9 @@ export function UsersPage(): React.ReactNode {
                         <td className="mono">{user.email}</td>
                         <td>
                           <RoleBadge role={user.role} />
+                        </td>
+                        <td>
+                          <AccountStatusBadge deletedAt={user.deletedAt} />
                         </td>
                         <td>{user.emailVerified ? 'Yes' : 'No'}</td>
                         <td>{formatDate(user.createdAt)}</td>
@@ -149,7 +170,7 @@ function UserDetail({
 }): React.ReactNode {
   const { client, user: currentAdmin } = useAuth();
   const { confirm, dialog } = useConfirm();
-  const [user, setUser] = useState<AdminUser | null>(null);
+  const [user, setUser] = useState<AdminUserDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -160,7 +181,7 @@ function UserDetail({
     setLoading(true);
     setError(null);
     try {
-      const result = await getUser(client, id);
+      const result = await getAdminUserDetail(client, id);
       setUser(result);
       setRoleDraft(result.role);
     } catch (err) {
@@ -190,7 +211,9 @@ function UserDetail({
     setSaving(true);
     try {
       const updated = await updateUserRole(client, user.id, roleDraft);
-      setUser(updated);
+      // updateUserRole returns the base AdminUser shape; keep the richer
+      // detail state (ownedArtists, updatedAt) and just apply the new role.
+      setUser({ ...user, role: updated.role });
       onChanged();
     } catch (err) {
       setActionError(apiErrorMessage(err));
@@ -214,7 +237,9 @@ function UserDetail({
         </div>
       )}
       <div className="card">
-        <h2>{user.displayName}</h2>
+        <h2>
+          {user.displayName} <AccountStatusBadge deletedAt={user.deletedAt} />
+        </h2>
         <div className="detail-grid">
           <div className="detail-item">
             <p className="detail-label">Email</p>
@@ -242,8 +267,43 @@ function UserDetail({
             <p className="detail-label">Created</p>
             <p className="detail-value">{formatDate(user.createdAt)}</p>
           </div>
+          <div className="detail-item">
+            <p className="detail-label">Updated</p>
+            <p className="detail-value">{formatDate(user.updatedAt)}</p>
+          </div>
+          {user.deletedAt && (
+            <div className="detail-item">
+              <p className="detail-label">Deleted</p>
+              <p className="detail-value">{formatDate(user.deletedAt)}</p>
+            </div>
+          )}
         </div>
       </div>
+      {user.ownedArtists.length > 0 && (
+        <div className="card">
+          <h2>Owned artists ({user.ownedArtists.length})</h2>
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Name</th>
+                  <th>Verified</th>
+                  <th>Created</th>
+                </tr>
+              </thead>
+              <tbody>
+                {user.ownedArtists.map((artist) => (
+                  <tr key={artist.id}>
+                    <td>{artist.name}</td>
+                    <td>{artist.verified ? 'Yes' : 'No'}</td>
+                    <td>{formatDate(artist.createdAt)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
       <div className="card">
         <h2>Change role</h2>
         <div className="toolbar">
