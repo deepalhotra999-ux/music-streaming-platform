@@ -65,6 +65,22 @@ export const tooManyRequests = (detail = 'Too many requests. Slow down and try a
     type: 'https://api.music-streaming.local/problems/rate-limited',
   });
 
+// Phase 14 — ingestion errors.
+export const payloadTooLarge = (detail: string) =>
+  new HttpProblem(413, 'Payload Too Large', detail, {
+    type: 'https://api.music-streaming.local/problems/payload-too-large',
+  });
+
+export const unsupportedMediaType = (detail: string) =>
+  new HttpProblem(415, 'Unsupported Media Type', detail, {
+    type: 'https://api.music-streaming.local/problems/unsupported-media-type',
+  });
+
+export const unprocessableEntity = (detail: string) =>
+  new HttpProblem(422, 'Unprocessable Entity', detail, {
+    type: 'https://api.music-streaming.local/problems/unprocessable-entity',
+  });
+
 function sendProblem(reply: FastifyReply, problem: Problem): FastifyReply {
   return reply.code(problem.status).type('application/problem+json').send(problem);
 }

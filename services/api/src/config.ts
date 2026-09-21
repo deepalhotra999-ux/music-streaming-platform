@@ -16,10 +16,19 @@ export interface RateLimitConfig {
   windowMs: number;
 }
 
-/** Where audio bytes come from. Only 'local' is implemented in Phase 7;
- *  's3' is the reserved seam for AWS S3 + CloudFront (selecting it throws
- *  a clear startup error until the provider is implemented). */
+/** Where audio bytes come from. 'local' is the development default and needs
+ *  no AWS configuration; 's3' uses the private-bucket driver (Phase 14) and
+ *  fails fast at startup when S3_BUCKET is unset. */
 export type AudioStorageDriver = 'local' | 's3';
+
+export interface S3Config {
+  /** S3 bucket holding audio. Null when S3_BUCKET is unset. */
+  bucket: string | null;
+  /** AWS region. Defaults to ca-central-1 per project infrastructure. */
+  region: string;
+  /** Optional key prefix inside the bucket (no leading/trailing slashes). */
+  prefix: string;
+}
 
 export interface StreamingConfig {
   audioStorageDriver: AudioStorageDriver;
@@ -28,6 +37,14 @@ export interface StreamingConfig {
   audioStorageDir: string;
   /** Lifetime of a playback session token, in seconds. */
   playbackSessionTtlSeconds: number;
+  s3: S3Config;
+}
+
+/** Phase 14 — artist audio ingestion (upload + transcode pipeline). */
+export interface IngestionConfig {
+  /** Maximum accepted upload size in bytes. Enforced while streaming the
+   *  request body; the temp file is discarded when exceeded. */
+  maxUploadBytes: number;
 }
 
 export interface Config {
@@ -41,6 +58,7 @@ export interface Config {
   refreshTokenTtlSeconds: number;
   rateLimits: RateLimitConfig;
   streaming: StreamingConfig;
+  ingestion: IngestionConfig;
 }
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
@@ -93,6 +111,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       audioStorageDriver: parseAudioStorageDriver(env.AUDIO_STORAGE_DRIVER),
       audioStorageDir: env.AUDIO_STORAGE_DIR ?? './storage/audio',
       playbackSessionTtlSeconds: int(env, 'PLAYBACK_SESSION_TTL_SECONDS', 900), // 15 min
+      s3: {
+        bucket: env.S3_BUCKET ?? null,
+        region: env.S3_REGION ?? 'ca-central-1',
+        prefix: (env.S3_PREFIX ?? '').replace(/^\/+|\/+$/g, ''),
+      },
+    },
+    ingestion: {
+      maxUploadBytes: int(env, 'INGESTION_MAX_UPLOAD_BYTES', 100 * 1024 * 1024), // 100 MiB
     },
   };
 }

@@ -127,14 +127,16 @@ describe('ArtistTracksScreen', () => {
     expect(post).not.toHaveBeenCalled();
   });
 
-  it('edits a track and changes its status', async () => {
+  it('edits a track and changes its status (manual READY is pipeline-owned, so the picker offers TAKEDOWN)', async () => {
     const { patch } = mockApi();
     render(<ArtistTracksScreen />);
     await waitFor(() => expect(screen.getByTestId('artist-tracks-list')).toBeTruthy());
 
     const edits = screen.getAllByText('Edit');
     fireEvent.press(edits[0]);
-    fireEvent.press(screen.getByTestId('track-status-READY'));
+    // READY is no longer offered: publishing is owned by the audio pipeline.
+    expect(screen.queryByTestId('track-status-READY')).toBeNull();
+    fireEvent.press(screen.getByTestId('track-status-TAKEDOWN'));
     fireEvent.press(screen.getByTestId('track-save'));
 
     await waitFor(() =>
@@ -144,7 +146,7 @@ describe('ArtistTracksScreen', () => {
         durationMs: 180_000,
         trackNumber: 1,
         isrc: null,
-        status: 'READY',
+        status: 'TAKEDOWN',
       }),
     );
   });

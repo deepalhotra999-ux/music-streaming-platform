@@ -197,7 +197,7 @@ describe('live artist platform', () => {
     await expectStatus(updateAlbum(listener, albumId, { title: 'hijack' }), 403);
   });
 
-  it('track CRUD with draft/published status', async () => {
+  it('track CRUD; manual READY is rejected (pipeline owns readiness)', async () => {
     const created = await createTrack(artist, {
       title: `Live Track ${RUN_ID}`,
       artistId,
@@ -205,11 +205,27 @@ describe('live artist platform', () => {
       durationMs: 120_000,
     });
     trackId = created.id;
-    // New tracks start as PROCESSING (draft) until the artist publishes them.
+    // New tracks start as PROCESSING (draft).
     expect(created.status).toBe('PROCESSING');
 
-    const published = await updateTrack(artist, trackId, { status: 'READY' });
-    expect(published.status).toBe('READY');
+    // Phase 14 — clients cannot claim READY by hand on create or update;
+    // only the audio pipeline promotes a track once its HLS validates.
+    await expectStatus(updateTrack(artist, trackId, { status: 'READY' }), 422);
+    await expectStatus(
+      createTrack(artist, {
+        title: `Live Track READY ${RUN_ID}`,
+        artistId,
+        durationMs: 60_000,
+        status: 'READY',
+      }),
+      422,
+    );
+
+    // Other manual transitions still work (takedown flow), then restore.
+    const takenDown = await updateTrack(artist, trackId, { status: 'TAKEDOWN' });
+    expect(takenDown.status).toBe('TAKEDOWN');
+    const restored = await updateTrack(artist, trackId, { status: 'PROCESSING' });
+    expect(restored.status).toBe('PROCESSING');
 
     // Duplicate ISRC is rejected.
     await updateTrack(artist, trackId, { isrc: `LIVE-${RUN_ID}` });

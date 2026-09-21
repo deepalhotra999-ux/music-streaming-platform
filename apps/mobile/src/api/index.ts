@@ -4,6 +4,8 @@ export { ApiClient, ApiError, apiErrorMessage } from './client';
 export type { ApiClientOptions, HttpMethod, RequestOptions } from './client';
 export { getMe, login, logout, refreshTokens, register } from './auth';
 export { createPlaybackSession, reportPlayEvent } from './playback';
+export { getAudioStatus, retryTrackAudio, uploadTrackAudio } from './ingestion';
+export type { AudioStatus, UploadableAudio } from './ingestion';
 export {
   createAlbum,
   createArtist,
@@ -65,6 +67,7 @@ export type {
   ArtistProfile,
   ArtistSummary,
   AuthResult,
+  AudioIngestStatus,
   CreatePlaylistInput,
   FieldError,
   FollowItem,

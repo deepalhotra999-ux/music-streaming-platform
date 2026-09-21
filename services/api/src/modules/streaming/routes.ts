@@ -97,7 +97,8 @@ export async function streamingRoutes(app: FastifyInstance, config: Config): Pro
   const apiLimit = apiRateLimit(config);
   const streamLimit = streamingRateLimit(config);
   // One storage handle per app instance; the driver is chosen at startup.
-  const storage = createAudioStorage(config);
+  // The S3 driver is async (fail-fast config validation); local is sync.
+  const storage = await createAudioStorage(config);
   const deps: StreamingDeps = { db: prisma, config, storage };
   const basePath = '/v1/playback';
 

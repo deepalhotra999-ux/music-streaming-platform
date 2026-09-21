@@ -128,6 +128,9 @@ export interface AlbumDetail extends AlbumListItem {
 
 export type TrackStatus = 'PROCESSING' | 'READY' | 'FAILED' | 'TAKEDOWN';
 
+/** Phase 14 — artist audio ingestion lifecycle for a track. */
+export type AudioIngestStatus = 'NONE' | 'PENDING' | 'PROCESSING' | 'READY' | 'FAILED';
+
 export interface TrackListItem {
   id: string;
   title: string;
@@ -139,6 +142,7 @@ export interface TrackListItem {
   trackNumber: number | null;
   discNumber: number;
   status: TrackStatus;
+  audioStatus: AudioIngestStatus;
   playCount: number;
   createdAt: string;
 }

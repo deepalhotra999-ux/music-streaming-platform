@@ -29,6 +29,7 @@ const track = {
   trackNumber: 1,
   discNumber: 1,
   status: 'READY' as const,
+  audioStatus: 'READY' as const,
   playCount: 0,
   createdAt: '',
 };

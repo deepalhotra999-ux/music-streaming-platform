@@ -31,6 +31,24 @@ enum TrackStatus {
   TAKEDOWN
 }
 
+// Phase 14 — artist audio ingestion. Lifecycle of the audio pipeline for a
+// track, independent of the catalog publication state (TrackStatus):
+//   NONE       — no source audio has ever been uploaded
+//   PENDING    — source stored, waiting for the transcoder
+//   PROCESSING — transcoding / HLS packaging in progress
+//   READY      — HLS package validated in storage and playable
+//   FAILED     — processing failed; retryable (see audioError)
+// Kept separate from TrackStatus so re-processing a published (READY) track
+// never unpublishes it: the old HLS package keeps serving until the new one
+// validates, and a failed re-upload leaves the catalog status untouched.
+enum AudioIngestStatus {
+  NONE
+  PENDING
+  PROCESSING
+  READY
+  FAILED
+}
+
 enum PlaylistVisibility {
   PRIVATE
   PUBLIC
@@ -148,6 +166,13 @@ model Track {
   isrc        String?     @unique
   status      TrackStatus @default(PROCESSING)
   playCount   BigInt      @default(0) @map("play_count")
+  // Phase 14 — audio ingestion pipeline state (see AudioIngestStatus).
+  // audioSourceKey is the private storage key of the uploaded source file;
+  // it is never exposed to clients.
+  audioStatus    AudioIngestStatus @default(NONE) @map("audio_status")
+  audioError     String?           @map("audio_error")
+  audioSourceKey String?           @map("audio_source_key")
+  audioReadyAt   DateTime?         @map("audio_ready_at") @db.Timestamptz(6)
   createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt   DateTime?   @map("deleted_at") @db.Timestamptz(6)

@@ -519,6 +519,42 @@ describe('albums and tracks', () => {
     });
     expect(res.statusCode).toBe(403);
   });
+
+  it('Phase 14 — manual READY is rejected; only the pipeline publishes (422)', async () => {
+    const createReady = await app.inject({
+      method: 'POST',
+      url: '/v1/tracks',
+      headers: auth(artistUser),
+      payload: { title: 'Manual Ready', artistId, durationMs: 60000, status: 'READY' },
+    });
+    expect(createReady.statusCode).toBe(422);
+
+    const updateReady = await app.inject({
+      method: 'PATCH',
+      url: `/v1/tracks/${trackId}`,
+      headers: auth(artistUser),
+      payload: { status: 'READY' },
+    });
+    expect(updateReady.statusCode).toBe(422);
+
+    // Other manual transitions are untouched: takedown and restore work.
+    const down = await app.inject({
+      method: 'PATCH',
+      url: `/v1/tracks/${trackId}`,
+      headers: auth(artistUser),
+      payload: { status: 'TAKEDOWN' },
+    });
+    expect(down.statusCode).toBe(200);
+    expect(down.json().status).toBe('TAKEDOWN');
+    const restore = await app.inject({
+      method: 'PATCH',
+      url: `/v1/tracks/${trackId}`,
+      headers: auth(artistUser),
+      payload: { status: 'PROCESSING' },
+    });
+    expect(restore.statusCode).toBe(200);
+    expect(restore.json().status).toBe('PROCESSING');
+  });
 });
 
 // ---------------------------------------------------------------------------

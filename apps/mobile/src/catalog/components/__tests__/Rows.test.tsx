@@ -15,6 +15,7 @@ const track: TrackListItem = {
   trackNumber: 3,
   discNumber: 1,
   status: 'READY',
+  audioStatus: 'READY',
   playCount: 42,
   createdAt: '2024-01-01T00:00:00.000Z',
 };

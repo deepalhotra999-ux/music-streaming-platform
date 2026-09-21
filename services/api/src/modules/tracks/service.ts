@@ -2,9 +2,9 @@
 // management of an artist's tracks. Throws HttpProblem errors (see
 // http/errors.ts) which the central handler renders as RFC 7807.
 
-import { Prisma, type PrismaClient, type TrackStatus } from '@prisma/client';
+import { Prisma, type PrismaClient, type TrackStatus, type AudioIngestStatus } from '@prisma/client';
 import { prisma } from '../../db.js';
-import { badRequest, conflict, forbidden, notFound } from '../../http/errors.js';
+import { badRequest, conflict, forbidden, notFound, unprocessableEntity } from '../../http/errors.js';
 import type { AuthUser } from '../../http/auth.js';
 import { canManageArtist } from '../../http/authorization.js';
 import {
@@ -27,6 +27,7 @@ interface TrackListRow {
   trackNumber: number | null;
   discNumber: number;
   status: TrackStatus;
+  audioStatus: AudioIngestStatus;
   playCount: bigint;
   createdAt: Date;
 }
@@ -42,6 +43,7 @@ export interface TrackListItemDto {
   trackNumber: number | null;
   discNumber: number;
   status: TrackStatus;
+  audioStatus: AudioIngestStatus;
   playCount: number;
   createdAt: Date;
 }
@@ -58,6 +60,7 @@ function toListItem(row: TrackListRow): TrackListItemDto {
     trackNumber: row.trackNumber,
     discNumber: row.discNumber,
     status: row.status,
+    audioStatus: row.audioStatus,
     playCount: Number(row.playCount),
     createdAt: row.createdAt,
   };
@@ -198,6 +201,14 @@ export async function createTrack(
 ): Promise<TrackDetailDto> {
   await checkManageableArtist(input.artistId, actor, db);
   const albumId = await resolveAlbumId(input.artistId, input.albumId, db);
+  // Phase 14 — READY is owned by the audio pipeline: a track becomes
+  // playable only after an upload is transcoded and its HLS package
+  // validates. Clients cannot claim readiness by hand.
+  if (input.status === 'READY') {
+    throw unprocessableEntity(
+      'Track readiness is determined by the audio processing pipeline. Upload audio to make a track playable.',
+    );
+  }
 
   try {
     const row = await db.track.create({
@@ -251,6 +262,14 @@ export async function updateTrack(
   }
   if (!canManageArtist(actor, existing.artist)) {
     throw forbidden('Only the artist owner or an admin can manage this catalog.');
+  }
+  // Phase 14 — same as create: only the pipeline may mark a track READY.
+  // Manual transitions that stay meaningful: PROCESSING (unpublish),
+  // FAILED, and TAKEDOWN (takedown/restore flows).
+  if (input.status === 'READY') {
+    throw unprocessableEntity(
+      'Track readiness is determined by the audio processing pipeline. Upload audio to make a track playable.',
+    );
   }
   const albumId = await resolveAlbumId(existing.artistId, input.albumId, db);
 

@@ -11,6 +11,13 @@ const statusEnum = {
   enum: ['PROCESSING', 'READY', 'FAILED', 'TAKEDOWN'],
 } as const;
 
+// Phase 14 — audio ingestion lifecycle. Read-only for clients: only the
+// processing pipeline changes it, never track create/update payloads.
+const audioStatusEnum = {
+  type: 'string',
+  enum: ['NONE', 'PENDING', 'PROCESSING', 'READY', 'FAILED'],
+} as const;
+
 const genreRefSchema = {
   type: 'object',
   required: ['id', 'name'],
@@ -33,6 +40,7 @@ export const trackListItemSchema = {
     'trackNumber',
     'discNumber',
     'status',
+    'audioStatus',
     'playCount',
     'createdAt',
   ],
@@ -47,6 +55,7 @@ export const trackListItemSchema = {
     trackNumber: { type: ['integer', 'null'], minimum: 1 },
     discNumber: { type: 'integer', minimum: 1 },
     status: statusEnum,
+    audioStatus: audioStatusEnum,
     playCount: { type: 'integer', minimum: 0 },
     createdAt: dateTime,
   },
@@ -65,6 +74,7 @@ export const trackDetailSchema = {
     'trackNumber',
     'discNumber',
     'status',
+    'audioStatus',
     'playCount',
     'createdAt',
     'isrc',
@@ -82,6 +92,7 @@ export const trackDetailSchema = {
     trackNumber: { type: ['integer', 'null'], minimum: 1 },
     discNumber: { type: 'integer', minimum: 1 },
     status: statusEnum,
+    audioStatus: audioStatusEnum,
     playCount: { type: 'integer', minimum: 0 },
     createdAt: dateTime,
     isrc: { type: ['string', 'null'] },

@@ -2,31 +2,48 @@
 //
 // Lists the caller's own tracks (paginated, artistId-scoped) with their
 // draft/published status badges, plus an inline create/edit form and
-// per-row delete. Track status (PROCESSING/READY/FAILED/TAKEDOWN) is the
-// model's draft/published distinction: new tracks default to
-// PROCESSING (draft) until the artist marks them READY.
+// per-row delete. Track status (PROCESSING/FAILED/TAKEDOWN, plus READY
+// once the pipeline has published it) is the model's draft/published
+// distinction: new tracks default to PROCESSING (draft).
+//
+// Phase 14 — READY is owned by the audio pipeline: uploading audio and
+// letting it transcode is what publishes a track. The status picker below
+// deliberately omits READY — the API rejects it with 422.
+//
+// Each row also shows the audio ingestion status
+// (NONE/PENDING/PROCESSING/READY/FAILED) with upload/replace/retry
+// actions. Uploading marks the track PENDING; the screen polls until the
+// pipeline reaches a terminal state. Buttons disable while an upload or
+// retry is in flight so a double-tap can never submit twice.
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { Alert, FlatList, StyleSheet, Text, View } from 'react-native';
+import { getDocumentAsync } from 'expo-document-picker';
 import {
   apiErrorMessage,
   createTrack,
   deleteTrack,
+  getAudioStatus,
   listAlbums,
   listMyArtists,
   listTracks,
+  retryTrackAudio,
   updateTrack,
+  uploadTrackAudio,
   type AlbumListItem,
+  type AudioStatus,
   type TrackListItem,
   type TrackStatus,
 } from '../api';
 import { useAuth } from '../auth';
 import { TrackRow } from '../catalog';
-import { StatusBadge } from '../artist';
+import { AudioStatusBadge, StatusBadge } from '../artist';
 import { Button, EmptyState, ErrorState, LoadingState, Screen, TextInput } from '../components';
 import { colors, fontSize, fontWeight, spacing } from '../theme';
 
-const STATUSES: TrackStatus[] = ['PROCESSING', 'READY', 'FAILED', 'TAKEDOWN'];
+// Phase 14 — READY is pipeline-owned (set when uploaded audio finishes
+// processing), so the artist can only pick draft/failed/takedown here.
+const STATUSES: TrackStatus[] = ['PROCESSING', 'FAILED', 'TAKEDOWN'];
 const STATUS_LABELS: Record<TrackStatus, string> = {
   PROCESSING: 'Draft',
   READY: 'Published',
@@ -56,9 +73,128 @@ export function ArtistTracksScreen() {
   const [trackNumber, setTrackNumber] = useState('');
   const [isrc, setIsrc] = useState('');
   const [status, setStatus] = useState<TrackStatus>('PROCESSING');
+  // The track's status when the edit form opened (null when creating).
+  // Phase 14 — READY is pipeline-owned, so the form only sends `status`
+  // when the artist actually changed it.
+  const [originalStatus, setOriginalStatus] = useState<TrackStatus | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+
+  // Phase 14 — per-track audio pipeline state. busyTracks disables a row's
+  // audio buttons while its upload/retry request is in flight;
+  // audioErrors carries the server's client-safe failure message for
+  // FAILED tracks.
+  //
+  // Duplicate-submit prevention uses busyRef (synchronous), not the
+  // busyTracks state: two taps in the same frame would both read stale
+  // state and submit twice. setTrackBusy mirrors the ref into state for
+  // the disabled UI.
+  const [busyTracks, setBusyTracks] = useState<Record<string, boolean>>({});
+  const busyRef = useRef<Set<string>>(new Set());
+  const [audioErrors, setAudioErrors] = useState<Record<string, string | null>>({});
+  const pollTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+
+  useEffect(
+    () => () => {
+      Object.values(pollTimers.current).forEach(clearTimeout);
+      pollTimers.current = {};
+    },
+    [],
+  );
+
+  const applyAudioStatus = useCallback((status: AudioStatus) => {
+    setAudioErrors((prev) => ({ ...prev, [status.trackId]: status.audioError }));
+    setTracks((prev) =>
+      prev.map((t) => (t.id === status.trackId ? { ...t, audioStatus: status.audioStatus } : t)),
+    );
+  }, []);
+
+  const pollAudioStatus = useCallback(
+    (trackId: string, attemptsLeft = 40) => {
+      if (attemptsLeft <= 0) return;
+      if (pollTimers.current[trackId]) clearTimeout(pollTimers.current[trackId]);
+      pollTimers.current[trackId] = setTimeout(async () => {
+        try {
+          const status = await getAudioStatus(api, trackId);
+          applyAudioStatus(status);
+          if (status.audioStatus === 'PENDING' || status.audioStatus === 'PROCESSING') {
+            pollAudioStatus(trackId, attemptsLeft - 1);
+          }
+        } catch {
+          // Keep the last known state; the artist can retry manually.
+        }
+      }, 3000);
+    },
+    [api, applyAudioStatus],
+  );
+
+  const setTrackBusy = useCallback((trackId: string, busy: boolean) => {
+    setBusyTracks((prev) => ({ ...prev, [trackId]: busy }));
+  }, []);
+
+  /** Synchronous claim: returns false when this track already has an upload/retry in flight. */
+  const claimTrack = useCallback(
+    (trackId: string) => {
+      if (busyRef.current.has(trackId)) return false;
+      busyRef.current.add(trackId);
+      setTrackBusy(trackId, true);
+      return true;
+    },
+    [setTrackBusy],
+  );
+
+  const releaseTrack = useCallback(
+    (trackId: string) => {
+      busyRef.current.delete(trackId);
+      setTrackBusy(trackId, false);
+    },
+    [setTrackBusy],
+  );
+
+  const handleUploadAudio = useCallback(
+    (track: TrackListItem) => {
+      if (!claimTrack(track.id)) return;
+      void (async () => {
+        try {
+          const picked = await getDocumentAsync({ type: 'audio/*', copyToCacheDirectory: true });
+          if (picked.canceled) return;
+          const asset = picked.assets[0];
+          if (!asset) return;
+          const status = await uploadTrackAudio(api, track.id, {
+            uri: asset.uri,
+            name: asset.name,
+            mimeType: asset.mimeType,
+          });
+          applyAudioStatus(status);
+          pollAudioStatus(track.id);
+        } catch (e) {
+          Alert.alert('Upload failed', apiErrorMessage(e));
+        } finally {
+          releaseTrack(track.id);
+        }
+      })();
+    },
+    [api, applyAudioStatus, claimTrack, pollAudioStatus, releaseTrack],
+  );
+
+  const handleRetryAudio = useCallback(
+    (track: TrackListItem) => {
+      if (!claimTrack(track.id)) return;
+      void (async () => {
+        try {
+          const status = await retryTrackAudio(api, track.id);
+          applyAudioStatus(status);
+          pollAudioStatus(track.id);
+        } catch (e) {
+          Alert.alert('Retry failed', apiErrorMessage(e));
+        } finally {
+          releaseTrack(track.id);
+        }
+      })();
+    },
+    [api, applyAudioStatus, claimTrack, pollAudioStatus, releaseTrack],
+  );
 
   const loadPage = useCallback(
     async (id: string, nextPage: number, append: boolean) => {
@@ -66,8 +202,14 @@ export function ArtistTracksScreen() {
       setTracks((prev) => (append ? [...prev, ...result.data] : result.data));
       setTotal(result.pagination.total);
       setPage(nextPage);
+      // The list DTO carries only the ingestion status; hydrate the last
+      // server-side failure message so it survives a reload.
+      for (const t of result.data) {
+        if (t.audioStatus !== 'FAILED') continue;
+        void getAudioStatus(api, t.id).then(applyAudioStatus).catch(() => {});
+      }
     },
-    [api],
+    [api, applyAudioStatus],
   );
 
   const load = useCallback(async () => {
@@ -99,6 +241,7 @@ export function ArtistTracksScreen() {
 
   const openCreate = useCallback(() => {
     setEditingId(null);
+    setOriginalStatus(null);
     setTitle('');
     setAlbumId(null);
     setDurationSeconds('');
@@ -113,6 +256,7 @@ export function ArtistTracksScreen() {
   const openEdit = useCallback(
     (track: TrackListItem) => {
       setEditingId(track.id);
+      setOriginalStatus(track.status);
       setTitle(track.title);
       setAlbumId(track.albumId);
       setDurationSeconds(String(Math.round(track.durationMs / 1000)));
@@ -159,7 +303,9 @@ export function ArtistTracksScreen() {
         durationMs,
         trackNumber: trackNumber.trim() ? Number(trackNumber) : null,
         isrc: isrc.trim() ? isrc.trim() : null,
-        status,
+        // Phase 14 — only send status on create or when the artist changed
+        // it; resubmitting an unchanged pipeline-owned READY would 422.
+        ...(originalStatus === null || status !== originalStatus ? { status } : {}),
       };
       if (editingId) {
         await updateTrack(api, editingId, body);
@@ -181,6 +327,7 @@ export function ArtistTracksScreen() {
     editingId,
     isrc,
     load,
+    originalStatus,
     status,
     title,
     trackNumber,
@@ -219,6 +366,53 @@ export function ArtistTracksScreen() {
       setLoadingMore(false);
     }
   }, [artistId, loadPage, loadingMore, page, total, tracks.length]);
+
+  const renderAudioActions = (track: TrackListItem) => {
+    const busy = !!busyTracks[track.id];
+    if (track.audioStatus === 'PENDING' || track.audioStatus === 'PROCESSING' || busy) {
+      return (
+        <Button
+          title={busy ? 'Uploading…' : 'Processing…'}
+          size="md"
+          variant="secondary"
+          disabled
+          onPress={() => {}}
+          testID={`audio-busy-${track.id}`}
+        />
+      );
+    }
+    if (track.audioStatus === 'FAILED') {
+      return (
+        <>
+          <Button
+            title="Retry"
+            size="md"
+            onPress={() => handleRetryAudio(track)}
+            disabled={busy}
+            testID={`audio-retry-${track.id}`}
+          />
+          <Button
+            title="New file"
+            size="md"
+            variant="secondary"
+            onPress={() => handleUploadAudio(track)}
+            disabled={busy}
+            testID={`audio-upload-${track.id}`}
+          />
+        </>
+      );
+    }
+    return (
+      <Button
+        title={track.audioStatus === 'READY' ? 'Replace audio' : 'Upload audio'}
+        size="md"
+        variant="secondary"
+        onPress={() => handleUploadAudio(track)}
+        disabled={busy}
+        testID={`audio-upload-${track.id}`}
+      />
+    );
+  };
 
   if (loadState === 'loading') {
     return (
@@ -312,6 +506,12 @@ export function ArtistTracksScreen() {
             testID="track-isrc"
           />
           <Text style={styles.fieldLabel}>Status</Text>
+          {originalStatus === 'READY' ? (
+            <Text style={styles.fieldHint} testID="track-status-pipeline-note">
+              Published — readiness is managed by audio processing. You can still unpublish or take
+              it down below.
+            </Text>
+          ) : null}
           <View style={styles.chips}>
             {STATUSES.map((s) => (
               <Button
@@ -347,20 +547,31 @@ export function ArtistTracksScreen() {
           onEndReached={loadMore}
           onEndReachedThreshold={0.5}
           renderItem={({ item }) => (
-            <View style={styles.row} testID={`track-row-${item.id}`}>
-              <View style={styles.rowMain}>
-                <TrackRow track={item} onPress={() => openEdit(item)} />
+            <View style={styles.rowBlock} testID={`track-row-${item.id}`}>
+              <View style={styles.row}>
+                <View style={styles.rowMain}>
+                  <TrackRow track={item} onPress={() => openEdit(item)} />
+                </View>
+                <StatusBadge status={item.status} />
+                <View style={styles.rowActions}>
+                  <Button title="Edit" size="md" variant="secondary" onPress={() => openEdit(item)} />
+                  <Button
+                    title="Delete"
+                    size="md"
+                    variant="secondary"
+                    onPress={() => handleDelete(item)}
+                    testID={`track-delete-${item.id}`}
+                  />
+                </View>
               </View>
-              <StatusBadge status={item.status} />
-              <View style={styles.rowActions}>
-                <Button title="Edit" size="md" variant="secondary" onPress={() => openEdit(item)} />
-                <Button
-                  title="Delete"
-                  size="md"
-                  variant="secondary"
-                  onPress={() => handleDelete(item)}
-                  testID={`track-delete-${item.id}`}
-                />
+              <View style={styles.audioRow}>
+                <AudioStatusBadge status={item.audioStatus} testID={`audio-status-${item.id}`} />
+                {audioErrors[item.id] ? (
+                  <Text style={styles.audioError} testID={`audio-error-${item.id}`}>
+                    {audioErrors[item.id]}
+                  </Text>
+                ) : null}
+                <View style={styles.audioActions}>{renderAudioActions(item)}</View>
               </View>
             </View>
           )}
@@ -393,6 +604,11 @@ const styles = StyleSheet.create({
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
   },
+  fieldHint: {
+    color: colors.textMuted,
+    fontSize: fontSize.sm,
+    marginBottom: spacing.xs,
+  },
   chips: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -411,6 +627,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: spacing.md,
   },
+  rowBlock: {
+    paddingVertical: spacing.xs,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: colors.border,
+  },
   rowMain: {
     flex: 1,
   },
@@ -418,5 +639,23 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: spacing.sm,
     marginLeft: spacing.sm,
+  },
+  audioRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.xs,
+  },
+  audioError: {
+    flex: 1,
+    flexShrink: 1,
+    color: colors.error,
+    fontSize: fontSize.xs,
+  },
+  audioActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginLeft: 'auto',
   },
 });

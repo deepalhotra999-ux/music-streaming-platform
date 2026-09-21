@@ -101,32 +101,32 @@ export class ApiClient {
 
   async request<T>(method: HttpMethod, path: string, options: RequestOptions = {}): Promise<T> {
     const useAuth = options.auth ?? true;
-    const token = useAuth ? this.getAccessToken?.() ?? null : null;
-    try {
-      const response = await this.fetchFn(this.baseUrl + path, {
-        method,
-        headers: this.buildHeaders(options.body !== undefined, token),
-        body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-      });
-      if (response.status === 401 && useAuth && this.onTokenRefresh) {
-        // Single transparent retry with a rotated token pair.
-        const refreshed = await this.onTokenRefresh().catch(() => null);
-        if (refreshed) {
-          const retry = await this.fetchFn(this.baseUrl + path, {
-            method,
-            headers: this.buildHeaders(options.body !== undefined, refreshed),
-            body: options.body !== undefined ? JSON.stringify(options.body) : undefined,
-          });
-          return this.readBody<T>(retry);
-        }
-      }
-      return this.readBody<T>(response);
-    } catch (error) {
-      if (error instanceof ApiError) {
-        throw error;
-      }
-      throw new ApiError(0, { title: 'Network error', detail: 'Could not reach the server. Check your connection and try again.' }, error);
-    }
+    const hasBody = options.body !== undefined;
+    const serialized = hasBody ? JSON.stringify(options.body) : undefined;
+    return this.execute<T>(path, useAuth, (token) => ({
+      method,
+      headers: this.buildHeaders(hasBody, token),
+      body: serialized,
+    }));
+  }
+
+  /**
+   * Phase 14 — multipart file upload. The caller builds the FormData; the
+   * client never sets Content-Type itself (fetch adds the multipart
+   * boundary). Same Bearer injection and single 401-refresh retry as
+   * request().
+   */
+  async upload<T>(
+    path: string,
+    formData: FormData,
+    options: Omit<RequestOptions, 'body'> = {},
+  ): Promise<T> {
+    const useAuth = options.auth ?? true;
+    return this.execute<T>(path, useAuth, (token) => ({
+      method: 'POST',
+      headers: this.buildUploadHeaders(token),
+      body: formData,
+    }));
   }
 
   get<T>(path: string, options: Omit<RequestOptions, 'body'> = {}): Promise<T> {
@@ -158,6 +158,39 @@ export class ApiClient {
       headers.Authorization = `Bearer ${token}`;
     }
     return headers;
+  }
+
+  private buildUploadHeaders(token: string | null): Record<string, string> {
+    // No Content-Type: fetch sets multipart/form-data with the boundary.
+    const headers: Record<string, string> = { Accept: 'application/json' };
+    if (token) {
+      headers.Authorization = `Bearer ${token}`;
+    }
+    return headers;
+  }
+
+  private async execute<T>(
+    path: string,
+    useAuth: boolean,
+    buildInit: (token: string | null) => RequestInit,
+  ): Promise<T> {
+    const token = useAuth ? this.getAccessToken?.() ?? null : null;
+    try {
+      const response = await this.fetchFn(this.baseUrl + path, buildInit(token));
+      if (response.status === 401 && useAuth && this.onTokenRefresh) {
+        // Single transparent retry with a rotated token pair.
+        const refreshed = await this.onTokenRefresh().catch(() => null);
+        if (refreshed) {
+          return this.readBody<T>(await this.fetchFn(this.baseUrl + path, buildInit(refreshed)));
+        }
+      }
+      return this.readBody<T>(response);
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw new ApiError(0, { title: 'Network error', detail: 'Could not reach the server. Check your connection and try again.' }, error);
+    }
   }
 
   private async readBody<T>(response: Response): Promise<T> {
