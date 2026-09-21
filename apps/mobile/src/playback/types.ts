@@ -79,6 +79,18 @@ export interface DriverStatus {
 }
 
 /**
+ * Now-playing metadata published to the OS (lock screen / notification /
+ * Control Center) and used as the remote-command target. Phase 10.
+ */
+export interface NowPlayingMetadata {
+  title: string;
+  artist?: string | null;
+  albumTitle?: string | null;
+  /** Remote artwork URL; omitted when the app has no URL artwork. */
+  artworkUrl?: string | null;
+}
+
+/**
  * Minimal player surface the engine needs. expoAudioDriver implements this
  * over expo-audio; tests use a fake. A future custom native module can
  * implement this interface instead without touching the engine.
@@ -97,6 +109,15 @@ export interface AudioDriver {
   getStatus(): DriverStatus;
   /** Subscribe to status changes; returns an unsubscribe function. */
   onStatusChange(listener: (status: DriverStatus) => void): () => void;
+  /**
+   * Publish now-playing metadata to the OS (lock screen / notification)
+   * and register this driver as the remote-command target (play/pause/seek
+   * where the OS supports it). Passing null clears the OS controls.
+   * Replacing the metadata for a new track must supersede the previous
+   * registration without an intermediate clear, so background playback is
+   * never left without a foreground session. Safe to call repeatedly.
+   */
+  setNowPlaying(metadata: NowPlayingMetadata | null): void;
   /** Release native resources. */
   destroy(): void;
 }

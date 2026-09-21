@@ -18,6 +18,7 @@ export type {
   DriverStatus,
   EngineListener,
   EngineSnapshot,
+  NowPlayingMetadata,
   PlaybackState,
   QueueTrack,
   RepeatMode,

@@ -32,6 +32,7 @@ import type {
   DriverStatus,
   EngineListener,
   EngineSnapshot,
+  NowPlayingMetadata,
   PlaybackState,
   QueueTrack,
   RepeatMode,
@@ -42,6 +43,16 @@ export const HEARTBEAT_INTERVAL_MS = 15_000;
 
 /** Seeking back within the first seconds of a track restarts it (standard player UX). */
 const PREVIOUS_RESTART_THRESHOLD_MS = 3_000;
+
+/** Map a queue entry to the OS now-playing metadata (Phase 10). */
+function toNowPlaying(track: QueueTrack): NowPlayingMetadata {
+  return {
+    title: track.title,
+    artist: track.artistName,
+    albumTitle: track.albumTitle,
+    artworkUrl: track.artworkUrl,
+  };
+}
 
 export interface PlaybackEngineOptions {
   api: ApiClient;
@@ -431,6 +442,10 @@ export class PlaybackEngine {
     if (generation !== this.loadGeneration) {
       return;
     }
+    // Register for lock-screen / system controls with this track's
+    // metadata before playback starts, so the OS surface is correct from
+    // the first frame — including when the app is backgrounded.
+    this.driver.setNowPlaying(toNowPlaying(track));
     if (opts.autoplay) {
       this.driver.play();
     }
@@ -446,7 +461,13 @@ export class PlaybackEngine {
     this.stopHeartbeat();
     this.unsubscribeDriver?.();
     this.unsubscribeDriver = null;
+    // Clear the OS now-playing surface before releasing the player: the
+    // track is genuinely gone during the load gap (a new registration
+    // follows in loadTrackAt). Skipped when no track was ever registered.
     // The driver destroys the native player: no second instance survives.
+    if (this.session) {
+      this.driver.setNowPlaying(null);
+    }
     this.driver.destroy();
     this.session = null;
     this.startedReported = false;
@@ -514,6 +535,11 @@ export class PlaybackEngine {
       this.setState('loading');
     } else {
       // Loaded but not playing: paused, or pre-play right after load.
+      // The heartbeat follows actual playback: a native-initiated pause
+      // (interruption, headphone unplug, remote pause, audio-focus loss)
+      // stops the cadence just like engine.pause() does, and the playing
+      // branch above restarts it on resume.
+      this.stopHeartbeat();
       this.setState(this.startedReported ? 'paused' : 'loading');
     }
     this.emit();

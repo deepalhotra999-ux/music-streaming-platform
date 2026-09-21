@@ -4,7 +4,7 @@
 // publishes its initial status synchronously, and exactly one "player" is
 // alive at a time (load without a matching destroy is a test failure).
 
-import type { AudioDriver, DriverStatus } from '../types';
+import type { AudioDriver, DriverStatus, NowPlayingMetadata } from '../types';
 
 export const EMPTY_STATUS: DriverStatus = {
   isLoaded: false,
@@ -82,6 +82,13 @@ export class FakeAudioDriver implements AudioDriver {
         this.listener = null;
       }
     };
+  }
+
+  /** Now-playing registrations, in order; null entries are clears. */
+  nowPlayingCalls: (NowPlayingMetadata | null)[] = [];
+
+  setNowPlaying(metadata: NowPlayingMetadata | null): void {
+    this.nowPlayingCalls.push(metadata);
   }
 
   destroy(): void {

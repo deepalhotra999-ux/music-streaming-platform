@@ -7,10 +7,11 @@
 import {
   createAudioPlayer,
   setAudioModeAsync,
+  type AudioMetadata,
   type AudioPlayer,
   type AudioStatus,
 } from 'expo-audio';
-import type { AudioDriver, DriverStatus } from './types';
+import type { AudioDriver, DriverStatus, NowPlayingMetadata } from './types';
 
 const EMPTY_STATUS: DriverStatus = {
   isLoaded: false,
@@ -68,13 +69,16 @@ export function createExpoAudioDriver(): AudioDriver {
       await setAudioModeAsync({
         // Play through the silent switch, like every music app.
         playsInSilentMode: true,
-        // Exclusive audio focus; also the mode lock-screen controls
-        // require when that phase wires them up (see ADR-007).
+        // Exclusive audio focus; required for lock-screen controls, and the
+        // mode under which the OS delivers interruptions (phone calls) and
+        // route changes (headphones unplugged) to the native player.
         interruptionMode: 'doNotMix',
-        // Foreground playback only in Phase 8. Background playback (audio
-        // background mode, foreground service, lock-screen controls) is a
-        // later phase; see ADR-007 for the seam.
-        shouldPlayInBackground: false,
+        // Phase 10 — background playback. The native module keeps the
+        // player alive when the app backgrounds (iOS audio background mode
+        // + Android foreground media-playback service, both enabled by the
+        // expo-audio config plugin). The engine's status subscription keeps
+        // state, queue, and telemetry consistent across the transition.
+        shouldPlayInBackground: true,
       });
     },
 
@@ -113,6 +117,28 @@ export function createExpoAudioDriver(): AudioDriver {
           statusListener = null;
         }
       };
+    },
+
+    setNowPlaying(metadata: NowPlayingMetadata | null): void {
+      if (!player) {
+        return;
+      }
+      if (metadata) {
+        // Registers this player for lock-screen / Control Center /
+        // notification controls (play/pause/seek where the OS supports
+        // them) and publishes the now-playing metadata. On Android this
+        // also promotes the playback service to the foreground, which is
+        // what keeps audio alive in the background.
+        const audioMetadata: AudioMetadata = {
+          title: metadata.title,
+          artist: metadata.artist ?? undefined,
+          albumTitle: metadata.albumTitle ?? undefined,
+          artworkUrl: metadata.artworkUrl ?? undefined,
+        };
+        player.setActiveForLockScreen(true, audioMetadata);
+      } else {
+        player.clearLockScreenControls();
+      }
     },
 
     destroy(): void {
