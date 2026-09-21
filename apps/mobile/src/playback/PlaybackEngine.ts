@@ -34,6 +34,7 @@ import type {
   EngineSnapshot,
   PlaybackState,
   QueueTrack,
+  RepeatMode,
 } from './types';
 
 /** Default cadence for HEARTBEAT events while a track is active. */
@@ -73,6 +74,8 @@ export class PlaybackEngine {
   private durationMs = 0;
   private isBuffering = false;
   private error: string | null = null;
+  private repeatMode: RepeatMode = 'off';
+  private shuffle = false;
 
   private startedReported = false;
   private finishedNaturally = false;
@@ -123,8 +126,17 @@ export class PlaybackEngine {
       durationMs: this.durationMs,
       isBuffering: this.isBuffering,
       error: this.error,
-      canNext: this.trackIndex >= 0 && this.trackIndex < this.queue.length - 1,
-      canPrevious: this.trackIndex > 0,
+      // With repeat-all the edges wrap, so next/previous stay available
+      // at the end/head of the queue.
+      canNext:
+        this.trackIndex >= 0 &&
+        (this.trackIndex < this.queue.length - 1 ||
+          (this.repeatMode === 'all' && this.queue.length > 1)),
+      canPrevious:
+        this.trackIndex > 0 ||
+        (this.trackIndex === 0 && this.repeatMode === 'all' && this.queue.length > 1),
+      repeatMode: this.repeatMode,
+      shuffle: this.shuffle,
     };
   }
 
@@ -158,6 +170,74 @@ export class PlaybackEngine {
   clearQueue(): void {
     this.queue = [];
     this.stop();
+  }
+
+  /**
+   * Remove the queue entry at index. Removing the current track continues
+   * with the track that slid into its place (or stops when the queue runs
+   * out). Out-of-range indices are ignored.
+   */
+  removeAt(index: number): void {
+    if (index < 0 || index >= this.queue.length) {
+      return;
+    }
+    this.queue.splice(index, 1);
+    if (index === this.trackIndex) {
+      if (index < this.queue.length) {
+        // The next track slid into this slot. loadTrackAt bumps the load
+        // generation, invalidating an in-flight load of the removed track.
+        void this.loadTrackAt(index, { autoplay: true });
+      } else {
+        this.stop();
+      }
+      return;
+    }
+    if (index < this.trackIndex) {
+      this.trackIndex -= 1;
+    }
+    this.emit();
+  }
+
+  /** Start playing the queue entry at index. Out-of-range indices are ignored. */
+  playAt(index: number): void {
+    if (index < 0 || index >= this.queue.length) {
+      return;
+    }
+    void this.loadTrackAt(index, { autoplay: true });
+  }
+
+  /** Repeat mode for natural track end and edge next/previous. */
+  setRepeatMode(mode: RepeatMode): void {
+    if (this.repeatMode !== mode) {
+      this.repeatMode = mode;
+      this.emit();
+    }
+  }
+
+  /**
+   * Shuffle the upcoming queue entries (everything after the current
+   * track) into a random play order. Already-played entries and the
+   * current track stay in place, so previous-track history still makes
+   * sense. Turning shuffle off keeps the current order.
+   */
+  setShuffle(enabled: boolean): void {
+    if (this.shuffle === enabled) {
+      return;
+    }
+    this.shuffle = enabled;
+    if (enabled) {
+      // Fisher–Yates over the upcoming slice only.
+      for (let i = this.queue.length - 1; i > this.trackIndex + 1; i -= 1) {
+        const j = this.trackIndex + 1 + Math.floor(Math.random() * (i - this.trackIndex));
+        const a = this.queue[i];
+        const b = this.queue[j];
+        if (a !== undefined && b !== undefined) {
+          this.queue[i] = b;
+          this.queue[j] = a;
+        }
+      }
+    }
+    this.emit();
   }
 
   // -- transport controls ----------------------------------------------------
@@ -242,8 +322,16 @@ export class PlaybackEngine {
   }
 
   next(): void {
-    if (this.trackIndex >= 0 && this.trackIndex < this.queue.length - 1) {
+    if (this.trackIndex < 0) {
+      return;
+    }
+    if (this.trackIndex < this.queue.length - 1) {
       void this.loadTrackAt(this.trackIndex + 1, { autoplay: true });
+      return;
+    }
+    if (this.repeatMode === 'all' && this.queue.length > 1) {
+      // Repeat-all wraps next() at the end of the queue back to the start.
+      void this.loadTrackAt(0, { autoplay: true });
     }
   }
 
@@ -251,10 +339,18 @@ export class PlaybackEngine {
     if (this.trackIndex < 0) {
       return;
     }
-    if (this.positionMs > PREVIOUS_RESTART_THRESHOLD_MS || this.trackIndex === 0) {
-      // Standard UX: restart the current track instead of going back (and
-      // there is nothing to go back to at the head of the queue).
+    if (this.positionMs > PREVIOUS_RESTART_THRESHOLD_MS) {
       void this.seekTo(0);
+      return;
+    }
+    if (this.trackIndex === 0) {
+      if (this.repeatMode === 'all' && this.queue.length > 1) {
+        // Repeat-all wraps previous() at the head of the queue to the end.
+        void this.loadTrackAt(this.queue.length - 1, { autoplay: true });
+      } else {
+        // Standard UX: restart the current track (nothing to go back to).
+        void this.seekTo(0);
+      }
       return;
     }
     void this.loadTrackAt(this.trackIndex - 1, { autoplay: true });
@@ -427,14 +523,24 @@ export class PlaybackEngine {
     this.stopHeartbeat();
     const finalPosition = this.positionMs;
     this.reportEvent('COMPLETE', finalPosition);
+    if (this.repeatMode === 'one' && this.trackIndex >= 0) {
+      // Repeat-one replays the same track with a fresh session.
+      await this.loadTrackAt(this.trackIndex, { autoplay: true });
+      return;
+    }
     if (this.trackIndex >= 0 && this.trackIndex < this.queue.length - 1) {
       await this.loadTrackAt(this.trackIndex + 1, { autoplay: true });
-    } else {
-      // Queue exhausted: release the player, keep the queue for replay.
-      this.teardownTrack();
-      this.setState('ended');
-      this.emit();
+      return;
     }
+    if (this.repeatMode === 'all' && this.queue.length > 0) {
+      // Repeat-all wraps the end of the queue back to the start.
+      await this.loadTrackAt(0, { autoplay: true });
+      return;
+    }
+    // Queue exhausted: release the player, keep the queue for replay.
+    this.teardownTrack();
+    this.setState('ended');
+    this.emit();
   }
 
   private fail(message: string): void {

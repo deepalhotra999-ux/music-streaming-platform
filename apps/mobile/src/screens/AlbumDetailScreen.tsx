@@ -4,9 +4,10 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Stack, useRouter } from 'expo-router';
-import type { AlbumDetail } from '../api';
+import type { AlbumDetail, TrackStatus, TrackSummary } from '../api';
 import { apiErrorMessage, getAlbum } from '../api';
 import { useAuth } from '../auth';
+import { useQueueActions } from '../player';
 import {
   AlbumTrackRow,
   ArtworkImage,
@@ -27,6 +28,9 @@ const ALBUM_TYPE_LABELS: Record<string, string> = {
 export function AlbumDetailScreen({ albumId }: { albumId: string }) {
   const { api } = useAuth();
   const router = useRouter();
+  // Phase 9 — tapping a track plays the album from that track; long-press
+  // appends the track to the current queue.
+  const { playTracks, addToQueue } = useQueueActions();
   const [album, setAlbum] = useState<AlbumDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
@@ -65,6 +69,21 @@ export function AlbumDetailScreen({ albumId }: { albumId: string }) {
 
   const year = formatReleaseYear(album.releaseDate);
   const totalMs = album.tracks.reduce((sum, t) => sum + t.durationMs, 0);
+  // Album-embedded tracks carry no artist/album summaries, so synthesize
+  // TrackSummary records from the album context for the queue.
+  const sorted = album.tracks
+    .slice()
+    .sort((a, b) => (a.trackNumber ?? 0) - (b.trackNumber ?? 0));
+  const summaries: TrackSummary[] = sorted.map((track) => ({
+    id: track.id,
+    title: track.title,
+    durationMs: track.durationMs,
+    status: track.status as TrackStatus,
+    artistId: album.artistId,
+    artistName: album.artistName,
+    albumId: album.id,
+    albumTitle: album.title,
+  }));
 
   return (
     <Screen scrollable={false} padded={false} edges={['bottom']} testID="album-detail-screen">
@@ -89,17 +108,16 @@ export function AlbumDetailScreen({ albumId }: { albumId: string }) {
         </View>
 
         <View style={styles.tracks}>
-          {album.tracks
-            .slice()
-            .sort((a, b) => (a.trackNumber ?? 0) - (b.trackNumber ?? 0))
-            .map((track, i) => (
-              <AlbumTrackRow
-                key={track.id}
-                track={track}
-                artistName={album.artistName}
-                index={track.trackNumber ?? i + 1}
-              />
-            ))}
+          {sorted.map((track, i) => (
+            <AlbumTrackRow
+              key={track.id}
+              track={track}
+              artistName={album.artistName}
+              index={track.trackNumber ?? i + 1}
+              onPress={() => void playTracks(summaries, i)}
+              onLongPress={() => void addToQueue(summaries[i])}
+            />
+          ))}
         </View>
       </ScrollView>
     </Screen>

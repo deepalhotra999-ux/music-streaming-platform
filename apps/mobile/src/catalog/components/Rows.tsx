@@ -21,22 +21,26 @@ import { ArtworkImage } from './ArtworkImage';
 
 function RowShell({
   onPress,
+  onLongPress,
   label,
   testID,
   children,
 }: {
   onPress?: () => void;
+  onLongPress?: () => void;
   label: string;
   testID?: string;
   children: React.ReactNode;
 }) {
+  const interactive = Boolean(onPress || onLongPress);
   return (
     <Pressable
       onPress={onPress}
-      disabled={!onPress}
-      accessibilityRole={onPress ? 'button' : undefined}
+      onLongPress={onLongPress}
+      disabled={!interactive}
+      accessibilityRole={interactive ? 'button' : undefined}
       accessibilityLabel={label}
-      style={({ pressed }) => [styles.row, pressed && onPress && styles.pressed]}
+      style={({ pressed }) => [styles.row, pressed && interactive && styles.pressed]}
       testID={testID}
     >
       {children}
@@ -62,16 +66,19 @@ function RowTexts({ title, subtitle }: { title: string; subtitle?: string }) {
 export function TrackRow({
   track,
   onPress,
+  onLongPress,
   index,
 }: {
   track: TrackListItem | TrackSummary;
   onPress?: () => void;
+  onLongPress?: () => void;
   /** Optional 1-based position shown in album/playlist context. */
   index?: number;
 }) {
   return (
     <RowShell
       onPress={onPress}
+      onLongPress={onLongPress}
       label={`Track ${track.title} by ${track.artistName}`}
       testID={`track-row-${track.id}`}
     >
@@ -93,17 +100,26 @@ export function AlbumTrackRow({
   track,
   artistName,
   index,
+  onPress,
+  onLongPress,
 }: {
   track: AlbumTrack;
   artistName: string;
   index: number;
+  onPress?: () => void;
+  onLongPress?: () => void;
 }) {
   return (
-    <View style={styles.row} testID={`album-track-row-${track.id}`}>
+    <RowShell
+      onPress={onPress}
+      onLongPress={onLongPress}
+      label={`Track ${track.title} by ${artistName}`}
+      testID={`album-track-row-${track.id}`}
+    >
       <Text style={styles.index}>{index}</Text>
       <RowTexts title={track.title} subtitle={artistName} />
       <Text style={styles.meta}>{formatDuration(track.durationMs)}</Text>
-    </View>
+    </RowShell>
   );
 }
 

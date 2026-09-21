@@ -12,19 +12,28 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import type { ReactNode } from 'react';
 import { AuthProvider, useAuth } from '../auth';
 import { PlaybackProvider } from '../playback';
+import { MiniPlayerHost } from '../player';
 import { colors } from '../theme';
 
 /**
  * Phase 8 — mounts the playback engine only for authenticated users: it
  * needs the authenticated API client for playback sessions and play
  * events. Unmounting on sign-out stops playback and releases the player.
+ *
+ * Phase 9 — the mini player host also lives here so the bar persists
+ * across tabs and catalog navigation (it overlays the root stack).
  */
 function PlaybackShell({ children }: { children: ReactNode }) {
   const { status, api } = useAuth();
   if (status !== 'authenticated') {
     return <>{children}</>;
   }
-  return <PlaybackProvider api={api}>{children}</PlaybackProvider>;
+  return (
+    <PlaybackProvider api={api}>
+      {children}
+      <MiniPlayerHost />
+    </PlaybackProvider>
+  );
 }
 
 function RootNavigator() {
@@ -49,6 +58,7 @@ function RootNavigator() {
         <Stack.Protected guard={isAuthenticated}>
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="(catalog)" />
+          <Stack.Screen name="player" options={{ presentation: 'modal' }} />
         </Stack.Protected>
       </Stack>
     </>

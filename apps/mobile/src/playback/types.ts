@@ -24,6 +24,8 @@ export interface QueueTrack {
   title: string;
   artistName: string;
   albumTitle?: string | null;
+  /** Album id, used as the stable seed for placeholder artwork. */
+  albumId?: string | null;
   artworkUrl?: string | null;
   /** Catalog duration, informational only; the player reports the true one. */
   durationMs?: number;
@@ -36,10 +38,14 @@ export function toQueueTrack(summary: TrackSummary): QueueTrack {
     title: summary.title,
     artistName: summary.artistName,
     albumTitle: summary.albumTitle,
+    albumId: summary.albumId,
     artworkUrl: null,
     durationMs: summary.durationMs,
   };
 }
+
+/** Repeat behavior for natural track end (and next/previous at the edges). */
+export type RepeatMode = 'off' | 'all' | 'one';
 
 /** Immutable point-in-time view of the engine, for React and other UIs. */
 export interface EngineSnapshot {
@@ -55,6 +61,10 @@ export interface EngineSnapshot {
   error: string | null;
   canNext: boolean;
   canPrevious: boolean;
+  /** Repeat mode; owned by the engine because it controls auto-advance. */
+  repeatMode: RepeatMode;
+  /** When true, upcoming queue entries were shuffled into play order. */
+  shuffle: boolean;
 }
 
 /** Driver-level status, mapped 1:1 from the underlying audio player. */

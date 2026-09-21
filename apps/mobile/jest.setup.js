@@ -1,6 +1,19 @@
 // Phase 5 — shared jest setup: mock native-dependent modules so component
 // tests run in the jest-expo environment without native code.
 
+// expo-audio is a native module; component tests never drive real audio.
+// The playback engine's own tests inject a fake driver instead.
+jest.mock('expo-audio', () => ({
+  createAudioPlayer: jest.fn(() => ({
+    play: jest.fn(),
+    pause: jest.fn(),
+    seekTo: jest.fn(),
+    replace: jest.fn(),
+    remove: jest.fn(),
+  })),
+  setAudioModeAsync: jest.fn(async () => {}),
+}));
+
 jest.mock('expo-secure-store', () => ({
   getItemAsync: jest.fn(async () => null),
   setItemAsync: jest.fn(async () => undefined),
@@ -21,8 +34,11 @@ jest.mock('@expo/vector-icons', () => {
 
 jest.mock('expo-router', () => {  const React = require('react');
   const routerMock = { push: jest.fn(), replace: jest.fn(), back: jest.fn() };
+  // Mutable route segments for tests that assert navigation-dependent UI.
+  const mockSegments = [];
   return {
     __esModule: true,
+    __mockSegments: mockSegments,
     Link: ({ asChild, children }) =>
       asChild ? children : React.createElement(React.Fragment, null, children),
     Stack: { Screen: () => null },
@@ -30,7 +46,7 @@ jest.mock('expo-router', () => {  const React = require('react');
     useRouter: () => routerMock,
     useNavigation: () => ({ setOptions: jest.fn(), goBack: jest.fn() }),
     useLocalSearchParams: () => ({}),
-    useSegments: () => [],
+    useSegments: () => mockSegments,
     usePathname: () => '/',
   };
 });

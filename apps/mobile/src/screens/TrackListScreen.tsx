@@ -1,12 +1,14 @@
 // Phase 6 — track list: paginated tracks, optionally filtered by artist or
-// genre. Tapping a track opens its album (or the artist when the track has
-// no album); there is no player in this phase.
+// genre.
+//
+// Phase 9 — tapping a track plays it immediately (single-track queue);
+// long-press appends it to the current queue.
 
 import type { ReactElement } from 'react';
-import { useRouter } from 'expo-router';
 import { listTracks } from '../api';
 import { useAuth } from '../auth';
 import { CatalogListScreen, TrackRow } from '../catalog';
+import { useQueueActions } from '../player';
 
 interface TrackListScreenProps {
   artistId?: string;
@@ -17,7 +19,7 @@ interface TrackListScreenProps {
 
 export function TrackListScreen({ artistId, genreId, listHeader, testID }: TrackListScreenProps) {
   const { api } = useAuth();
-  const router = useRouter();
+  const { playTracks, addToQueue } = useQueueActions();
 
   return (
     <CatalogListScreen
@@ -26,9 +28,8 @@ export function TrackListScreen({ artistId, genreId, listHeader, testID }: Track
       renderItem={(track) => (
         <TrackRow
           track={track}
-          onPress={() =>
-            router.push(track.albumId ? `/album/${track.albumId}` : `/artist/${track.artistId}`)
-          }
+          onPress={() => void playTracks([track])}
+          onLongPress={() => void addToQueue(track)}
         />
       )}
       emptyTitle="No tracks found"

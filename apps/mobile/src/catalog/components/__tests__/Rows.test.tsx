@@ -46,6 +46,14 @@ describe('TrackRow', () => {
     fireEvent.press(screen.getByTestId('track-row-t1'));
     expect(onPress).toHaveBeenCalledTimes(1);
   });
+
+  // Phase 9 — long-press wires add-to-queue from the screens.
+  it('fires onLongPress when long-pressed', () => {
+    const onLongPress = jest.fn();
+    render(<TrackRow track={track} onPress={() => {}} onLongPress={onLongPress} />);
+    fireEvent(screen.getByTestId('track-row-t1'), 'longPress');
+    expect(onLongPress).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('ArtistRow', () => {
@@ -60,22 +68,37 @@ describe('ArtistRow', () => {
 });
 
 describe('AlbumTrackRow', () => {
+  const albumTrack = {
+    id: 't2',
+    title: 'Intro',
+    durationMs: 61000,
+    trackNumber: 1,
+    discNumber: 1,
+    status: 'READY',
+  };
+
   it('renders the track number, title, and duration', () => {
-    render(
-      <AlbumTrackRow
-        track={{
-          id: 't2',
-          title: 'Intro',
-          durationMs: 61000,
-          trackNumber: 1,
-          discNumber: 1,
-          status: 'READY',
-        }}
-        artistName="Neon Bloom"
-        index={1}
-      />,
-    );
+    render(<AlbumTrackRow track={albumTrack} artistName="Neon Bloom" index={1} />);
     expect(screen.getByText('Intro')).toBeTruthy();
     expect(screen.getByText('1:01')).toBeTruthy();
+  });
+
+  // Phase 9 — album rows are tappable: tap plays, long-press queues.
+  it('fires onPress and onLongPress', () => {
+    const onPress = jest.fn();
+    const onLongPress = jest.fn();
+    render(
+      <AlbumTrackRow
+        track={albumTrack}
+        artistName="Neon Bloom"
+        index={1}
+        onPress={onPress}
+        onLongPress={onLongPress}
+      />,
+    );
+    fireEvent.press(screen.getByTestId('album-track-row-t2'));
+    expect(onPress).toHaveBeenCalledTimes(1);
+    fireEvent(screen.getByTestId('album-track-row-t2'), 'longPress');
+    expect(onLongPress).toHaveBeenCalledTimes(1);
   });
 });

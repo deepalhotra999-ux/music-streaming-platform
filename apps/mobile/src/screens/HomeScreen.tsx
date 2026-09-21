@@ -33,6 +33,7 @@ import {
   listTracks,
 } from '../api';
 import { useAuth } from '../auth';
+import { useQueueActions } from '../player';
 import {
   AlbumCard,
   ArtistCard,
@@ -127,6 +128,9 @@ function RailBody<T>({
 export function HomeScreen() {
   const { api } = useAuth();
   const router = useRouter();
+  // Phase 9 — tapping a recent track plays it (the rail becomes the queue);
+  // long-press appends it to the current queue.
+  const { playTracks, addToQueue } = useQueueActions();
   const [rails, setRails] = useState<HomeRails>({
     albums: emptyRail(),
     artists: emptyRail(),
@@ -216,15 +220,12 @@ export function HomeScreen() {
             emptyMessage="No tracks yet."
             renderItems={(tracks) => (
               <View>
-                {tracks.map((track) => (
+                {tracks.map((track, i) => (
                   <TrackRow
                     key={track.id}
                     track={track}
-                    onPress={() =>
-                      router.push(
-                        track.albumId ? `/album/${track.albumId}` : `/artist/${track.artistId}`,
-                      )
-                    }
+                    onPress={() => void playTracks(tracks, i)}
+                    onLongPress={() => void addToQueue(track)}
                   />
                 ))}
               </View>

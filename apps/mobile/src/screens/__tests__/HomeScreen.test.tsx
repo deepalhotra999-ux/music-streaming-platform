@@ -10,6 +10,14 @@ jest.mock('../../auth', () => ({
   useAuth: jest.fn(),
 }));
 
+// Phase 9 — HomeScreen now drives playback through useQueueActions. The
+// hook is stubbed here; engine behavior is covered by the playback tests.
+const mockPlayTracks = jest.fn();
+const mockAddToQueue = jest.fn();
+jest.mock('../../player', () => ({
+  useQueueActions: () => ({ playTracks: mockPlayTracks, addToQueue: mockAddToQueue }),
+}));
+
 const mockUseAuth = useAuth as jest.Mock;
 
 function pageOf<T>(items: T[]): {
@@ -40,6 +48,28 @@ const artist = {
   verified: true,
   followerCount: 9001,
   createdAt: '2024-01-01T00:00:00.000Z',
+};
+
+const track1 = {
+  id: 't1',
+  title: 'First Light',
+  artistId: 'a1',
+  artistName: 'Neon Bloom',
+  albumId: 'al1',
+  albumTitle: 'Afterglow',
+  durationMs: 180_000,
+  trackNumber: 1,
+  discNumber: 1,
+  status: 'READY',
+  playCount: 10,
+  createdAt: '2024-01-01T00:00:00.000Z',
+};
+
+const track2 = {
+  ...track1,
+  id: 't2',
+  title: 'Second Wave',
+  trackNumber: 2,
 };
 
 function mockApi(overrides: Record<string, unknown> = {}) {
@@ -97,5 +127,22 @@ describe('HomeScreen', () => {
     expect(seeAll.length).toBeGreaterThan(0);
     fireEvent.press(seeAll[0]);
     expect((router.push as jest.Mock)).toHaveBeenCalledWith('/albums');
+  });
+
+  // Phase 9 — tapping a recent track plays the rail from that track.
+  it('plays the recent-tracks rail from the tapped track', async () => {
+    mockApi({ '/v1/tracks?limit=5': pageOf([track1, track2]) });
+    render(<HomeScreen />);
+    await waitFor(() => expect(screen.getByTestId('track-row-t2')).toBeTruthy());
+    fireEvent.press(screen.getByTestId('track-row-t2'));
+    expect(mockPlayTracks).toHaveBeenCalledWith([track1, track2], 1);
+  });
+
+  it('adds a recent track to the queue on long press', async () => {
+    mockApi({ '/v1/tracks?limit=5': pageOf([track1, track2]) });
+    render(<HomeScreen />);
+    await waitFor(() => expect(screen.getByTestId('track-row-t1')).toBeTruthy());
+    fireEvent(screen.getByTestId('track-row-t1'), 'longPress');
+    expect(mockAddToQueue).toHaveBeenCalledWith(track1);
   });
 });

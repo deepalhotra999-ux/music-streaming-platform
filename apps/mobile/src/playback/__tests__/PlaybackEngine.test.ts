@@ -590,8 +590,257 @@ describe('PlaybackEngine', () => {
       title: 'Song',
       artistName: 'Artist',
       albumTitle: null,
+      albumId: null,
       artworkUrl: null,
       durationMs: 30000,
     });
+  });
+});
+
+// -- Phase 9: queue management, repeat, shuffle ------------------------------
+
+describe('PlaybackEngine queue modes', () => {
+  it('removeAt drops an upcoming track and keeps playback going', async () => {
+    const t = createTestApi();
+    const { engine, driver } = createEngine(t.api);
+    await playTrack(engine, driver, [track('t1'), track('t2'), track('t3')]);
+
+    engine.removeAt(1);
+
+    const snap = engine.getSnapshot();
+    expect(snap.queue.map((q) => q.trackId)).toEqual(['t1', 't3']);
+    expect(snap.trackIndex).toBe(0);
+    expect(snap.state).toBe('playing');
+    expect(t.sessions).toHaveLength(1); // no reload of the current track
+    expect(driver.loadCalls).toHaveLength(1);
+  });
+
+  it('removeAt before the current track shifts the index down', async () => {
+    const t = createTestApi();
+    const { engine, driver } = createEngine(t.api);
+    await playTrack(engine, driver, [track('t1'), track('t2'), track('t3')]);
+    engine.playAt(2);
+    await flush();
+
+    engine.removeAt(0);
+
+    const snap = engine.getSnapshot();
+    expect(snap.queue.map((q) => q.trackId)).toEqual(['t2', 't3']);
+    expect(snap.trackIndex).toBe(1);
+    expect(snap.track?.trackId).toBe('t3');
+  });
+
+  it('removeAt on the current track continues with the next track', async () => {
+    const t = createTestApi();
+    const { engine, driver } = createEngine(t.api);
+    await playTrack(engine, driver, [track('t1'), track('t2')]);
+
+    engine.removeAt(0);
+    await flush();
+
+    expect(t.sessions.map((s) => s.trackId)).toEqual(['t1', 't2']);
+    const snap = engine.getSnapshot();
+    expect(snap.track?.trackId).toBe('t2');
+    expect(snap.trackIndex).toBe(0);
+    expect(driver.maxConcurrentPlayers).toBeLessThanOrEqual(1);
+  });
+
+  it('removeAt on the last remaining track stops playback', async () => {
+    const t = createTestApi();
+    const { engine, driver } = createEngine(t.api);
+    await playTrack(engine, driver, [track('t1')]);
+
+    engine.removeAt(0);
+
+    const snap = engine.getSnapshot();
+    expect(snap.queue).toHaveLength(0);
+    expect(snap.state).toBe('idle');
+    expect(snap.track).toBeNull();
+  });
+
+  it('removeAt and playAt ignore out-of-range indices', async () => {
+    const t = createTestApi();
+    const { engine, driver } = createEngine(t.api);
+    await playTrack(engine, driver, [track('t1'), track('t2')]);
+
+    engine.removeAt(-1);
+    engine.removeAt(7);
+    engine.playAt(-1);
+    engine.playAt(7);
+    await flush();
+
+    const snap = engine.getSnapshot();
+    expect(snap.queue).toHaveLength(2);
+    expect(snap.trackIndex).toBe(0);
+    expect(t.sessions).toHaveLength(1);
+  });
+
+  it('playAt jumps to a queue index', async () => {
+    const t = createTestApi();
+    const { engine, driver } = createEngine(t.api);
+    await playTrack(engine, driver, [track('t1'), track('t2'), track('t3')]);
+
+    engine.playAt(2);
+    await flush();
+
+    expect(t.sessions.map((s) => s.trackId)).toEqual(['t1', 't3']);
+    const snap = engine.getSnapshot();
+    expect(snap.trackIndex).toBe(2);
+    expect(snap.track?.trackId).toBe('t3');
+    expect(driver.loadCalls).toHaveLength(2);
+  });
+
+  it('setRepeatMode is reflected in the snapshot', async () => {
+    const t = createTestApi();
+    const { engine, driver } = createEngine(t.api);
+    await playTrack(engine, driver, [track('t1')]);
+
+    expect(engine.getSnapshot().repeatMode).toBe('off');
+    engine.setRepeatMode('all');
+    expect(engine.getSnapshot().repeatMode).toBe('all');
+    engine.setRepeatMode('one');
+    expect(engine.getSnapshot().repeatMode).toBe('one');
+    engine.setRepeatMode('off');
+    expect(engine.getSnapshot().repeatMode).toBe('off');
+  });
+
+  it('repeat one replays the same track with a fresh session on natural finish', async () => {
+    const t = createTestApi();
+    const { engine, driver } = createEngine(t.api);
+    await playTrack(engine, driver, [track('t1'), track('t2')]);
+    engine.setRepeatMode('one');
+
+    driver.emit({ didJustFinish: true, playing: false, currentTimeSec: 30, durationSec: 30 });
+    await flush();
+
+    expect(t.events).toContainEqual({ sessionId: 'sess-1', type: 'COMPLETE', positionMs: 30000 });
+    expect(t.sessions.map((s) => s.trackId)).toEqual(['t1', 't1']);
+    const snap = engine.getSnapshot();
+    expect(snap.trackIndex).toBe(0);
+    expect(snap.track?.trackId).toBe('t1');
+  });
+
+  it('repeat all wraps the end of the queue on natural finish', async () => {
+    const t = createTestApi();
+    const { engine, driver } = createEngine(t.api);
+    await playTrack(engine, driver, [track('t1'), track('t2')], 1);
+    engine.setRepeatMode('all');
+
+    driver.emit({ didJustFinish: true, playing: false, currentTimeSec: 25, durationSec: 25 });
+    await flush();
+
+    expect(t.sessions.map((s) => s.trackId)).toEqual(['t2', 't1']);
+    const snap = engine.getSnapshot();
+    expect(snap.trackIndex).toBe(0);
+    expect(snap.state).not.toBe('ended');
+  });
+
+  it('next() wraps to the start with repeat all', async () => {
+    const t = createTestApi();
+    const { engine, driver } = createEngine(t.api);
+    await playTrack(engine, driver, [track('t1'), track('t2')], 1);
+    engine.setRepeatMode('all');
+
+    expect(engine.getSnapshot().canNext).toBe(true);
+    engine.next();
+    await flush();
+
+    expect(t.sessions.map((s) => s.trackId)).toEqual(['t2', 't1']);
+    expect(engine.getSnapshot().trackIndex).toBe(0);
+  });
+
+  it('previous() wraps to the end with repeat all at the head of the queue', async () => {
+    const t = createTestApi();
+    const { engine, driver } = createEngine(t.api);
+    await playTrack(engine, driver, [track('t1'), track('t2'), track('t3')]);
+    engine.setRepeatMode('all');
+
+    expect(engine.getSnapshot().canPrevious).toBe(true);
+    engine.previous(); // position 0 ≤ 3s, at head → wraps
+    await flush();
+
+    expect(t.sessions.map((s) => s.trackId)).toEqual(['t1', 't3']);
+    expect(engine.getSnapshot().trackIndex).toBe(2);
+  });
+
+  it('previous() still restarts past 3s even with repeat all', async () => {
+    const t = createTestApi();
+    const { engine, driver } = createEngine(t.api);
+    await playTrack(engine, driver, [track('t1'), track('t2')]);
+    engine.setRepeatMode('all');
+    driver.emit({ playing: true, currentTimeSec: 10, durationSec: 30 });
+
+    engine.previous();
+    await flush();
+
+    expect(t.sessions).toHaveLength(1); // no new session: restarted instead
+    expect(driver.seekCalls).toEqual([0]);
+  });
+
+  it('setShuffle shuffles only upcoming tracks and keeps current/history in place', async () => {
+    const random = jest.spyOn(Math, 'random').mockReturnValue(0);
+    try {
+      const t = createTestApi();
+      const { engine, driver } = createEngine(t.api);
+      await playTrack(engine, driver, [
+        track('t1'),
+        track('t2'),
+        track('t3'),
+        track('t4'),
+        track('t5'),
+      ]);
+
+      engine.setShuffle(true);
+
+      const snap = engine.getSnapshot();
+      expect(snap.shuffle).toBe(true);
+      // Deterministic with Math.random() === 0: swaps (4,1), (3,1), (2,1).
+      expect(snap.queue.map((q) => q.trackId)).toEqual(['t1', 't3', 't4', 't5', 't2']);
+      expect(snap.trackIndex).toBe(0);
+      expect(snap.track?.trackId).toBe('t1');
+      expect(snap.state).toBe('playing');
+      expect(t.sessions).toHaveLength(1); // shuffling never reloads
+    } finally {
+      random.mockRestore();
+    }
+  });
+
+  it('setShuffle leaves already-played tracks before the current one in place', async () => {
+    const random = jest.spyOn(Math, 'random').mockReturnValue(0);
+    try {
+      const t = createTestApi();
+      const { engine, driver } = createEngine(t.api);
+      await playTrack(engine, driver, [track('t1'), track('t2'), track('t3'), track('t4')], 2);
+
+      engine.setShuffle(true);
+
+      const snap = engine.getSnapshot();
+      const ids = snap.queue.map((q) => q.trackId);
+      expect(ids.slice(0, 3)).toEqual(['t1', 't2', 't3']); // history + current fixed
+      expect(ids).toHaveLength(4);
+      expect(new Set(ids)).toEqual(new Set(['t1', 't2', 't3', 't4'])); // same multiset
+      expect(snap.trackIndex).toBe(2);
+    } finally {
+      random.mockRestore();
+    }
+  });
+
+  it('setShuffle(false) keeps the current order and is a no-op when unchanged', async () => {
+    const t = createTestApi();
+    const { engine, driver } = createEngine(t.api);
+    await playTrack(engine, driver, [track('t1'), track('t2')]);
+
+    let emissions = 0;
+    const unsub = engine.subscribe(() => {
+      emissions += 1;
+    });
+    emissions = 0;
+    engine.setShuffle(false); // already off
+    expect(emissions).toBe(0);
+    engine.setShuffle(true);
+    expect(engine.getSnapshot().shuffle).toBe(true);
+    engine.setShuffle(false);
+    expect(engine.getSnapshot().shuffle).toBe(false);
+    unsub();
   });
 });

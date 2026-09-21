@@ -10,7 +10,7 @@ import { useSyncExternalStore } from 'react';
 import { getApiBaseUrl, type ApiClient } from '../api';
 import { PlaybackEngine } from './PlaybackEngine';
 import { createExpoAudioDriver } from './expoAudioDriver';
-import type { EngineSnapshot, QueueTrack } from './types';
+import type { EngineSnapshot, QueueTrack, RepeatMode } from './types';
 
 export interface PlaybackContextValue extends EngineSnapshot {
   play: () => void;
@@ -24,6 +24,11 @@ export interface PlaybackContextValue extends EngineSnapshot {
   setQueue: (tracks: QueueTrack[], startIndex?: number) => Promise<void>;
   enqueue: (track: QueueTrack) => void;
   clearQueue: () => void;
+  /** Phase 9 — queue management and playback modes for the player UI. */
+  removeAt: (index: number) => void;
+  playAt: (index: number) => void;
+  setRepeatMode: (mode: RepeatMode) => void;
+  setShuffle: (enabled: boolean) => void;
 }
 
 const PlaybackContext = createContext<PlaybackContextValue | null>(null);
@@ -90,6 +95,10 @@ export function PlaybackProvider({ children, api, baseUrl }: PlaybackProviderPro
         engine.setQueue(tracks, startIndex),
       enqueue: (track: QueueTrack) => engine.enqueue(track),
       clearQueue: () => engine.clearQueue(),
+      removeAt: (index: number) => engine.removeAt(index),
+      playAt: (index: number) => engine.playAt(index),
+      setRepeatMode: (mode: RepeatMode) => engine.setRepeatMode(mode),
+      setShuffle: (enabled: boolean) => engine.setShuffle(enabled),
     }),
     [engine, snapshot],
   );

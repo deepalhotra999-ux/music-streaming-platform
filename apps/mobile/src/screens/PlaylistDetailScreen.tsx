@@ -3,17 +3,20 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StyleSheet, Text, View } from 'react-native';
-import { Stack, useRouter } from 'expo-router';
+import { Stack } from 'expo-router';
 import type { PlaylistDetail } from '../api';
 import { apiErrorMessage, getPlaylist } from '../api';
 import { useAuth } from '../auth';
+import { useQueueActions } from '../player';
 import { ArtworkImage, TrackRow, formatTrackCount } from '../catalog';
 import { ErrorState, LoadingState, Screen } from '../components';
 import { colors, fontSize, fontWeight, spacing } from '../theme';
 
 export function PlaylistDetailScreen({ playlistId }: { playlistId: string }) {
   const { api } = useAuth();
-  const router = useRouter();
+  // Phase 9 — tapping a track plays the playlist from that track;
+  // long-press appends the track to the current queue.
+  const { playTracks, addToQueue } = useQueueActions();
   const [playlist, setPlaylist] = useState<PlaylistDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
@@ -78,13 +81,8 @@ export function PlaylistDetailScreen({ playlistId }: { playlistId: string }) {
               key={item.id}
               track={item.track}
               index={i + 1}
-              onPress={() =>
-                router.push(
-                  item.track.albumId
-                    ? `/album/${item.track.albumId}`
-                    : `/artist/${item.track.artistId}`,
-                )
-              }
+              onPress={() => void playTracks(sorted.map((entry) => entry.track), i)}
+              onLongPress={() => void addToQueue(item.track)}
             />
           ))}
         </View>

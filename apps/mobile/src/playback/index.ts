@@ -20,4 +20,5 @@ export type {
   EngineSnapshot,
   PlaybackState,
   QueueTrack,
+  RepeatMode,
 } from './types';

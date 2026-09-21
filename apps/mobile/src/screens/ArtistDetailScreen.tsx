@@ -14,6 +14,7 @@ import type {
 } from '../api';
 import { apiErrorMessage, getArtist, listAlbums, listTracks } from '../api';
 import { useAuth } from '../auth';
+import { useQueueActions } from '../player';
 import {
   AlbumCard,
   ArtworkImage,
@@ -54,6 +55,9 @@ async function loadArtistDetail(api: ApiClient, artistId: string): Promise<Artis
 export function ArtistDetailScreen({ artistId }: { artistId: string }) {
   const { api } = useAuth();
   const router = useRouter();
+  // Phase 9 — tapping a top track plays it (the visible tracks become the
+  // queue); long-press appends it to the current queue.
+  const { playTracks, addToQueue } = useQueueActions();
   const [data, setData] = useState<ArtistDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
@@ -163,9 +167,8 @@ export function ArtistDetailScreen({ artistId }: { artistId: string }) {
                 key={track.id}
                 track={track}
                 index={i + 1}
-                onPress={() =>
-                  router.push(track.albumId ? `/album/${track.albumId}` : `/artist/${artist.id}`)
-                }
+                onPress={() => void playTracks(data.tracks, i)}
+                onLongPress={() => void addToQueue(track)}
               />
             ))
           )}
