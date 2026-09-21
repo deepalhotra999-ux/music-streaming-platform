@@ -2,8 +2,12 @@
 export { AddTracksScreen } from './AddTracksScreen';
 export { AlbumDetailScreen } from './AlbumDetailScreen';
 export { AlbumListScreen } from './AlbumListScreen';
+export { ArtistAlbumsScreen } from './ArtistAlbumsScreen';
+export { ArtistDashboardScreen } from './ArtistDashboardScreen';
 export { ArtistDetailScreen } from './ArtistDetailScreen';
 export { ArtistListScreen } from './ArtistListScreen';
+export { ArtistProfileScreen } from './ArtistProfileScreen';
+export { ArtistTracksScreen } from './ArtistTracksScreen';
 export { FollowedArtistsScreen } from './FollowedArtistsScreen';
 export { GenreDetailScreen } from './GenreDetailScreen';
 export { GenreListScreen } from './GenreListScreen';

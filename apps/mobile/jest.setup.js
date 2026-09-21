@@ -65,7 +65,21 @@ jest.mock('expo-router', () => {  const React = require('react');
     __mockSegments: mockSegments,
     Link: ({ asChild, children }) =>
       asChild ? children : React.createElement(React.Fragment, null, children),
-    Stack: { Screen: () => null },
+    Stack: Object.assign(
+      ({ children }) => React.createElement(React.Fragment, null, children),
+      {
+        Screen: () => null,
+        Protected: ({ children }) => React.createElement(React.Fragment, null, children),
+      },
+    ),
+    Tabs: Object.assign(
+      ({ children }) => React.createElement(React.Fragment, null, children),
+      {
+        Screen: ({ name }) =>
+          React.createElement('tabs-screen', { testID: `tabs-screen-${name}`, name }),
+      },
+    ),
+    Redirect: ({ href }) => React.createElement('redirect', { testID: 'redirect', href }),
     router: routerMock,
     useRouter: () => routerMock,
     useNavigation: () => ({ setOptions: jest.fn(), goBack: jest.fn() }),

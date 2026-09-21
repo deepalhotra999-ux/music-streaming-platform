@@ -5,6 +5,28 @@ export type { ApiClientOptions, HttpMethod, RequestOptions } from './client';
 export { getMe, login, logout, refreshTokens, register } from './auth';
 export { createPlaybackSession, reportPlayEvent } from './playback';
 export {
+  createAlbum,
+  createArtist,
+  createTrack,
+  deleteAlbum,
+  deleteArtist,
+  deleteTrack,
+  listMyArtists,
+  updateAlbum,
+  updateArtist,
+  updateArtistProfile,
+  updateTrack,
+} from './artist';
+export type {
+  CreateAlbumInput,
+  CreateArtistInput,
+  CreateTrackInput,
+  UpdateAlbumInput,
+  UpdateArtistInput,
+  UpdateArtistProfileInput,
+  UpdateTrackInput,
+} from './artist';
+export {
   getAlbum,
   getArtist,
   getGenre,
