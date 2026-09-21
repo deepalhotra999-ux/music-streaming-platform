@@ -22,6 +22,7 @@
 
 import {
   ApiClient,
+  ApiError,
   apiErrorMessage,
   createPlaybackSession,
   reportPlayEvent,
@@ -85,6 +86,8 @@ export class PlaybackEngine {
   private durationMs = 0;
   private isBuffering = false;
   private error: string | null = null;
+  /** Phase 18 — set when playback is denied for lack of subscription. */
+  private locked = false;
   private repeatMode: RepeatMode = 'off';
   private shuffle = false;
 
@@ -137,6 +140,7 @@ export class PlaybackEngine {
       durationMs: this.durationMs,
       isBuffering: this.isBuffering,
       error: this.error,
+      locked: this.locked,
       // With repeat-all the edges wrap, so next/previous stay available
       // at the end/head of the queue.
       canNext:
@@ -295,6 +299,7 @@ export class PlaybackEngine {
     this.invalidatePendingLoads();
     this.teardownTrack();
     this.trackIndex = -1;
+    this.locked = false;
     this.setState('idle');
     this.emit();
   }
@@ -397,6 +402,7 @@ export class PlaybackEngine {
     this.teardownTrack();
     this.trackIndex = index;
     this.error = null;
+    this.locked = false;
     this.setState('loading');
     this.emit();
 
@@ -409,6 +415,12 @@ export class PlaybackEngine {
     } catch (error) {
       if (generation !== this.loadGeneration) {
         return; // superseded by a newer load (or stop/destroy)
+      }
+      // Phase 18 — subscription denial is a distinct locked state, not a
+      // generic playback error. The track stays queued; the UI offers the
+      // subscription screen instead of a retry.
+      if (error instanceof ApiError && error.isSubscriptionRequired) {
+        this.locked = true;
       }
       this.fail(apiErrorMessage(error));
       return;

@@ -160,7 +160,7 @@ describe('database foundation', () => {
     });
 
     const sub = await prisma.subscription.create({
-      data: { userId: user.id, planId: 'premium-monthly', status: 'ACTIVE' },
+      data: { userId: user.id, planId: 'premium_individual', provider: 'DEV', status: 'ACTIVE' },
     });
     const play = await prisma.listeningHistory.create({
       data: { userId: user.id, trackId: track.id, progressMs: 200000, completed: true },

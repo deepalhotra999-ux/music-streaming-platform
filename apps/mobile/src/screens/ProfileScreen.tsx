@@ -1,14 +1,17 @@
 // Phase 5 — Profile placeholder: account summary + sign out.
+// Phase 18 — adds the subscription section (server-reported state only).
 
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { apiErrorMessage } from '../api';
 import { useAuth } from '../auth';
 import { Button, Screen } from '../components';
+import { SubscriptionCard, useSubscription } from '../subscriptions';
 import { colors, fontSize, fontWeight, radii, spacing } from '../theme';
 
 export function ProfileScreen() {
-  const { user, signOut } = useAuth();
+  const { user, api, signOut } = useAuth();
+  const subscription = useSubscription(api);
   const [signingOut, setSigningOut] = useState(false);
   const [signOutError, setSignOutError] = useState<string | null>(null);
 
@@ -47,6 +50,14 @@ export function ProfileScreen() {
           <Text style={styles.bannerText}>{signOutError}</Text>
         </View>
       ) : null}
+
+      <Text style={styles.sectionHeading}>Subscription</Text>
+      <SubscriptionCard
+        data={subscription.data}
+        loading={subscription.state === 'loading' || subscription.state === 'idle'}
+        error={subscription.state === 'error' ? subscription.error : null}
+        onRetry={subscription.retry}
+      />
 
       <View style={styles.signOut}>
         <Button
@@ -106,5 +117,12 @@ const styles = StyleSheet.create({
     marginTop: spacing.md,
   },
   bannerText: { color: colors.error, fontSize: fontSize.sm },
+  sectionHeading: {
+    color: colors.text,
+    fontSize: fontSize.lg,
+    fontWeight: fontWeight.bold,
+    marginTop: spacing.xl,
+    marginBottom: spacing.sm,
+  },
   signOut: { marginTop: spacing.xl },
 });

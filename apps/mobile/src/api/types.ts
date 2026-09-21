@@ -323,3 +323,50 @@ export interface RecentPlay {
   playedAt: string;
   listeningTimeMs: number;
 }
+
+/** Phase 18 — subscription plan from the server plan catalog. */
+export interface SubscriptionPlan {
+  id: string;
+  name: string;
+  planType: 'INDIVIDUAL' | 'FAMILY' | 'STUDENT';
+  active: boolean;
+}
+
+export type SubscriptionStatus =
+  'ACTIVE' | 'TRIALING' | 'PAST_DUE' | 'CANCELED' | 'EXPIRED' | 'REVOKED';
+
+export type SubscriptionProvider = 'APPLE' | 'GOOGLE' | 'DEV';
+
+/** Phase 18 — the caller's current subscription, or null when none exists.
+ * The API omits external transaction identifiers and the user id from this
+ * current-user DTO; the client never needs them. */
+export interface Subscription {
+  id: string;
+  planId: string;
+  plan: SubscriptionPlan;
+  provider: SubscriptionProvider;
+  status: SubscriptionStatus;
+  currentPeriodStart: string | null;
+  currentPeriodEnd: string | null;
+  canceledAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * Phase 18 — server-computed premium access state. The ONLY source of
+ * truth for locked/unlocked UI; the client never decides entitlement.
+ */
+export interface Entitlement {
+  entitled: boolean;
+  status: SubscriptionStatus | 'NONE';
+  planCode: string | null;
+  currentPeriodEnd: string | null;
+  reason: string;
+}
+
+/** Phase 18 — GET /v1/subscriptions/me response. */
+export interface MySubscription {
+  subscription: Subscription | null;
+  entitlement: Entitlement;
+}

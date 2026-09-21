@@ -1,7 +1,8 @@
 // Phase 16 — status badges for track processing state.
 // Phase 17 — moderation status badges.
+// Phase 18 — subscription status badges.
 
-import type { ModerationStatus, TrackStatus } from '../api/types';
+import type { ModerationStatus, SubscriptionStatus, TrackStatus } from '../api/types';
 
 const STATUS_CLASS: Record<TrackStatus, string> = {
   READY: 'badge-green',
@@ -47,4 +48,23 @@ export function RoleBadge({ role }: { role: string }): React.ReactNode {
   const className =
     role === 'ADMIN' ? 'badge-red' : role === 'ARTIST' ? 'badge-amber' : 'badge-gray';
   return <span className={`badge ${className}`}>{role}</span>;
+}
+
+const SUBSCRIPTION_STATUS_CLASS: Record<SubscriptionStatus, string> = {
+  ACTIVE: 'badge-green',
+  TRIALING: 'badge-green',
+  PAST_DUE: 'badge-amber',
+  CANCELED: 'badge-amber',
+  EXPIRED: 'badge-gray',
+  REVOKED: 'badge-red',
+};
+
+/** Phase 18 — subscription lifecycle status. Read-only inspection. */
+export function SubscriptionStatusBadge({
+  status,
+}: {
+  status: SubscriptionStatus;
+}): React.ReactNode {
+  const className = SUBSCRIPTION_STATUS_CLASS[status] ?? 'badge-gray';
+  return <span className={`badge ${className}`}>{status.replace('_', ' ')}</span>;
 }

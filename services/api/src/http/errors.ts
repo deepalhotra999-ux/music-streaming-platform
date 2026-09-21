@@ -81,6 +81,14 @@ export const unprocessableEntity = (detail: string) =>
     type: 'https://api.music-streaming.local/problems/unprocessable-entity',
   });
 
+// Phase 18 — subscriptions. Distinct 403 for entitlement denial so clients
+// can distinguish "no subscription" from generic permission failures and
+// render locked UI. The title is the stable client contract.
+export const subscriptionRequired = (detail: string) =>
+  new HttpProblem(403, 'Subscription Required', detail, {
+    type: 'https://api.music-streaming.local/problems/subscription-required',
+  });
+
 function sendProblem(reply: FastifyReply, problem: Problem): FastifyReply {
   return reply.code(problem.status).type('application/problem+json').send(problem);
 }

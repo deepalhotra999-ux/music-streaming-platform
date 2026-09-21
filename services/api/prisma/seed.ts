@@ -227,11 +227,13 @@ async function main(): Promise<void> {
     },
   });
 
-  // Subscription (shape only — no payment processing in Phase 2)
+  // Subscription (shape only — no payment processing; maps the legacy
+  // Phase 2 seed value onto the Phase 18 plan catalog)
   await prisma.subscription.create({
     data: {
       userId: producer.id,
-      planId: 'premium-monthly',
+      planId: 'premium_individual',
+      provider: 'DEV',
       status: 'ACTIVE',
       currentPeriodStart: new Date('2026-09-01T00:00:00Z'),
       currentPeriodEnd: new Date('2026-10-01T00:00:00Z'),

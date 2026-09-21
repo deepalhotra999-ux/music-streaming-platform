@@ -122,6 +122,8 @@ async function scopedClean(): Promise<void> {
   const userWhere = { user: { email: { endsWith: TEST_DOMAIN } } };
   await prisma.playEvent.deleteMany({ where: userWhere });
   await prisma.playbackSession.deleteMany({ where: userWhere });
+  await prisma.subscriptionEvent.deleteMany({ where: { subscription: userWhere } });
+  await prisma.subscription.deleteMany({ where: userWhere });
   await prisma.track.deleteMany({
     where: { artist: { owner: { email: { endsWith: TEST_DOMAIN } } } },
   });
@@ -130,7 +132,11 @@ async function scopedClean(): Promise<void> {
   await prisma.user.deleteMany({ where: { email: { endsWith: TEST_DOMAIN } } });
 }
 
-async function synthAudio(outPath: string, seconds: number, codecArgs: string[] = []): Promise<void> {
+async function synthAudio(
+  outPath: string,
+  seconds: number,
+  codecArgs: string[] = [],
+): Promise<void> {
   await execFileAsync(
     'ffmpeg',
     [
@@ -156,7 +162,12 @@ function fixturePath(name: string): string {
   return path.join(fixturesDir, name);
 }
 
-function multipartUpload(boundary: string, filename: string, mimeType: string, data: Buffer): Buffer {
+function multipartUpload(
+  boundary: string,
+  filename: string,
+  mimeType: string,
+  data: Buffer,
+): Buffer {
   return Buffer.concat([
     Buffer.from(
       `--${boundary}\r\nContent-Disposition: form-data; name="audio"; filename="${filename}"\r\n` +
@@ -215,11 +226,7 @@ async function audioSourceKey(trackId: string): Promise<string | null> {
 }
 
 /** Service-level upload: copies a fixture to a temp path the service validates. */
-async function serviceUpload(
-  trackId: string,
-  fixtureName: string,
-  actor: AuthUser = ownerActor(),
-) {
+async function serviceUpload(trackId: string, fixtureName: string, actor: AuthUser = ownerActor()) {
   const tmp = path.join(os.tmpdir(), `phase14-${Date.now()}-${counter++}.up`);
   await fs.copyFile(fixturePath(fixtureName), tmp);
   const { size } = await fs.stat(tmp);
@@ -275,8 +282,27 @@ beforeAll(async () => {
   listener = await createUser('listener', 'LISTENER');
   admin = await createUser('admin', 'ADMIN');
 
-  artist1Id = (await prisma.artist.create({ data: { name: 'P14 Artist One', ownerUserId: ownerArtist.id } })).id;
-  artist2Id = (await prisma.artist.create({ data: { name: 'P14 Artist Two', ownerUserId: otherArtist.id } })).id;
+  // Phase 18: playback sessions require a real entitlement. The listener
+  // gets a DEV subscription so the pipeline→playback tests exercise the
+  // entitled path.
+  await prisma.subscription.create({
+    data: {
+      userId: listener.id,
+      planId: 'premium_individual',
+      provider: 'DEV',
+      status: 'ACTIVE',
+      externalSubscriptionId: `p14-listener-${Date.now()}`,
+      currentPeriodStart: new Date('2026-09-01T00:00:00Z'),
+      currentPeriodEnd: new Date('2026-10-01T00:00:00Z'),
+    },
+  });
+
+  artist1Id = (
+    await prisma.artist.create({ data: { name: 'P14 Artist One', ownerUserId: ownerArtist.id } })
+  ).id;
+  artist2Id = (
+    await prisma.artist.create({ data: { name: 'P14 Artist Two', ownerUserId: otherArtist.id } })
+  ).id;
 
   uploadTrackId = await makeTrack('Upload Target', artist1Id);
   retryTrackId = await makeTrack('Retry Target', artist1Id);
@@ -318,7 +344,9 @@ afterAll(async () => {
 
 describe('sniffAudioFormat', () => {
   it('detects WAV by RIFF....WAVE', () => {
-    expect(sniffAudioFormat(Buffer.from('RIFF\x00\x00\x00\x00WAVEfmt extra', 'binary'))).toMatchObject({
+    expect(
+      sniffAudioFormat(Buffer.from('RIFF\x00\x00\x00\x00WAVEfmt extra', 'binary')),
+    ).toMatchObject({
       ext: 'wav',
     });
   });
@@ -333,7 +361,9 @@ describe('sniffAudioFormat', () => {
     });
   });
   it('detects M4A/AAC by ....ftyp', () => {
-    expect(sniffAudioFormat(Buffer.from('\x00\x00\x00\x20ftypM4A padding', 'binary'))).toMatchObject({
+    expect(
+      sniffAudioFormat(Buffer.from('\x00\x00\x00\x20ftypM4A padding', 'binary')),
+    ).toMatchObject({
       ext: 'm4a',
     });
   });
@@ -342,7 +372,9 @@ describe('sniffAudioFormat', () => {
       sniffAudioFormat(Buffer.from('ID3\x04\x00\x00\x00\x00\x00\x00\x00\x00', 'binary')),
     ).toMatchObject({ ext: 'mp3' });
     expect(
-      sniffAudioFormat(Buffer.from([0xff, 0xfb, 0x90, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00])),
+      sniffAudioFormat(
+        Buffer.from([0xff, 0xfb, 0x90, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]),
+      ),
     ).toMatchObject({ ext: 'mp3' });
   });
   it('returns null for unknown data and short buffers', () => {
@@ -539,7 +571,9 @@ describe('processTrackAudio', () => {
 
     const track = await prisma.track.findUniqueOrThrow({ where: { id: trackId } });
     expect(track.audioStatus).toBe('FAILED');
-    expect(track.audioError).toBe('The uploaded audio is missing from storage. Please upload again.');
+    expect(track.audioError).toBe(
+      'The uploaded audio is missing from storage. Please upload again.',
+    );
     expect(track.audioReadyAt).toBeNull();
     expect(track.status).toBe('FAILED'); // never published without playable audio
   }, 60_000);
@@ -600,7 +634,9 @@ describe('processTrackAudio', () => {
     const key = await audioSourceKey(trackId);
     await storage.deleteObject(key!);
     await processTrackAudio(trackId, deps);
-    expect((await prisma.track.findUniqueOrThrow({ where: { id: trackId } })).audioStatus).toBe('FAILED');
+    expect((await prisma.track.findUniqueOrThrow({ where: { id: trackId } })).audioStatus).toBe(
+      'FAILED',
+    );
     const retried = await retryTrackAudio(trackId, ownerActor(), deps);
     expect(retried.audioStatus).toBe('PENDING');
     expect(retried.audioError).toBeNull();
@@ -614,7 +650,9 @@ describe('processTrackAudio', () => {
 
     // Finish the first job (as the background queue would), then re-upload.
     await processTrackAudio(trackId, deps);
-    expect((await prisma.track.findUniqueOrThrow({ where: { id: trackId } })).audioStatus).toBe('READY');
+    expect((await prisma.track.findUniqueOrThrow({ where: { id: trackId } })).audioStatus).toBe(
+      'READY',
+    );
 
     await serviceUpload(trackId, 'valid.mp3');
     const secondKey = await audioSourceKey(trackId);
@@ -680,17 +718,35 @@ describe('processTrackAudio', () => {
 
 describe('POST /v1/tracks/:id/audio authz', () => {
   it('401 without a token', async () => {
-    const res = await uploadFile(null, uploadTrackId, 'x.wav', 'audio/wav', await readFile('valid.wav'));
+    const res = await uploadFile(
+      null,
+      uploadTrackId,
+      'x.wav',
+      'audio/wav',
+      await readFile('valid.wav'),
+    );
     expect(res.statusCode).toBe(401);
   });
 
   it('403 for a LISTENER', async () => {
-    const res = await uploadFile(listener, uploadTrackId, 'x.wav', 'audio/wav', await readFile('valid.wav'));
+    const res = await uploadFile(
+      listener,
+      uploadTrackId,
+      'x.wav',
+      'audio/wav',
+      await readFile('valid.wav'),
+    );
     expect(res.statusCode).toBe(403);
   });
 
   it('403 for an ARTIST who does not own the track', async () => {
-    const res = await uploadFile(otherArtist, uploadTrackId, 'x.wav', 'audio/wav', await readFile('valid.wav'));
+    const res = await uploadFile(
+      otherArtist,
+      uploadTrackId,
+      'x.wav',
+      'audio/wav',
+      await readFile('valid.wav'),
+    );
     expect(res.statusCode).toBe(403);
   });
 
@@ -706,13 +762,25 @@ describe('POST /v1/tracks/:id/audio authz', () => {
   });
 
   it('403 for another artist’s track even to the owner (matches catalog write routes)', async () => {
-    const res = await uploadFile(ownerArtist, foreignTrackId, 'x.wav', 'audio/wav', await readFile('valid.wav'));
+    const res = await uploadFile(
+      ownerArtist,
+      foreignTrackId,
+      'x.wav',
+      'audio/wav',
+      await readFile('valid.wav'),
+    );
     expect(res.statusCode).toBe(403);
   });
 
   it('202 for the owning ARTIST, returning the ingestion status', async () => {
     const trackId = await makeTrack('Owner Upload', artist1Id);
-    const res = await uploadFile(ownerArtist, trackId, 'song.wav', 'audio/wav', await readFile('valid.wav'));
+    const res = await uploadFile(
+      ownerArtist,
+      trackId,
+      'song.wav',
+      'audio/wav',
+      await readFile('valid.wav'),
+    );
     expect(res.statusCode).toBe(202);
     const body = res.json();
     expect(body.trackId).toBe(trackId);
@@ -743,13 +811,25 @@ describe('POST /v1/tracks/:id/audio validation', () => {
   });
 
   it('415 for a non-audio file even with an audio/* content type', async () => {
-    const res = await uploadFile(ownerArtist, uploadTrackId, 'evil.mp3', 'audio/mpeg', await readFile('not-audio.txt'));
+    const res = await uploadFile(
+      ownerArtist,
+      uploadTrackId,
+      'evil.mp3',
+      'audio/mpeg',
+      await readFile('not-audio.txt'),
+    );
     expect(res.statusCode).toBe(415);
     expect(res.json().title).toMatch(/unsupported media type/i);
   });
 
   it('422 for a corrupt file that sniffs as audio but does not probe', async () => {
-    const res = await uploadFile(ownerArtist, uploadTrackId, 'fake.mp3', 'audio/mpeg', await readFile('fake.mp3'));
+    const res = await uploadFile(
+      ownerArtist,
+      uploadTrackId,
+      'fake.mp3',
+      'audio/mpeg',
+      await readFile('fake.mp3'),
+    );
     expect(res.statusCode).toBe(422);
   });
 
@@ -762,7 +842,13 @@ describe('POST /v1/tracks/:id/audio validation', () => {
 
   it('accepts mp3 uploads too (not just wav)', async () => {
     const trackId = await makeTrack('MP3 Upload', artist1Id);
-    const res = await uploadFile(ownerArtist, trackId, 'song.mp3', 'audio/mpeg', await readFile('valid.mp3'));
+    const res = await uploadFile(
+      ownerArtist,
+      trackId,
+      'song.mp3',
+      'audio/mpeg',
+      await readFile('valid.mp3'),
+    );
     expect(res.statusCode).toBe(202);
   });
 });
@@ -892,7 +978,10 @@ describe('S3 AudioStorage (mocked)', () => {
     const fakeClient = {
       send: async (cmd: { constructor: { name: string }; input: Record<string, unknown> }) => {
         sent.push({ name: cmd.constructor.name, input: cmd.input });
-        if (cmd.constructor.name === 'HeadObjectCommand' || cmd.constructor.name === 'GetObjectCommand') {
+        if (
+          cmd.constructor.name === 'HeadObjectCommand' ||
+          cmd.constructor.name === 'GetObjectCommand'
+        ) {
           const err = new Error('not found') as Error & { name: string };
           err.name = 'NotFound';
           throw err;
@@ -942,7 +1031,11 @@ describe('S3 AudioStorage (mocked)', () => {
       region: 'ca-central-1',
       credentials: { accessKeyId: 'test-key', secretAccessKey: 'test-secret' },
     });
-    const s3 = new S3Storage(client, { bucket: 'music-bucket', region: 'ca-central-1', prefix: '' });
+    const s3 = new S3Storage(client, {
+      bucket: 'music-bucket',
+      region: 'ca-central-1',
+      prefix: '',
+    });
     const url = await s3.createSignedUrl!('tracks/t1/source/x.wav', 60);
     expect(url).toMatch(
       /^https:\/\/music-bucket\.s3\.ca-central-1\.amazonaws\.com\/tracks\/t1\/source\/x\.wav\?/,

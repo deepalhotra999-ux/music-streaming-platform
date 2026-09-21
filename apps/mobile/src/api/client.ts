@@ -65,6 +65,16 @@ export class ApiError extends Error {
   get isNetworkError(): boolean {
     return this.status === 0;
   }
+
+  /**
+   * Phase 18 — the server denied an action because the user lacks an
+   * entitled subscription (RFC 7807 title "Subscription Required").
+   * Clients use this to render locked playback UI instead of a generic
+   * error.
+   */
+  get isSubscriptionRequired(): boolean {
+    return this.status === 403 && this.title === 'Subscription Required';
+  }
 }
 
 /** Human-readable message for banners/toasts. Prefers detail, then title. */
@@ -174,7 +184,7 @@ export class ApiClient {
     useAuth: boolean,
     buildInit: (token: string | null) => RequestInit,
   ): Promise<T> {
-    const token = useAuth ? this.getAccessToken?.() ?? null : null;
+    const token = useAuth ? (this.getAccessToken?.() ?? null) : null;
     try {
       const response = await this.fetchFn(this.baseUrl + path, buildInit(token));
       if (response.status === 401 && useAuth && this.onTokenRefresh) {
@@ -189,7 +199,14 @@ export class ApiClient {
       if (error instanceof ApiError) {
         throw error;
       }
-      throw new ApiError(0, { title: 'Network error', detail: 'Could not reach the server. Check your connection and try again.' }, error);
+      throw new ApiError(
+        0,
+        {
+          title: 'Network error',
+          detail: 'Could not reach the server. Check your connection and try again.',
+        },
+        error,
+      );
     }
   }
 

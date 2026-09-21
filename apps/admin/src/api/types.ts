@@ -35,6 +35,47 @@ export interface AdminUserDetail extends AdminUser {
   }>;
 }
 
+/** Phase 18 — subscription status values the admin console may display. */
+export type SubscriptionStatus =
+  'ACTIVE' | 'TRIALING' | 'PAST_DUE' | 'CANCELED' | 'EXPIRED' | 'REVOKED';
+
+export type SubscriptionProvider = 'APPLE' | 'GOOGLE' | 'DEV';
+
+/**
+ * Phase 18 — admin subscription inspection. Read-only: status, plan,
+ * provider, period, and the server-computed entitlement state. No payment
+ * management surface exists.
+ */
+export interface AdminSubscriptionDetail {
+  subscription: {
+    id: string;
+    userId: string;
+    planId: string;
+    plan: { id: string; name: string; planType: string; active: boolean };
+    provider: SubscriptionProvider;
+    status: SubscriptionStatus;
+    currentPeriodStart: string | null;
+    currentPeriodEnd: string | null;
+    canceledAt: string | null;
+    createdAt: string;
+    updatedAt: string;
+  } | null;
+  entitlement: {
+    entitled: boolean;
+    status: SubscriptionStatus | 'NONE';
+    planCode: string | null;
+    currentPeriodEnd: string | null;
+    reason: string;
+  };
+  events: {
+    id: string;
+    eventType: string;
+    statusFrom: SubscriptionStatus | null;
+    statusTo: SubscriptionStatus | null;
+    createdAt: string;
+  }[];
+}
+
 export type ModerationTargetType = 'ARTIST' | 'ALBUM' | 'TRACK';
 export type ModerationStatus = 'OPEN' | 'UNDER_REVIEW' | 'RESOLVED' | 'DISMISSED';
 

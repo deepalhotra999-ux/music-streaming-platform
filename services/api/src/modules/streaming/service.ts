@@ -14,7 +14,7 @@ import { createHash, randomBytes } from 'node:crypto';
 import type { PrismaClient, PlayEventType } from '@prisma/client';
 import { prisma } from '../../db.js';
 import type { Config } from '../../config.js';
-import { conflict, forbidden, notFound, unauthorized } from '../../http/errors.js';
+import { conflict, notFound, subscriptionRequired, unauthorized } from '../../http/errors.js';
 import { checkPlaybackEntitlement } from './entitlements.js';
 import { masterKey, type AudioStorage } from './storage.js';
 
@@ -57,10 +57,7 @@ interface AvailableTrack {
  * soft-deleted, and be in READY status. Anything else is a client-visible
  * error, never silent.
  */
-async function requireStreamableTrack(
-  trackId: string,
-  db: PrismaClient,
-): Promise<AvailableTrack> {
+async function requireStreamableTrack(trackId: string, db: PrismaClient): Promise<AvailableTrack> {
   const track = await db.track.findFirst({
     where: { id: trackId, deletedAt: null },
     select: { id: true, status: true },
@@ -87,9 +84,12 @@ export async function createPlaybackSession(
 
   const track = await requireStreamableTrack(trackId, db);
 
-  const entitlement = await checkPlaybackEntitlement({ userId, trackId: track.id });
+  const entitlement = await checkPlaybackEntitlement({ userId, trackId: track.id, db });
   if (!entitlement.allowed) {
-    throw forbidden(`Playback not allowed: ${entitlement.reason}`);
+    // Dedicated problem type (not generic 403) so clients can render
+    // locked UI. The reason carries only the denial category, never
+    // provider internals.
+    throw subscriptionRequired(`Playback not allowed: ${entitlement.reason}`);
   }
 
   // The catalog says READY but the audio package must actually be on disk
@@ -172,7 +172,12 @@ export async function getSessionForEvents(
   if (session.expiresAt.getTime() <= Date.now()) {
     throw unauthorized('Playback session has expired.');
   }
-  return { sessionId: session.id, userId: session.userId, trackId: session.trackId, expiresAt: session.expiresAt };
+  return {
+    sessionId: session.id,
+    userId: session.userId,
+    trackId: session.trackId,
+    expiresAt: session.expiresAt,
+  };
 }
 
 export interface RecordPlayEventInput {
@@ -188,7 +193,10 @@ export async function recordPlayEvent(
   input: RecordPlayEventInput,
   db: PrismaClient = prisma,
 ): Promise<{ id: string }> {
-  if (input.positionMs !== undefined && (!Number.isInteger(input.positionMs) || input.positionMs < 0)) {
+  if (
+    input.positionMs !== undefined &&
+    (!Number.isInteger(input.positionMs) || input.positionMs < 0)
+  ) {
     throw new Error('positionMs must be a non-negative integer.');
   }
   const event = await db.playEvent.create({

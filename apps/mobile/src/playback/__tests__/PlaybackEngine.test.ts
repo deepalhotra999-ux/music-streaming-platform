@@ -26,6 +26,8 @@ function fakeResponse(status: number, data: unknown) {
 
 interface TestApiOptions {
   failSessionFor?: Set<string>;
+  /** Phase 18 — deny with "Subscription Required" instead of generic 403. */
+  subscriptionRequiredFor?: Set<string>;
   failEvents?: boolean;
   holdSessions?: boolean;
   onSession?: (trackId: string) => void;
@@ -52,6 +54,13 @@ function createTestApi(options: TestApiOptions = {}) {
       options.onSession?.(trackId);
       if (options.failSessionFor?.has(trackId)) {
         return fakeResponse(403, { title: 'Forbidden', detail: 'denied' });
+      }
+      if (options.subscriptionRequiredFor?.has(trackId)) {
+        return fakeResponse(403, {
+          title: 'Subscription Required',
+          detail: 'Playback not allowed: subscription required (no_subscription)',
+          type: 'https://api.music-streaming.local/problems/subscription-required',
+        });
       }
       if (options.holdSessions) {
         await new Promise<void>((resolve) => {
@@ -267,10 +276,14 @@ describe('PlaybackEngine', () => {
     expect(journal).toEqual([
       'destroy', // teardown before the first session is even requested
       'session:t1',
-      expect.stringMatching(/^load:https:\/\/api\.example\.test\/v1\/playback\/hls\/master\.m3u8\?token=tok-1$/),
+      expect.stringMatching(
+        /^load:https:\/\/api\.example\.test\/v1\/playback\/hls\/master\.m3u8\?token=tok-1$/,
+      ),
       'destroy', // old player gone before the new session
       'session:t2',
-      expect.stringMatching(/^load:https:\/\/api\.example\.test\/v1\/playback\/hls\/master\.m3u8\?token=tok-2$/),
+      expect.stringMatching(
+        /^load:https:\/\/api\.example\.test\/v1\/playback\/hls\/master\.m3u8\?token=tok-2$/,
+      ),
     ]);
     expect(driver.maxConcurrentPlayers).toBeLessThanOrEqual(1);
     // A manual skip is not a completed play.
@@ -474,6 +487,32 @@ describe('PlaybackEngine', () => {
     expect(snap.error).toMatch(/denied/i);
     // No session id exists, so there is nothing to report against.
     expect(t.events).toHaveLength(0);
+  });
+
+  it('marks playback locked (not a generic error) on Subscription Required', async () => {
+    const t = createTestApi({ subscriptionRequiredFor: new Set(['t10']) });
+    const { engine } = createEngine(t.api);
+
+    await engine.setQueue([track('t10')]);
+
+    const snap = engine.getSnapshot();
+    expect(snap.state).toBe('error');
+    expect(snap.locked).toBe(true);
+    expect(snap.error).toMatch(/subscription/i);
+    // No session id exists, so there is nothing to report against.
+    expect(t.events).toHaveLength(0);
+  });
+
+  it('clears the locked flag when a later load succeeds', async () => {
+    const t = createTestApi({ subscriptionRequiredFor: new Set(['t11']) });
+    const { engine } = createEngine(t.api);
+
+    await engine.setQueue([track('t11')]);
+    expect(engine.getSnapshot().locked).toBe(true);
+
+    await engine.setQueue([track('t1')]);
+    await flush();
+    expect(engine.getSnapshot().locked).toBe(false);
   });
 
   it('aborts a pending load when stop() wins the race', async () => {

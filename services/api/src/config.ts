@@ -47,6 +47,16 @@ export interface IngestionConfig {
   maxUploadBytes: number;
 }
 
+/** Phase 18 — subscriptions & entitlements. */
+export interface SubscriptionsConfig {
+  /**
+   * DEV_SUBSCRIPTIONS_ENABLED=true exposes the deterministic dev
+   * subscription adapter and the POST /v1/dev/subscription-events
+   * endpoint. Must never be true in production — loadConfig throws.
+   */
+  devEnabled: boolean;
+}
+
 export interface Config {
   nodeEnv: string;
   port: number;
@@ -59,6 +69,7 @@ export interface Config {
   rateLimits: RateLimitConfig;
   streaming: StreamingConfig;
   ingestion: IngestionConfig;
+  subscriptions: SubscriptionsConfig;
 }
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
@@ -120,13 +131,26 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     ingestion: {
       maxUploadBytes: int(env, 'INGESTION_MAX_UPLOAD_BYTES', 100 * 1024 * 1024), // 100 MiB
     },
+    subscriptions: {
+      devEnabled: parseDevSubscriptions(env),
+    },
   };
+}
+
+function parseDevSubscriptions(env: NodeJS.ProcessEnv): boolean {
+  const enabled = env.DEV_SUBSCRIPTIONS_ENABLED === 'true';
+  if (enabled && env.NODE_ENV !== 'development' && env.NODE_ENV !== 'test') {
+    // The dev adapter performs NO store verification; it must be
+    // impossible to enable outside local development and tests.
+    throw new Error(
+      'DEV_SUBSCRIPTIONS_ENABLED may only be true when NODE_ENV is development or test.',
+    );
+  }
+  return enabled;
 }
 
 function parseAudioStorageDriver(raw: string | undefined): AudioStorageDriver {
   if (raw === undefined || raw === '' || raw === 'local') return 'local';
   if (raw === 's3') return 's3';
-  throw new Error(
-    `AUDIO_STORAGE_DRIVER must be "local" or "s3", got "${raw}".`,
-  );
+  throw new Error(`AUDIO_STORAGE_DRIVER must be "local" or "s3", got "${raw}".`);
 }

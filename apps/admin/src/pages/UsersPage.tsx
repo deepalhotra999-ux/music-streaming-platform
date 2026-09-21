@@ -6,13 +6,18 @@ import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useAuth } from '../auth/AuthContext';
 import { apiErrorMessage } from '../api/client';
-import { getAdminUserDetail, listUsers, updateUserRole } from '../api/users';
-import type { AdminUserDetail, UserRole } from '../api/types';
+import {
+  getAdminUserDetail,
+  getAdminUserSubscription,
+  listUsers,
+  updateUserRole,
+} from '../api/users';
+import type { AdminSubscriptionDetail, AdminUserDetail, UserRole } from '../api/types';
 import type { UserListQuery } from '../api/users';
 import { useApiList } from '../hooks/useApiList';
 import { EmptyState, ErrorState, LoadingState } from '../components/DataStates';
 import { Pagination } from '../components/Pagination';
-import { AccountStatusBadge, RoleBadge } from '../components/Badges';
+import { AccountStatusBadge, RoleBadge, SubscriptionStatusBadge } from '../components/Badges';
 import { useConfirm } from '../components/ConfirmDialog';
 import { formatDate } from '../utils/format';
 
@@ -176,6 +181,10 @@ function UserDetail({
   const [actionError, setActionError] = useState<string | null>(null);
   const [roleDraft, setRoleDraft] = useState<UserRole>('LISTENER');
   const [saving, setSaving] = useState(false);
+  // Phase 18 — subscription inspection (read-only).
+  const [subscription, setSubscription] = useState<AdminSubscriptionDetail | null>(null);
+  const [subLoading, setSubLoading] = useState(true);
+  const [subError, setSubError] = useState<unknown>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -191,9 +200,25 @@ function UserDetail({
     }
   }, [client, id]);
 
+  const loadSubscription = useCallback(async () => {
+    setSubLoading(true);
+    setSubError(null);
+    try {
+      setSubscription(await getAdminUserSubscription(client, id));
+    } catch (err) {
+      setSubError(err);
+    } finally {
+      setSubLoading(false);
+    }
+  }, [client, id]);
+
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    void loadSubscription();
+  }, [loadSubscription]);
 
   async function handleRoleChange(): Promise<void> {
     if (!user || roleDraft === user.role) return;
@@ -304,6 +329,84 @@ function UserDetail({
           </div>
         </div>
       )}
+      <div className="card">
+        <h2>Subscription</h2>
+        {subLoading ? (
+          <LoadingState label="Loading subscription…" />
+        ) : subError ? (
+          <ErrorState error={subError} onRetry={() => void loadSubscription()} />
+        ) : !subscription?.subscription ? (
+          <EmptyState message="No subscription on file." />
+        ) : (
+          <>
+            <div className="detail-grid">
+              <div className="detail-item">
+                <p className="detail-label">Status</p>
+                <p className="detail-value">
+                  <SubscriptionStatusBadge status={subscription.subscription.status} />
+                </p>
+              </div>
+              <div className="detail-item">
+                <p className="detail-label">Plan</p>
+                <p className="detail-value">{subscription.subscription.plan.name}</p>
+              </div>
+              <div className="detail-item">
+                <p className="detail-label">Provider</p>
+                <p className="detail-value">{subscription.subscription.provider}</p>
+              </div>
+              <div className="detail-item">
+                <p className="detail-label">Playback entitlement</p>
+                <p className="detail-value">
+                  {subscription.entitlement.entitled ? (
+                    <span className="badge badge-green">Entitled</span>
+                  ) : (
+                    <span className="badge badge-gray">Not entitled</span>
+                  )}
+                </p>
+              </div>
+              <div className="detail-item">
+                <p className="detail-label">Current period ends</p>
+                <p className="detail-value">
+                  {subscription.subscription.currentPeriodEnd
+                    ? formatDate(subscription.subscription.currentPeriodEnd)
+                    : '—'}
+                </p>
+              </div>
+              <div className="detail-item">
+                <p className="detail-label">Subscription ID</p>
+                <p className="detail-value mono">{subscription.subscription.id}</p>
+              </div>
+            </div>
+            {subscription.events.length > 0 && (
+              <>
+                <h3>Event history ({subscription.events.length})</h3>
+                <div className="table-wrap">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>Event</th>
+                        <th>From</th>
+                        <th>To</th>
+                        <th>At</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {subscription.events.map((event) => (
+                        <tr key={event.id}>
+                          <td className="mono">{event.eventType}</td>
+                          <td>{event.statusFrom ?? '—'}</td>
+                          <td>{event.statusTo ?? '—'}</td>
+                          <td>{formatDate(event.createdAt)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
+          </>
+        )}
+      </div>
       <div className="card">
         <h2>Change role</h2>
         <div className="toolbar">

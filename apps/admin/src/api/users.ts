@@ -1,7 +1,7 @@
 // Phase 16 — admin user-management endpoints. ADMIN-guarded server-side.
 
 import type { ApiClient } from './client';
-import type { AdminUser, AdminUserDetail, Page, UserRole } from './types';
+import type { AdminSubscriptionDetail, AdminUser, AdminUserDetail, Page, UserRole } from './types';
 
 export interface UserListQuery {
   q?: string;
@@ -30,6 +30,17 @@ export function getUser(client: ApiClient, id: string): Promise<AdminUser> {
 /** Phase 17 — full admin user detail: account status + owned artists. */
 export function getAdminUserDetail(client: ApiClient, id: string): Promise<AdminUserDetail> {
   return client.get<AdminUserDetail>(`/v1/admin/users/${id}`);
+}
+
+/**
+ * Phase 18 — read-only subscription inspection: status, plan, provider,
+ * period, entitlement, and event history. No payment management.
+ */
+export function getAdminUserSubscription(
+  client: ApiClient,
+  id: string,
+): Promise<AdminSubscriptionDetail> {
+  return client.get<AdminSubscriptionDetail>(`/v1/admin/users/${id}/subscription`);
 }
 
 /** Changes a user's role. Destructive-ish: callers must confirm first. */

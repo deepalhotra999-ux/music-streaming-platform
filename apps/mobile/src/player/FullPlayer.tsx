@@ -30,6 +30,8 @@ export interface FullPlayerViewProps {
   shuffle: boolean;
   repeatMode: RepeatMode;
   error: string | null;
+  /** Phase 18 — playback denied for lack of subscription. */
+  locked: boolean;
   onToggle: () => void;
   onNext: () => void;
   onPrevious: () => void;
@@ -56,6 +58,7 @@ export function FullPlayerView({
   shuffle,
   repeatMode,
   error,
+  locked,
   onToggle,
   onNext,
   onPrevious,
@@ -131,7 +134,14 @@ export function FullPlayerView({
           </View>
         </View>
 
-        {errored ? (
+        {locked ? (
+          <View style={styles.lockedBanner} testID="full-player-locked">
+            <Ionicons name="lock-closed" size={20} color={colors.warning} />
+            <Text style={styles.lockedText} numberOfLines={3}>
+              Premium required to play this track.
+            </Text>
+          </View>
+        ) : errored ? (
           <View style={styles.errorBanner} testID="full-player-error">
             <Ionicons name="alert-circle" size={20} color={colors.error} />
             <Text style={styles.errorText} numberOfLines={3}>
@@ -214,6 +224,7 @@ export function FullPlayer() {
       shuffle={playback.shuffle}
       repeatMode={playback.repeatMode}
       error={playback.error}
+      locked={playback.locked}
       onToggle={playback.toggle}
       onNext={playback.next}
       onPrevious={playback.previous}
@@ -308,6 +319,24 @@ const styles = StyleSheet.create({
     flex: 1,
     color: colors.text,
     fontSize: fontSize.sm,
+  },
+  lockedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.md,
+    padding: spacing.md,
+    backgroundColor: colors.surfaceElevated,
+    borderRadius: radii.md,
+    borderWidth: 1,
+    borderColor: colors.warning,
+  },
+  lockedText: {
+    flex: 1,
+    color: colors.text,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.medium,
   },
   queueTitle: {
     color: colors.text,

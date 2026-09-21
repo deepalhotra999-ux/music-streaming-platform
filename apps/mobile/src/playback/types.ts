@@ -59,6 +59,12 @@ export interface EngineSnapshot {
   durationMs: number;
   isBuffering: boolean;
   error: string | null;
+  /**
+   * Phase 18 — true when the last session creation was denied with
+   * "Subscription Required". The track stays in the queue and the UI
+   * renders locked playback instead of a generic error.
+   */
+  locked: boolean;
   canNext: boolean;
   canPrevious: boolean;
   /** Repeat mode; owned by the engine because it controls auto-advance. */

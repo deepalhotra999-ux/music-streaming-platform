@@ -6,8 +6,24 @@ import type { QueueTrack } from '../../playback';
 import { FullPlayerView } from '../FullPlayer';
 
 const tracks: QueueTrack[] = [
-  { trackId: 't1', title: 'First Light', artistName: 'Neon Bloom', albumTitle: 'Afterglow', albumId: 'al1', artworkUrl: null, durationMs: 180_000 },
-  { trackId: 't2', title: 'Second Wave', artistName: 'Neon Bloom', albumTitle: 'Afterglow', albumId: 'al1', artworkUrl: null, durationMs: 210_000 },
+  {
+    trackId: 't1',
+    title: 'First Light',
+    artistName: 'Neon Bloom',
+    albumTitle: 'Afterglow',
+    albumId: 'al1',
+    artworkUrl: null,
+    durationMs: 180_000,
+  },
+  {
+    trackId: 't2',
+    title: 'Second Wave',
+    artistName: 'Neon Bloom',
+    albumTitle: 'Afterglow',
+    albumId: 'al1',
+    artworkUrl: null,
+    durationMs: 210_000,
+  },
 ];
 
 function renderView(overrides = {}) {
@@ -23,6 +39,7 @@ function renderView(overrides = {}) {
     shuffle: false,
     repeatMode: 'off' as const,
     error: null as string | null,
+    locked: false,
     onToggle: jest.fn(),
     onNext: jest.fn(),
     onPrevious: jest.fn(),
@@ -71,6 +88,13 @@ describe('FullPlayerView', () => {
     expect(screen.getByText('network failed')).toBeTruthy();
     fireEvent.press(screen.getByTestId('full-player-retry'));
     expect(props.onRetry).toHaveBeenCalledTimes(1);
+  });
+
+  it('shows the locked banner (not the error banner) when playback is locked', () => {
+    renderView({ state: 'error', error: 'Playback not allowed', locked: true });
+    expect(screen.getByTestId('full-player-locked')).toBeTruthy();
+    expect(screen.queryByTestId('full-player-error')).toBeNull();
+    expect(screen.getByText(/Premium required/)).toBeTruthy();
   });
 
   it('shows a loading indicator while the session is minted', () => {

@@ -24,6 +24,7 @@ import { ingestionRoutes } from '../modules/ingestion/routes.js';
 import { analyticsRoutes } from '../modules/analytics/routes.js';
 import { auditRoutes } from '../modules/audit/routes.js';
 import { moderationRoutes } from '../modules/moderation/routes.js';
+import { subscriptionRoutes } from '../modules/subscriptions/routes.js';
 
 export async function buildApp(config: Config): Promise<FastifyInstance> {
   const app = Fastify({
@@ -106,6 +107,7 @@ export async function buildApp(config: Config): Promise<FastifyInstance> {
     await analyticsRoutes(instance, config);
     await auditRoutes(instance, config);
     await moderationRoutes(instance, config);
+    await subscriptionRoutes(instance, config);
   });
 
   return app;
