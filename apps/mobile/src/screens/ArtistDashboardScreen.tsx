@@ -201,6 +201,17 @@ export function ArtistDashboardScreen() {
 
         <View style={styles.actions}>
           <Button
+            title="View analytics"
+            variant="secondary"
+            onPress={() =>
+              router.push({
+                pathname: '/(artist)/analytics',
+                params: selectedId ? { artistId: selectedId } : {},
+              })
+            }
+            testID="view-analytics-button"
+          />
+          <Button
             title="Edit profile"
             variant="secondary"
             onPress={() => router.push('/(artist)/profile')}
@@ -288,6 +299,8 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   actions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
     marginBottom: spacing.md,
   },
   rail: {

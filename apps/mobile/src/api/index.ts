@@ -7,6 +7,31 @@ export { createPlaybackSession, reportPlayEvent } from './playback';
 export { getAudioStatus, retryTrackAudio, uploadTrackAudio } from './ingestion';
 export type { AudioStatus, UploadableAudio } from './ingestion';
 export {
+  getArtistAlbumStats,
+  getArtistOverview,
+  getArtistRecentActivity,
+  getArtistTrackStats,
+  getArtistTrend,
+  getPlatformOverview,
+} from './analytics';
+export type {
+  AlbumAnalytics,
+  AnalyticsOverview,
+  AnalyticsRange,
+  AnalyticsTotals,
+  AnalyticsTrend,
+  RecentPlay,
+  TrackAnalytics,
+  TrendGranularity,
+  TrendPoint,
+} from './types';
+export type {
+  AnalyticsPagedQuery,
+  AnalyticsQuery,
+  AnalyticsRecentQuery,
+  AnalyticsTrendQuery,
+} from './analytics';
+export {
   createAlbum,
   createArtist,
   createTrack,

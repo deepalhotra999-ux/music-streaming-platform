@@ -21,6 +21,7 @@ import { followsRoutes } from '../modules/follows/routes.js';
 import { historyRoutes } from '../modules/history/routes.js';
 import { streamingRoutes } from '../modules/streaming/routes.js';
 import { ingestionRoutes } from '../modules/ingestion/routes.js';
+import { analyticsRoutes } from '../modules/analytics/routes.js';
 
 export async function buildApp(config: Config): Promise<FastifyInstance> {
   const app = Fastify({
@@ -99,6 +100,7 @@ export async function buildApp(config: Config): Promise<FastifyInstance> {
     await historyRoutes(instance, config);
     await streamingRoutes(instance, config);
     await ingestionRoutes(instance, config);
+    await analyticsRoutes(instance, config);
   });
 
   return app;

@@ -271,3 +271,55 @@ export interface AddTrackInput {
   /** Appends at max(position) + 1 when omitted. */
   position?: number;
 }
+
+/** Phase 15 — artist analytics & reporting types. All metrics are computed
+ *  server-side from the append-only play_events stream; the session is the
+ *  unit of a "play" (see ADR-011). */
+export type AnalyticsRange = '7d' | '28d' | '90d' | 'all';
+export type TrendGranularity = 'day' | 'week';
+
+export interface AnalyticsTotals {
+  streams: number;
+  starts: number;
+  failedPlays: number;
+  incompletePlays: number;
+  uniqueListeners: number;
+  listeningTimeMs: number;
+}
+
+export interface AnalyticsOverview extends AnalyticsTotals {
+  /** Null for the platform-wide (ADMIN) overview. */
+  artistId: string | null;
+  range: AnalyticsRange;
+  /** Inclusive lower bound, ISO-8601; null for range=all. */
+  from: string | null;
+  to: string;
+}
+
+export interface TrackAnalytics extends AnalyticsTotals {
+  trackId: string;
+  title: string;
+}
+
+export interface AlbumAnalytics extends AnalyticsTotals {
+  albumId: string;
+  title: string;
+}
+
+export interface TrendPoint extends AnalyticsTotals {
+  /** UTC bucket start: YYYY-MM-DD (day) or Monday YYYY-MM-DD (week). */
+  date: string;
+}
+
+export interface AnalyticsTrend {
+  granularity: TrendGranularity;
+  points: TrendPoint[];
+}
+
+export interface RecentPlay {
+  sessionId: string;
+  trackId: string;
+  trackTitle: string;
+  playedAt: string;
+  listeningTimeMs: number;
+}

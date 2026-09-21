@@ -342,6 +342,7 @@ model PlaybackSession {
 
   @@index([userId])
   @@index([expiresAt])
+  @@index([trackId, createdAt])
   @@map("playback_sessions")
 }
 
@@ -369,5 +370,6 @@ model PlayEvent {
 
   @@index([sessionId, createdAt])
   @@index([trackId, createdAt])
+  @@index([createdAt])
   @@map("play_events")
 }
