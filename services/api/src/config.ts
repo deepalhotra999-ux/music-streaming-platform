@@ -8,6 +8,8 @@ export interface RateLimitConfig {
   register: number;
   refresh: number;
   logout: number;
+  /** general API routes (all Phase 4 endpoints) */
+  api: number;
   /** window length in milliseconds */
   windowMs: number;
 }
@@ -66,6 +68,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       register: int(env, 'RATE_LIMIT_REGISTER', 20),
       refresh: int(env, 'RATE_LIMIT_REFRESH', 60),
       logout: int(env, 'RATE_LIMIT_LOGOUT', 60),
+      api: int(env, 'RATE_LIMIT_API', 300),
       windowMs: int(env, 'RATE_LIMIT_WINDOW_MS', 60_000),
     },
   };

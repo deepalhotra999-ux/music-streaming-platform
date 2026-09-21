@@ -50,7 +50,15 @@ tests/       repo-level toolchain tests
 - REST APIs are specified in `packages/contracts` (OpenAPI) before implementation.
 - No secrets in code — `.env` is gitignored; `.env.example` documents keys.
 
+## Phase status
+
+- Phase 1: repo scaffold, toolchain, conventions.
+- Phase 2: Prisma 6 + PostgreSQL 16 data model (13 tables), migration, idempotent seed.
+- Phase 3: authentication — register/login/logout, Argon2id passwords, HS256 access JWT + rotating opaque refresh tokens, `GET /v1/me`, JSON Schema validation, RFC 7807 errors, per-IP rate limits. See `docs/PHASE-3-REPORT.md`.
+- Phase 4: backend API — users, artists (+profiles), albums, tracks, genres, playlists (+items), likes, follows, listening history. Public catalog reads, ARTIST/ADMIN publishing, playlist visibility (public/unlisted/private), shared `?page=&limit=` pagination, Swagger/OpenAPI at `/docs`. See `docs/PHASE-4-REPORT.md` and `docs/adr/004-phase4-api-authorization-model.md`.
+
 ## What's intentionally not here yet
 
-Auth (Phase 2), database models/migrations (Phase 2–3), any UI (Phase 9+).
-Placeholders mark where each phase's code will land.
+Audio streaming, HLS/CDN, subscriptions, payments, artist payouts,
+recommendations, mobile UI (later phases). Placeholders mark where each
+phase's code will land.

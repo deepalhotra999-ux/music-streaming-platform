@@ -4,7 +4,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { Config } from '../../config.js';
 import { prisma } from '../../db.js';
-import { conflict, unauthorized } from '../../http/errors.js';
+import { conflict, problemSchema, unauthorized } from '../../http/errors.js';
 import {
   authResultSchema,
   loginBody,
@@ -42,7 +42,13 @@ export async function authRoutes(app: FastifyInstance, config: Config): Promise<
   app.post<{ Body: RegisterBody }>(
     '/v1/auth/register',
     {
-      schema: { body: registerBody, response: { 201: authResultSchema } },
+      schema: {
+        tags: ['Auth'],
+        summary: 'Register a new account',
+        description: 'Creates a LISTENER account and returns tokens. Email must be unique.',
+        body: registerBody,
+        response: { 201: authResultSchema, 400: problemSchema, 409: problemSchema },
+      },
       config: { rateLimit: { max: limits.register, timeWindow: limits.windowMs } },
     },
     async (req, reply) => {
@@ -59,7 +65,13 @@ export async function authRoutes(app: FastifyInstance, config: Config): Promise<
   app.post<{ Body: LoginBody }>(
     '/v1/auth/login',
     {
-      schema: { body: loginBody, response: { 200: authResultSchema } },
+      schema: {
+        tags: ['Auth'],
+        summary: 'Log in',
+        description: 'Verifies credentials and returns a fresh token pair.',
+        body: loginBody,
+        response: { 200: authResultSchema, 400: problemSchema, 401: problemSchema },
+      },
       config: { rateLimit: { max: limits.login, timeWindow: limits.windowMs } },
     },
     async (req, reply) => {
@@ -76,7 +88,13 @@ export async function authRoutes(app: FastifyInstance, config: Config): Promise<
   app.post<{ Body: TokenBody }>(
     '/v1/auth/refresh',
     {
-      schema: { body: refreshBody, response: { 200: authResultSchema } },
+      schema: {
+        tags: ['Auth'],
+        summary: 'Refresh tokens',
+        description: 'Rotates a refresh token; reuse revokes the whole token family.',
+        body: refreshBody,
+        response: { 200: authResultSchema, 400: problemSchema, 401: problemSchema },
+      },
       config: { rateLimit: { max: limits.refresh, timeWindow: limits.windowMs } },
     },
     async (req, reply) => {
@@ -93,7 +111,13 @@ export async function authRoutes(app: FastifyInstance, config: Config): Promise<
   app.post<{ Body: TokenBody }>(
     '/v1/auth/logout',
     {
-      schema: { body: logoutBody },
+      schema: {
+        tags: ['Auth'],
+        summary: 'Log out',
+        description: 'Revokes a refresh token.',
+        body: logoutBody,
+        response: { 204: { type: 'null' }, 400: problemSchema },
+      },
       config: { rateLimit: { max: limits.logout, timeWindow: limits.windowMs } },
     },
     async (req, reply) => {
@@ -106,7 +130,13 @@ export async function authRoutes(app: FastifyInstance, config: Config): Promise<
     '/v1/me',
     {
       preHandler: [app.authenticate],
-      schema: { response: { 200: publicUserSchema } },
+      schema: {
+        tags: ['Auth'],
+        summary: 'Get my account',
+        description: 'Returns the authenticated user’s own profile.',
+        security: [{ bearerAuth: [] }],
+        response: { 200: publicUserSchema, 401: problemSchema },
+      },
     },
     async (req, reply) => {
       // The guard guarantees authUser; the service re-reads the row so a

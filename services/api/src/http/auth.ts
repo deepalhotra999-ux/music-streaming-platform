@@ -21,6 +21,12 @@ declare module 'fastify' {
   interface FastifyInstance {
     /** preHandler: rejects with 401 unless a valid Bearer token is present. */
     authenticate: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
+    /**
+     * preHandler: populates `request.authUser` when a valid Bearer token is
+     * present, but never rejects. For endpoints with mixed visibility (e.g.
+     * public playlists), where the service decides based on who is asking.
+     */
+    authenticateOptional: (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
   }
 }
 
@@ -54,6 +60,32 @@ export async function authPlugin(app: FastifyInstance, config: Config): Promise<
     if (typeof payload.sub !== 'string' || typeof payload.email !== 'string') {
       throw unauthorized('Invalid or expired access token.');
     }
+    req.authUser = {
+      id: payload.sub,
+      email: payload.email,
+      role: typeof payload.role === 'string' ? payload.role : 'LISTENER',
+    };
+  });
+
+  app.decorate('authenticateOptional', async (req: FastifyRequest) => {
+    const header = req.headers.authorization;
+    if (!header || !header.toLowerCase().startsWith('bearer ')) return;
+    const token = header.slice(7).trim();
+    if (!token) return;
+
+    let payload: jose.JWTPayload;
+    try {
+      ({ payload } = await jose.jwtVerify(token, secret, {
+        issuer: config.jwtIssuer,
+        audience: config.jwtAudience,
+      }));
+    } catch {
+      // Optional auth: an invalid token is treated the same as no token.
+      // Routes that require auth use the strict `authenticate` guard instead.
+      return;
+    }
+
+    if (typeof payload.sub !== 'string' || typeof payload.email !== 'string') return;
     req.authUser = {
       id: payload.sub,
       email: payload.email,

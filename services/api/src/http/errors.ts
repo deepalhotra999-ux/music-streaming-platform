@@ -45,6 +45,16 @@ export const forbidden = (detail = 'You do not have permission to do that.') =>
     type: 'https://api.music-streaming.local/problems/forbidden',
   });
 
+export const notFound = (detail = 'The requested resource was not found.') =>
+  new HttpProblem(404, 'Not Found', detail, {
+    type: 'https://api.music-streaming.local/problems/not-found',
+  });
+
+export const badRequest = (detail: string) =>
+  new HttpProblem(400, 'Bad Request', detail, {
+    type: 'https://api.music-streaming.local/problems/bad-request',
+  });
+
 export const conflict = (detail: string) =>
   new HttpProblem(409, 'Conflict', detail, {
     type: 'https://api.music-streaming.local/problems/conflict',
@@ -133,3 +143,27 @@ export function registerErrorHandler(app: FastifyInstance): void {
     });
   });
 }
+
+/**
+ * Phase 4 — shared JSON Schema for RFC 7807 error responses, referenced from
+ * route `response` schemas so the OpenAPI document describes error shapes.
+ */
+export const problemSchema = {
+  type: 'object',
+  properties: {
+    type: { type: 'string' },
+    title: { type: 'string' },
+    status: { type: 'integer' },
+    detail: { type: 'string' },
+    errors: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          field: { type: 'string' },
+          message: { type: 'string' },
+        },
+      },
+    },
+  },
+} as const;
