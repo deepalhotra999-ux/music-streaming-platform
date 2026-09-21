@@ -22,6 +22,7 @@ import { historyRoutes } from '../modules/history/routes.js';
 import { streamingRoutes } from '../modules/streaming/routes.js';
 import { ingestionRoutes } from '../modules/ingestion/routes.js';
 import { analyticsRoutes } from '../modules/analytics/routes.js';
+import { auditRoutes } from '../modules/audit/routes.js';
 
 export async function buildApp(config: Config): Promise<FastifyInstance> {
   const app = Fastify({
@@ -64,6 +65,7 @@ export async function buildApp(config: Config): Promise<FastifyInstance> {
         { name: 'Likes', description: "The caller's liked tracks" },
         { name: 'Follows', description: "The caller's followed artists" },
         { name: 'History', description: "The caller's listening history" },
+        { name: 'Admin', description: 'Admin-only audit log (append-only)' },
       ],
       components: {
         securitySchemes: {
@@ -101,6 +103,7 @@ export async function buildApp(config: Config): Promise<FastifyInstance> {
     await streamingRoutes(instance, config);
     await ingestionRoutes(instance, config);
     await analyticsRoutes(instance, config);
+    await auditRoutes(instance, config);
   });
 
   return app;

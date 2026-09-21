@@ -88,6 +88,7 @@ model User {
   subscriptions      Subscription[]
   refreshTokens      RefreshToken[]
   playbackSessions   PlaybackSession[]
+  auditEvents        AdminAuditLog[]
   playEvents         PlayEvent[]
 
   @@index([role])
@@ -372,4 +373,25 @@ model PlayEvent {
   @@index([trackId, createdAt])
   @@index([createdAt])
   @@map("play_events")
+}
+
+// Phase 16 — admin audit foundation. Append-only record of privileged admin
+// actions (role changes, artist verification, ...). No updated_at/deleted_at:
+// the migration adds a BEFORE UPDATE OR DELETE trigger enforcing immutability
+// in depth, and the HTTP surface exposes only reads. actor is null when the
+// user who performed the action has been hard-deleted (ON DELETE SET NULL).
+model AdminAuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  actorId    String?  @map("actor_id") @db.Uuid
+  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action     String
+  targetType String   @map("target_type")
+  targetId   String?  @map("target_id") @db.Uuid
+  metadata   Json     @default("{}")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([createdAt(sort: Desc)])
+  @@index([action])
+  @@index([actorId])
+  @@map("admin_audit_logs")
 }

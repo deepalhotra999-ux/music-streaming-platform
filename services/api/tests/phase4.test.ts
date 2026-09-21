@@ -43,6 +43,22 @@ async function scopedClean(): Promise<void> {
   });
   await prisma.artist.deleteMany({ where: { owner: { email: { endsWith: TEST_DOMAIN } } } });
   await prisma.refreshToken.deleteMany({ where: userWhere });
+  // Phase 16 — admin audit rows are append-only (the DB trigger rejects even
+  // the FK's ON DELETE SET NULL maintenance update), so retire this suite's
+  // audit rows explicitly before deleting its users. Scoped to this suite's
+  // actor domain, like everything else here.
+  await prisma.$executeRawUnsafe(
+    'ALTER TABLE admin_audit_logs DISABLE TRIGGER admin_audit_logs_no_mutation',
+  );
+  try {
+    await prisma.adminAuditLog.deleteMany({
+      where: { actor: { email: { endsWith: TEST_DOMAIN } } },
+    });
+  } finally {
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE admin_audit_logs ENABLE TRIGGER admin_audit_logs_no_mutation',
+    );
+  }
   await prisma.user.deleteMany({ where: { email: { endsWith: TEST_DOMAIN } } });
 }
 

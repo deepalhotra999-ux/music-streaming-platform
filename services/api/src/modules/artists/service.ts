@@ -5,6 +5,7 @@
 
 import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from '../../db.js';
+import { recordAuditEvent } from '../audit/service.js';
 import { conflict, forbidden, notFound } from '../../http/errors.js';
 import type { AuthUser } from '../../http/auth.js';
 import { canManageArtist, isAdmin } from '../../http/authorization.js';
@@ -205,7 +206,7 @@ export async function updateArtist(
 ): Promise<ArtistDetailDto> {
   const existing = await db.artist.findFirst({
     where: { id, deletedAt: null },
-    select: { id: true, ownerUserId: true },
+    select: { id: true, ownerUserId: true, verified: true },
   });
   if (!existing) {
     throw notFound('Artist not found.');
@@ -226,6 +227,20 @@ export async function updateArtist(
     },
     include: detailInclude,
   });
+  // Audit verification flips only when the flag actually changes. Admin-only
+  // action by the route guard, so the actor is always an admin here.
+  if (input.verified !== undefined && input.verified !== existing.verified) {
+    await recordAuditEvent(
+      {
+        actorId: actor.id,
+        action: input.verified ? 'artist.verified' : 'artist.unverified',
+        targetType: 'artist',
+        targetId: id,
+        metadata: { verified: input.verified },
+      },
+      db,
+    );
+  }
   return toDetail(row);
 }
 

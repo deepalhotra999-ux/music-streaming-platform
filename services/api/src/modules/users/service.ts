@@ -4,6 +4,7 @@
 
 import type { PrismaClient, UserRole } from '@prisma/client';
 import { prisma } from '../../db.js';
+import { recordAuditEvent } from '../audit/service.js';
 import { badRequest, forbidden, notFound } from '../../http/errors.js';
 import type { AuthUser } from '../../http/auth.js';
 import {
@@ -159,5 +160,16 @@ export async function updateUserRole(
     throw notFound('User not found.');
   }
   const row = await db.user.update({ where: { id }, data: { role } });
+  // Audit the privilege change after success. Metadata holds role facts only.
+  await recordAuditEvent(
+    {
+      actorId: actor.id,
+      action: 'user.role.changed',
+      targetType: 'user',
+      targetId: id,
+      metadata: { oldRole: existing.role, newRole: role },
+    },
+    db,
+  );
   return toPublicUser(row);
 }
