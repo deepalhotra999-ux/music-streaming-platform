@@ -1,0 +1,487 @@
+// Phase 8 — PlaybackEngine: the mobile audio engine. Framework-free.
+//
+// Owns exactly one audio driver (and therefore one native player) at a time,
+// one playback session per track, and a local queue. React binds via
+// subscribe()/getSnapshot(); future native surfaces (background service,
+// CarPlay, Android Auto) can drive this same class without React.
+//
+// Play-event semantics (see ADR-007):
+// - START once per track, when playback actually begins (position 0).
+// - HEARTBEAT every heartbeatIntervalMs while the track is active.
+// - COMPLETE only when a track plays to its natural end. A manual skip is
+//   not a completed play, so the royalty/fraud signal stays clean.
+// - ERROR when session creation or playback fails, with the last position.
+//   Note: if session creation itself fails there is no session id to report
+//   against, so the failure surfaces only as engine error state (and via
+//   onEngineError), not as a play event.
+//
+// Session hygiene: the raw session token is only ever embedded in the HLS
+// URL handed to the player; the engine keeps the session id (for events)
+// and discards the token. Changing tracks tears down the old player and
+// session before the new one loads, so two tracks never play at once.
+
+import {
+  ApiClient,
+  apiErrorMessage,
+  createPlaybackSession,
+  reportPlayEvent,
+} from '../api';
+import type { PlayEventType } from '../api';
+import type {
+  AudioDriver,
+  DriverStatus,
+  EngineListener,
+  EngineSnapshot,
+  PlaybackState,
+  QueueTrack,
+} from './types';
+
+/** Default cadence for HEARTBEAT events while a track is active. */
+export const HEARTBEAT_INTERVAL_MS = 15_000;
+
+/** Seeking back within the first seconds of a track restarts it (standard player UX). */
+const PREVIOUS_RESTART_THRESHOLD_MS = 3_000;
+
+export interface PlaybackEngineOptions {
+  api: ApiClient;
+  /** API origin, e.g. getApiBaseUrl(). Session hlsUrl values are relative. */
+  baseUrl: string;
+  driver: AudioDriver;
+  /** Override for tests. Defaults to HEARTBEAT_INTERVAL_MS. */
+  heartbeatIntervalMs?: number;
+  /** Optional diagnostics hook; the engine never throws from event paths. */
+  onEngineError?: (error: unknown, context: string) => void;
+}
+
+interface ActiveSession {
+  id: string;
+  trackId: string;
+}
+
+export class PlaybackEngine {
+  private readonly api: ApiClient;
+  private readonly baseUrl: string;
+  private readonly driver: AudioDriver;
+  private readonly heartbeatIntervalMs: number;
+  private readonly onEngineError: (error: unknown, context: string) => void;
+
+  private queue: QueueTrack[] = [];
+  private trackIndex = -1;
+  private session: ActiveSession | null = null;
+  private state: PlaybackState = 'idle';
+  private positionMs = 0;
+  private durationMs = 0;
+  private isBuffering = false;
+  private error: string | null = null;
+
+  private startedReported = false;
+  private finishedNaturally = false;
+  private pendingSeekMs: number | null = null;
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+  private unsubscribeDriver: (() => void) | null = null;
+  /** Bumps on every load; stale async loads abort instead of clobbering. */
+  private loadGeneration = 0;
+  private initialized = false;
+
+  private readonly listeners = new Set<EngineListener>();
+
+  constructor(options: PlaybackEngineOptions) {
+    this.api = options.api;
+    this.baseUrl = options.baseUrl.replace(/\/+$/, '');
+    this.driver = options.driver;
+    this.heartbeatIntervalMs = options.heartbeatIntervalMs ?? HEARTBEAT_INTERVAL_MS;
+    this.onEngineError = options.onEngineError ?? (() => undefined);
+  }
+
+  /** One-time native audio-mode setup. Called by the provider on mount. */
+  async initialize(): Promise<void> {
+    if (this.initialized) {
+      return;
+    }
+    this.initialized = true;
+    await this.driver.initialize();
+  }
+
+  // -- subscriptions -------------------------------------------------------
+
+  subscribe(listener: EngineListener): () => void {
+    this.listeners.add(listener);
+    listener(this.getSnapshot());
+    return () => {
+      this.listeners.delete(listener);
+    };
+  }
+
+  getSnapshot(): EngineSnapshot {
+    const track = this.trackIndex >= 0 ? (this.queue[this.trackIndex] ?? null) : null;
+    return {
+      state: this.state,
+      queue: this.queue.slice(),
+      trackIndex: this.trackIndex,
+      track,
+      positionMs: this.positionMs,
+      durationMs: this.durationMs,
+      isBuffering: this.isBuffering,
+      error: this.error,
+      canNext: this.trackIndex >= 0 && this.trackIndex < this.queue.length - 1,
+      canPrevious: this.trackIndex > 0,
+    };
+  }
+
+  private emit(): void {
+    const snapshot = this.getSnapshot();
+    for (const listener of this.listeners) {
+      listener(snapshot);
+    }
+  }
+
+  // -- queue ---------------------------------------------------------------
+
+  /** Replace the queue and start playing at startIndex. */
+  async setQueue(tracks: QueueTrack[], startIndex = 0): Promise<void> {
+    this.queue = tracks.slice();
+    if (this.queue.length === 0) {
+      this.stop();
+      return;
+    }
+    const index = Math.min(Math.max(0, startIndex), this.queue.length - 1);
+    await this.loadTrackAt(index, { autoplay: true });
+  }
+
+  /** Append a track to the end of the queue. */
+  enqueue(track: QueueTrack): void {
+    this.queue = [...this.queue, track];
+    this.emit();
+  }
+
+  /** Stop playback and drop the queue. */
+  clearQueue(): void {
+    this.queue = [];
+    this.stop();
+  }
+
+  // -- transport controls ----------------------------------------------------
+
+  play(): void {
+    if (this.state === 'error') {
+      // Recovering from an error means a fresh session at the last position.
+      void this.retry();
+      return;
+    }
+    if (this.trackIndex < 0) {
+      if (this.queue.length > 0) {
+        void this.loadTrackAt(0, { autoplay: true });
+      }
+      return;
+    }
+    if (this.state === 'ended' || this.state === 'idle') {
+      void this.loadTrackAt(this.trackIndex, { autoplay: true });
+      return;
+    }
+    // Paused (or still loading): resume. Harmless if already playing.
+    this.driver.play();
+  }
+
+  pause(): void {
+    if (this.state === 'playing' || this.state === 'buffering') {
+      this.stopHeartbeat();
+      this.driver.pause();
+      this.setState('paused');
+      this.emit();
+    }
+  }
+
+  toggle(): void {
+    if (this.state === 'playing' || this.state === 'buffering') {
+      this.pause();
+    } else {
+      this.play();
+    }
+  }
+
+  /** Full stop: invalidate pending loads, release the player and session, keep the queue. */
+  stop(): void {
+    this.invalidatePendingLoads();
+    this.teardownTrack();
+    this.trackIndex = -1;
+    this.setState('idle');
+    this.emit();
+  }
+
+  /** Release everything (app teardown). The engine must not be used after. */
+  destroy(): void {
+    this.invalidatePendingLoads();
+    this.teardownTrack();
+    this.queue = [];
+    this.trackIndex = -1;
+    this.listeners.clear();
+    this.setState('idle');
+  }
+
+  async seekTo(positionMs: number): Promise<void> {
+    if (this.trackIndex < 0) {
+      return;
+    }
+    const clamped = Math.max(
+      0,
+      this.durationMs > 0 ? Math.min(positionMs, this.durationMs) : positionMs,
+    );
+    this.positionMs = Math.round(clamped);
+    if (this.driver.getStatus().isLoaded) {
+      try {
+        await this.driver.seekTo(this.positionMs);
+      } catch (error) {
+        this.fail(apiErrorMessage(error));
+        return;
+      }
+    } else {
+      // Not loaded yet (e.g. seek during 'loading'): apply once it is.
+      this.pendingSeekMs = this.positionMs;
+    }
+    this.emit();
+  }
+
+  next(): void {
+    if (this.trackIndex >= 0 && this.trackIndex < this.queue.length - 1) {
+      void this.loadTrackAt(this.trackIndex + 1, { autoplay: true });
+    }
+  }
+
+  previous(): void {
+    if (this.trackIndex < 0) {
+      return;
+    }
+    if (this.positionMs > PREVIOUS_RESTART_THRESHOLD_MS || this.trackIndex === 0) {
+      // Standard UX: restart the current track instead of going back (and
+      // there is nothing to go back to at the head of the queue).
+      void this.seekTo(0);
+      return;
+    }
+    void this.loadTrackAt(this.trackIndex - 1, { autoplay: true });
+  }
+
+  /**
+   * Recover from a network interruption or playback error: mint a fresh
+   * playback session for the current track and resume at the last position.
+   */
+  async retry(): Promise<void> {
+    if (this.trackIndex < 0) {
+      return;
+    }
+    await this.loadTrackAt(this.trackIndex, {
+      autoplay: true,
+      resumeMs: this.positionMs,
+    });
+  }
+
+  // -- track loading ---------------------------------------------------------
+
+  private async loadTrackAt(
+    index: number,
+    opts: { autoplay: boolean; resumeMs?: number },
+  ): Promise<void> {
+    const track = this.queue[index];
+    if (!track) {
+      return;
+    }
+    const generation = ++this.loadGeneration;
+    // Tear down first: the old player and session are gone before the new
+    // session is even requested, so two tracks can never play at once.
+    this.teardownTrack();
+    this.trackIndex = index;
+    this.error = null;
+    this.setState('loading');
+    this.emit();
+
+    let sessionId: string;
+    let hlsUrl: string;
+    try {
+      const session = await createPlaybackSession(this.api, track.trackId);
+      sessionId = session.id;
+      hlsUrl = session.hlsUrl;
+    } catch (error) {
+      if (generation !== this.loadGeneration) {
+        return; // superseded by a newer load (or stop/destroy)
+      }
+      this.fail(apiErrorMessage(error));
+      return;
+    }
+    if (generation !== this.loadGeneration) {
+      return; // superseded while the session was minted
+    }
+    this.session = { id: sessionId, trackId: track.trackId };
+    // ADR-006: hlsUrl is a relative, session-scoped path. Resolve it against
+    // the API origin. The raw token lives only inside this URL.
+    const uri = `${this.baseUrl}${hlsUrl}`;
+    // Set the resume target BEFORE load: the driver publishes its initial
+    // status synchronously during load(), so a later assignment would be
+    // missed by handleDriverStatus. A user seek issued while the session
+    // was being minted already set pendingSeekMs — don't clobber it.
+    if (opts.resumeMs !== undefined && opts.resumeMs > 0) {
+      this.pendingSeekMs = Math.round(opts.resumeMs);
+    }
+    try {
+      this.unsubscribeDriver = this.driver.onStatusChange((status) =>
+        this.handleDriverStatus(status),
+      );
+      await this.driver.load(uri);
+    } catch (error) {
+      if (generation !== this.loadGeneration) {
+        return;
+      }
+      this.fail(apiErrorMessage(error));
+      return;
+    }
+    if (generation !== this.loadGeneration) {
+      return;
+    }
+    if (opts.autoplay) {
+      this.driver.play();
+    }
+    this.emit();
+  }
+
+  /**
+   * Release the player, session, and timers for the current track.
+   * Does NOT bump the load generation: callers that start a new load do
+   * that themselves; stop()/destroy() bump it to abort in-flight loads.
+   */
+  private teardownTrack(): void {
+    this.stopHeartbeat();
+    this.unsubscribeDriver?.();
+    this.unsubscribeDriver = null;
+    // The driver destroys the native player: no second instance survives.
+    this.driver.destroy();
+    this.session = null;
+    this.startedReported = false;
+    this.finishedNaturally = false;
+    this.pendingSeekMs = null;
+    this.positionMs = 0;
+    this.durationMs = 0;
+    this.isBuffering = false;
+  }
+
+  /**
+   * Called by stop()/destroy() so an in-flight loadTrackAt (awaiting session
+   * creation or driver.load) sees a stale generation and aborts instead of
+   * finishing after the stop.
+   */
+  private invalidatePendingLoads(): void {
+    this.loadGeneration += 1;
+  }
+
+  // -- driver status ---------------------------------------------------------
+
+  private handleDriverStatus(status: DriverStatus): void {
+    if (!this.session) {
+      return; // stale update from a torn-down track
+    }
+    this.positionMs = Math.max(0, Math.round(status.currentTimeSec * 1000));
+    this.durationMs = Math.max(0, Math.round(status.durationSec * 1000));
+    this.isBuffering = status.isBuffering;
+
+    if (status.error) {
+      this.fail(status.error);
+      return;
+    }
+
+    if (this.pendingSeekMs !== null && status.isLoaded) {
+      const ms = this.pendingSeekMs;
+      this.pendingSeekMs = null;
+      this.driver.seekTo(ms).catch((error: unknown) => {
+        this.fail(apiErrorMessage(error));
+      });
+    }
+
+    if (status.didJustFinish && !this.finishedNaturally) {
+      this.finishedNaturally = true;
+      void this.onTrackEnded();
+      return;
+    }
+
+    if (status.playing) {
+      if (!this.startedReported) {
+        this.startedReported = true;
+        this.setState(status.isBuffering ? 'buffering' : 'playing');
+        this.emit();
+        this.reportEvent('START', 0);
+      } else {
+        this.setState(status.isBuffering ? 'buffering' : 'playing');
+        this.emit();
+      }
+      // Resume the cadence after a pause (pause() stops the timer).
+      this.ensureHeartbeat();
+      return;
+    }
+
+    if (!status.isLoaded) {
+      this.setState('loading');
+    } else {
+      // Loaded but not playing: paused, or pre-play right after load.
+      this.setState(this.startedReported ? 'paused' : 'loading');
+    }
+    this.emit();
+  }
+
+  private async onTrackEnded(): Promise<void> {
+    this.stopHeartbeat();
+    const finalPosition = this.positionMs;
+    this.reportEvent('COMPLETE', finalPosition);
+    if (this.trackIndex >= 0 && this.trackIndex < this.queue.length - 1) {
+      await this.loadTrackAt(this.trackIndex + 1, { autoplay: true });
+    } else {
+      // Queue exhausted: release the player, keep the queue for replay.
+      this.teardownTrack();
+      this.setState('ended');
+      this.emit();
+    }
+  }
+
+  private fail(message: string): void {
+    this.stopHeartbeat();
+    this.error = message;
+    this.setState('error');
+    this.emit();
+    if (this.session) {
+      this.reportEvent('ERROR', this.positionMs);
+    }
+  }
+
+  // -- play events -----------------------------------------------------------
+
+  /** Start the heartbeat cadence if it is not already running. */
+  private ensureHeartbeat(): void {
+    if (this.heartbeatTimer !== null || !this.session || this.finishedNaturally) {
+      return;
+    }
+    this.heartbeatTimer = setInterval(() => {
+      if (this.session && !this.finishedNaturally) {
+        this.reportEvent('HEARTBEAT', this.positionMs);
+      }
+    }, this.heartbeatIntervalMs);
+  }
+
+  private stopHeartbeat(): void {
+    if (this.heartbeatTimer !== null) {
+      clearInterval(this.heartbeatTimer);
+      this.heartbeatTimer = null;
+    }
+  }
+
+  /** Fire-and-forget: telemetry failures must never break playback. */
+  private reportEvent(type: PlayEventType, positionMs: number): void {
+    const session = this.session;
+    if (!session) {
+      return;
+    }
+    reportPlayEvent(this.api, session.id, type, Math.max(0, Math.round(positionMs))).catch(
+      (error: unknown) => {
+        this.onEngineError(error, `reportPlayEvent(${type})`);
+      },
+    );
+  }
+
+  private setState(state: PlaybackState): void {
+    this.state = state;
+  }
+}

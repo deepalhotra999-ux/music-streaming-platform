@@ -9,8 +9,23 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
+import type { ReactNode } from 'react';
 import { AuthProvider, useAuth } from '../auth';
+import { PlaybackProvider } from '../playback';
 import { colors } from '../theme';
+
+/**
+ * Phase 8 — mounts the playback engine only for authenticated users: it
+ * needs the authenticated API client for playback sessions and play
+ * events. Unmounting on sign-out stops playback and releases the player.
+ */
+function PlaybackShell({ children }: { children: ReactNode }) {
+  const { status, api } = useAuth();
+  if (status !== 'authenticated') {
+    return <>{children}</>;
+  }
+  return <PlaybackProvider api={api}>{children}</PlaybackProvider>;
+}
 
 function RootNavigator() {
   const { status } = useAuth();
@@ -44,7 +59,9 @@ export default function RootLayout() {
   return (
     <SafeAreaProvider>
       <AuthProvider>
-        <RootNavigator />
+        <PlaybackShell>
+          <RootNavigator />
+        </PlaybackShell>
       </AuthProvider>
     </SafeAreaProvider>
   );

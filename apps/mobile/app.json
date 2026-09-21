@@ -37,7 +37,15 @@
             "resizeMode": "contain"
           }
         }
-      ]
+      ],
+      [
+        "expo-audio",
+        {
+          "enableBackgroundPlayback": false,
+          "recordAudioAndroid": false
+        }
+      ],
+      "expo-asset"
     ],
     "scheme": "waveform",
     "slug": "waveform",
