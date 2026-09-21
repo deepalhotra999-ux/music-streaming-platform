@@ -1,16 +1,21 @@
 // Phase 6 — screens public surface.
+export { AddTracksScreen } from './AddTracksScreen';
 export { AlbumDetailScreen } from './AlbumDetailScreen';
 export { AlbumListScreen } from './AlbumListScreen';
 export { ArtistDetailScreen } from './ArtistDetailScreen';
 export { ArtistListScreen } from './ArtistListScreen';
+export { FollowedArtistsScreen } from './FollowedArtistsScreen';
 export { GenreDetailScreen } from './GenreDetailScreen';
 export { GenreListScreen } from './GenreListScreen';
 export { HomeScreen } from './HomeScreen';
 export { LibraryScreen } from './LibraryScreen';
+export { LikedTracksScreen } from './LikedTracksScreen';
 export { LoginScreen } from './LoginScreen';
+export { MyPlaylistsScreen } from './MyPlaylistsScreen';
 export { PlaylistDetailScreen } from './PlaylistDetailScreen';
 export { PlaylistListScreen } from './PlaylistListScreen';
 export { ProfileScreen } from './ProfileScreen';
+export { RecentlyPlayedScreen } from './RecentlyPlayedScreen';
 export { RegisterScreen } from './RegisterScreen';
 export { SearchScreen } from './SearchScreen';
 export { SplashScreen } from './SplashScreen';

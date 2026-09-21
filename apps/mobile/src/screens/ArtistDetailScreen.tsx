@@ -15,6 +15,7 @@ import type {
 import { apiErrorMessage, getArtist, listAlbums, listTracks } from '../api';
 import { useAuth } from '../auth';
 import { useQueueActions } from '../player';
+import { FollowButton } from '../library';
 import {
   AlbumCard,
   ArtworkImage,
@@ -119,6 +120,9 @@ export function ArtistDetailScreen({ artistId }: { artistId: string }) {
             {formatAlbumCount(artist.counts.albums)} • {formatTrackCount(artist.counts.tracks)} •{' '}
             {formatFollowerCount(artist.counts.followers)}
           </Text>
+          <View style={styles.followWrap}>
+            <FollowButton artistId={artist.id} />
+          </View>
           {profile?.bio ? <Text style={styles.bio}>{profile.bio}</Text> : null}
         </View>
 
@@ -190,6 +194,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+    marginTop: spacing.md,
+  },
+  followWrap: {
     marginTop: spacing.md,
   },
   name: {

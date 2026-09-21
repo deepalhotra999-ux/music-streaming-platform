@@ -12,6 +12,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import type { ReactNode } from 'react';
 import { AuthProvider, useAuth } from '../auth';
 import { PlaybackProvider } from '../playback';
+import { LibraryProvider } from '../library';
 import { MiniPlayerHost } from '../player';
 import { colors } from '../theme';
 
@@ -22,6 +23,9 @@ import { colors } from '../theme';
  *
  * Phase 9 — the mini player host also lives here so the bar persists
  * across tabs and catalog navigation (it overlays the root stack).
+ *
+ * Phase 11 — the library provider also mounts here: like/follow state is
+ * per-user and must reset on sign-out, exactly like playback.
  */
 function PlaybackShell({ children }: { children: ReactNode }) {
   const { status, api } = useAuth();
@@ -30,8 +34,10 @@ function PlaybackShell({ children }: { children: ReactNode }) {
   }
   return (
     <PlaybackProvider api={api}>
-      {children}
-      <MiniPlayerHost />
+      <LibraryProvider api={api}>
+        {children}
+        <MiniPlayerHost />
+      </LibraryProvider>
     </PlaybackProvider>
   );
 }

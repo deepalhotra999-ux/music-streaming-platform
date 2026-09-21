@@ -53,6 +53,11 @@ jest.mock('expo-router', () => {  const React = require('react');
     useLocalSearchParams: () => ({}),
     useSegments: () => mockSegments,
     usePathname: () => '/',
+    // Behaves like an effect in tests; on device it re-runs when the screen
+    // gains focus.
+    useFocusEffect: (cb) => {
+      React.useEffect(() => cb(), [cb]);
+    },
   };
 });
 

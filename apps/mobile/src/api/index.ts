@@ -16,7 +16,24 @@ export {
   listTracks,
 } from './catalog';
 export type { AlbumListQuery, ArtistListQuery, ListQuery, TrackListQuery } from './catalog';
+export {
+  addTrackToPlaylist,
+  createPlaylist,
+  deletePlaylist,
+  followArtist,
+  likeTrack,
+  listFollowedArtists,
+  listHistory,
+  listLikedTracks,
+  listMyPlaylists,
+  movePlaylistItem,
+  removePlaylistItem,
+  unfollowArtist,
+  unlikeTrack,
+  updatePlaylist,
+} from './library';
 export type {
+  AddTrackInput,
   AlbumDetail,
   AlbumListItem,
   AlbumTrack,
@@ -24,9 +41,14 @@ export type {
   ArtistDetail,
   ArtistListItem,
   ArtistProfile,
+  ArtistSummary,
   AuthResult,
+  CreatePlaylistInput,
   FieldError,
+  FollowItem,
   Genre,
+  HistoryItem,
+  LikeItem,
   LoginInput,
   Page,
   PageInfo,
@@ -44,6 +66,7 @@ export type {
   TrackListItem,
   TrackStatus,
   TrackSummary,
+  UpdatePlaylistInput,
   User,
   UserRole,
 } from './types';

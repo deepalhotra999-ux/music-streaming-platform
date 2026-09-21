@@ -209,3 +209,61 @@ export interface PlaybackSession {
 
 /** Phase 7 — stream telemetry event types (append-only, royalty foundation). */
 export type PlayEventType = 'START' | 'HEARTBEAT' | 'COMPLETE' | 'ERROR';
+
+// ---------------------------------------------------------------------------
+// Phase 11 — library contract types.
+// Mirror the Phase 4 backend JSON shapes
+// (services/api/src/modules/{likes,follows,history,playlists}/schemas.ts).
+// Plain interfaces only; screens never depend on fetch details.
+// ---------------------------------------------------------------------------
+
+export interface ArtistSummary {
+  id: string;
+  name: string;
+  verified: boolean;
+}
+
+/** A liked track: the like metadata plus the embedded track summary. */
+export interface LikeItem {
+  trackId: string;
+  createdAt: string;
+  track: TrackSummary;
+}
+
+/** A followed artist: the follow metadata plus the embedded artist summary. */
+export interface FollowItem {
+  artistId: string;
+  createdAt: string;
+  artist: ArtistSummary;
+}
+
+/** One listening-history entry with the embedded track summary. */
+export interface HistoryItem {
+  id: string;
+  trackId: string;
+  playedAt: string;
+  progressMs: number | null;
+  completed: boolean;
+  track: TrackSummary;
+}
+
+export interface CreatePlaylistInput {
+  title: string;
+  description?: string | null;
+  coverArtUrl?: string | null;
+  /** Defaults to PRIVATE on the backend when omitted. */
+  visibility?: PlaylistVisibility;
+}
+
+export interface UpdatePlaylistInput {
+  title?: string;
+  description?: string | null;
+  coverArtUrl?: string | null;
+  visibility?: PlaylistVisibility;
+}
+
+export interface AddTrackInput {
+  trackId: string;
+  /** Appends at max(position) + 1 when omitted. */
+  position?: number;
+}
