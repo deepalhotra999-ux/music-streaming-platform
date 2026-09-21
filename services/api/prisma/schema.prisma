@@ -1,0 +1,275 @@
+// Phase 2 — database foundation. Design notes: docs/DATABASE.md
+// Conventions: uuid PKs, created_at/updated_at everywhere, soft delete
+// (deleted_at) on user-facing content, audit fields (created_by/updated_by).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  LISTENER
+  ARTIST
+  ADMIN
+}
+
+enum AlbumType {
+  ALBUM
+  SINGLE
+  EP
+  COMPILATION
+}
+
+enum TrackStatus {
+  PROCESSING
+  READY
+  FAILED
+  TAKEDOWN
+}
+
+enum PlaylistVisibility {
+  PRIVATE
+  PUBLIC
+  UNLISTED
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+}
+
+model User {
+  id            String    @id @default(uuid()) @db.Uuid
+  authSubject   String?   @unique @map("auth_subject")
+  email         String    @unique @db.Citext
+  emailVerified Boolean   @default(false) @map("email_verified")
+  displayName   String    @map("display_name")
+  avatarUrl     String?   @map("avatar_url")
+  role          UserRole  @default(LISTENER)
+  countryCode   String?   @map("country_code") @db.Char(2)
+  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdBy     String?   @map("created_by") @db.Uuid
+  updatedBy     String?   @map("updated_by") @db.Uuid
+
+  artists            Artist[]
+  playlists          Playlist[]
+  playlistItemsAdded PlaylistTrack[]    @relation("AddedBy")
+  likes              Like[]
+  follows            Follow[]
+  listeningHistory   ListeningHistory[]
+  subscriptions      Subscription[]
+
+  @@index([role])
+  @@map("users")
+}
+
+model Artist {
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String
+  ownerUserId String?   @map("owner_user_id") @db.Uuid
+  owner       User?     @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+  verified    Boolean   @default(false)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdBy   String?   @map("created_by") @db.Uuid
+  updatedBy   String?   @map("updated_by") @db.Uuid
+
+  profile   ArtistProfile?
+  albums    Album[]
+  tracks    Track[]
+  followers Follow[]
+
+  @@index([ownerUserId])
+  @@index([name])
+  @@map("artists")
+}
+
+model ArtistProfile {
+  id          String   @id @default(uuid()) @db.Uuid
+  artistId    String   @unique @map("artist_id") @db.Uuid
+  artist      Artist   @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  bio         String?
+  imageUrl    String?  @map("image_url")
+  bannerUrl   String?  @map("banner_url")
+  website     String?
+  socialLinks Json?    @map("social_links")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy   String?  @map("created_by") @db.Uuid
+  updatedBy   String?  @map("updated_by") @db.Uuid
+
+  @@map("artist_profiles")
+}
+
+model Album {
+  id          String    @id @default(uuid()) @db.Uuid
+  title       String
+  artistId    String    @map("artist_id") @db.Uuid
+  artist      Artist    @relation(fields: [artistId], references: [id], onDelete: Restrict)
+  albumType   AlbumType @default(ALBUM) @map("album_type")
+  releaseDate DateTime? @map("release_date") @db.Date
+  coverArtUrl String?   @map("cover_art_url")
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdBy   String?   @map("created_by") @db.Uuid
+  updatedBy   String?   @map("updated_by") @db.Uuid
+
+  tracks Track[]
+
+  @@index([artistId, releaseDate])
+  @@map("albums")
+}
+
+model Track {
+  id          String      @id @default(uuid()) @db.Uuid
+  title       String
+  artistId    String      @map("artist_id") @db.Uuid
+  artist      Artist      @relation(fields: [artistId], references: [id], onDelete: Restrict)
+  albumId     String?     @map("album_id") @db.Uuid
+  album       Album?      @relation(fields: [albumId], references: [id], onDelete: Restrict)
+  durationMs  Int         @map("duration_ms")
+  trackNumber Int?        @map("track_number")
+  discNumber  Int         @default(1) @map("disc_number")
+  isrc        String?     @unique
+  status      TrackStatus @default(PROCESSING)
+  playCount   BigInt      @default(0) @map("play_count")
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime?   @map("deleted_at") @db.Timestamptz(6)
+  createdBy   String?     @map("created_by") @db.Uuid
+  updatedBy   String?     @map("updated_by") @db.Uuid
+
+  genres           TrackGenre[]
+  playlistItems    PlaylistTrack[]
+  likes            Like[]
+  listeningHistory ListeningHistory[]
+
+  @@index([artistId])
+  @@index([albumId, trackNumber])
+  @@index([status])
+  @@map("tracks")
+}
+
+model Genre {
+  id          String   @id @default(uuid()) @db.Uuid
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  tracks TrackGenre[]
+
+  @@map("genres")
+}
+
+model TrackGenre {
+  trackId   String   @map("track_id") @db.Uuid
+  track     Track    @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  genreId   String   @map("genre_id") @db.Uuid
+  genre     Genre    @relation(fields: [genreId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([trackId, genreId])
+  @@map("track_genres")
+}
+
+model Playlist {
+  id          String             @id @default(uuid()) @db.Uuid
+  title       String
+  description String?
+  coverArtUrl String?            @map("cover_art_url")
+  visibility  PlaylistVisibility @default(PRIVATE)
+  ownerUserId String             @map("owner_user_id") @db.Uuid
+  owner       User               @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt   DateTime?          @map("deleted_at") @db.Timestamptz(6)
+  createdBy   String?            @map("created_by") @db.Uuid
+  updatedBy   String?            @map("updated_by") @db.Uuid
+
+  items PlaylistTrack[]
+
+  @@index([ownerUserId, updatedAt])
+  @@map("playlists")
+}
+
+model PlaylistTrack {
+  id            String   @id @default(uuid()) @db.Uuid
+  playlistId    String   @map("playlist_id") @db.Uuid
+  playlist      Playlist @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  trackId       String   @map("track_id") @db.Uuid
+  track         Track    @relation(fields: [trackId], references: [id], onDelete: Restrict)
+  position      Float
+  addedByUserId String   @map("added_by_user_id") @db.Uuid
+  addedBy       User     @relation("AddedBy", fields: [addedByUserId], references: [id], onDelete: Restrict)
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([playlistId, position])
+  @@map("playlist_tracks")
+}
+
+model Like {
+  userId    String   @map("user_id") @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trackId   String   @map("track_id") @db.Uuid
+  track     Track    @relation(fields: [trackId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([userId, trackId])
+  @@map("likes")
+}
+
+model Follow {
+  userId    String   @map("user_id") @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  artistId  String   @map("artist_id") @db.Uuid
+  artist    Artist   @relation(fields: [artistId], references: [id], onDelete: Restrict)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([userId, artistId])
+  @@map("follows")
+}
+
+model ListeningHistory {
+  id         String   @id @default(uuid()) @db.Uuid
+  userId     String   @map("user_id") @db.Uuid
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trackId    String   @map("track_id") @db.Uuid
+  track      Track    @relation(fields: [trackId], references: [id], onDelete: Restrict)
+  playedAt   DateTime @default(now()) @map("played_at") @db.Timestamptz(6)
+  progressMs Int?     @map("progress_ms")
+  completed  Boolean  @default(false)
+
+  @@index([userId, playedAt])
+  @@map("listening_history")
+}
+
+model Subscription {
+  id                  String             @id @default(uuid()) @db.Uuid
+  userId              String             @map("user_id") @db.Uuid
+  user                User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId              String             @map("plan_id")
+  status              SubscriptionStatus @default(ACTIVE)
+  currentPeriodStart  DateTime?          @map("current_period_start") @db.Timestamptz(6)
+  currentPeriodEnd    DateTime?          @map("current_period_end") @db.Timestamptz(6)
+  store               String?
+  storeSubscriptionId String?            @map("store_subscription_id")
+  createdAt           DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt           DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy           String?            @map("created_by") @db.Uuid
+  updatedBy           String?            @map("updated_by") @db.Uuid
+
+  @@index([userId, status])
+  @@index([store, storeSubscriptionId])
+  @@map("subscriptions")
+}

@@ -201,7 +201,32 @@ users 1───1 entitlements
 users 1───* playback_sessions *───1 tracks
 ```
 
-## Notes for later phases
+## Phase 2 implementation notes (2026-09-21)
+
+Implemented with Prisma in `services/api/prisma/schema.prisma`
+(migration `20260921081734_phase2_foundation`). Entities shipped:
+`users`, `artists`, `artist_profiles` (1:1, new vs. Phase 0 sketch),
+`albums`, `tracks`, `genres` + `track_genres`, `playlists`,
+`playlist_tracks`, `likes`, `follows`, `listening_history`,
+`subscriptions`.
+
+Deliberate deviations from the Phase 0 sketch, per Phase 2 scope
+(no auth / payments / streaming / royalties yet):
+
+- `playback_sessions` → simplified `listening_history`
+  (`played_at`, `progress_ms`, `completed`); monthly partitioning deferred.
+- `plans` / `entitlements` tables deferred to Phase 8 (billing);
+  `subscriptions.plan_id` is a plain string until then.
+- `audio_files` / `upload_sessions` arrive with Phase 4 (ingestion).
+- `search_documents` arrives with Phase 6 (search).
+- `users.auth_subject` (OIDC `sub`) is nullable until Phase 2-auth lands.
+
+All tables: uuid PKs, `created_at`/`updated_at`, soft delete on
+user-facing content, `created_by`/`updated_by` audit fields (plain uuid,
+no FK — attribution only). Email uses `citext`. FKs `ON DELETE RESTRICT`
+except cascades: user-owned rows (playlists, likes, follows,
+listening_history, subscriptions), playlist→items, artist→profile,
+track→track_genres.
 
 - **Availability/licensing** (territory restrictions) is intentionally absent
   from v1; `users.country_code` reserves the seam.

@@ -26,3 +26,10 @@ onboarding_tour/
 scheduler/
 self_improvement/
 spaces/
+
+# Local Prisma engine mirror (dev-environment workaround, see Phase 2 notes)
+.prisma-mirror/
+
+# Build / runtime
+*.tsbuildinfo
+agents/
