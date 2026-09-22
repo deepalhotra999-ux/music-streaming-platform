@@ -56,6 +56,23 @@ export interface OfflineConfig {
   authorizationTtlSeconds: number;
 }
 
+/** Phase 26 — AI music discovery & recommendations. */
+export interface DiscoveryConfig {
+  /** NL query endpoint rate limit (requests per window). Tight: each call
+   *  may invoke an AI provider. */
+  queryRateLimit: number;
+  /** Window length in milliseconds for the discovery query bucket. */
+  queryRateLimitWindowMs: number;
+  /** Recommendation cache TTL, in milliseconds. Short: taste signals
+   *  change and cached results go stale quickly. */
+  cacheTtlMs: number;
+  /** AI provider selection: "none" (default, deterministic local parsing)
+   *  or a vendor name. Unknown values fall back to "none". */
+  aiProvider: string;
+  /** AI request timeout, in milliseconds. */
+  aiTimeoutMs: number;
+}
+
 /** Phase 14 — artist audio ingestion (upload + transcode pipeline). */
 export interface IngestionConfig {
   /** Maximum accepted upload size in bytes. Enforced while streaming the
@@ -131,6 +148,8 @@ export interface Config {
   subscriptions: SubscriptionsConfig;
   /** Phase 25 — offline downloads & offline playback. */
   offline: OfflineConfig;
+  /** Phase 26 — AI music discovery & recommendations. */
+  discovery: DiscoveryConfig;
 }
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
@@ -201,6 +220,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     offline: {
       downloadTokenTtlSeconds: int(env, 'OFFLINE_DOWNLOAD_TOKEN_TTL_SECONDS', 3600), // 1 hour
       authorizationTtlSeconds: int(env, 'OFFLINE_AUTHORIZATION_TTL_SECONDS', 30 * 24 * 3600), // 30 days
+    },
+    discovery: {
+      queryRateLimit: int(env, 'DISCOVERY_QUERY_RATE_LIMIT', 30),
+      queryRateLimitWindowMs: int(env, 'DISCOVERY_QUERY_RATE_LIMIT_WINDOW_MS', 60_000),
+      cacheTtlMs: int(env, 'DISCOVERY_CACHE_TTL_MS', 5 * 60 * 1000), // 5 min
+      aiProvider: (env.DISCOVERY_AI_PROVIDER ?? 'none').toLowerCase(),
+      aiTimeoutMs: int(env, 'DISCOVERY_AI_TIMEOUT_MS', 8000),
     },
   };
 }

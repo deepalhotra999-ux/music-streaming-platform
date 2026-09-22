@@ -8,6 +8,7 @@ export { ArtistDetailScreen } from './ArtistDetailScreen';
 export { ArtistListScreen } from './ArtistListScreen';
 export { ArtistProfileScreen } from './ArtistProfileScreen';
 export { ArtistTracksScreen } from './ArtistTracksScreen';
+export { DiscoveryScreen } from './DiscoveryScreen';
 export { FollowedArtistsScreen } from './FollowedArtistsScreen';
 export { GenreDetailScreen } from './GenreDetailScreen';
 export { GenreListScreen } from './GenreListScreen';
