@@ -196,10 +196,85 @@ export interface PlaylistListItem {
   trackCount: number;
   createdAt: string;
   updatedAt: string;
+  /** Phase 27 — collaborative playlists. */
+  isCollaborative: boolean;
+  revision: number;
 }
 
 export interface PlaylistDetail extends PlaylistListItem {
   items: PlaylistItem[];
+  /** Phase 27 — the caller's role on this playlist (null for non-member viewers). */
+  viewerRole: 'OWNER' | 'EDITOR' | null;
+}
+
+// ---------------------------------------------------------------------------
+// Phase 27 — collaborative playlist contract types.
+// Mirror the Phase 27 backend JSON shapes
+// (services/api/src/modules/playlists/{schemas,collab}.ts). Plain
+// interfaces only; screens never depend on fetch details.
+// ---------------------------------------------------------------------------
+
+/** Roles on a collaborative playlist. Only the owner manages settings/membership. */
+export type CollaboratorRole = 'OWNER' | 'EDITOR';
+
+/** The caller's relationship to a playlist: owner, editor member, or non-member viewer. */
+export type ViewerRole = 'OWNER' | 'EDITOR' | null;
+
+export interface PlaylistMember {
+  userId: string;
+  displayName: string;
+  role: CollaboratorRole;
+  joinedAt: string;
+}
+
+/**
+ * An invitation row. The plaintext token is returned exactly once by
+ * createInvitation and is never stored server-side (only its SHA-256
+ * hash); it never appears in list responses.
+ */
+export interface PlaylistInvitation {
+  id: string;
+  expiresAt: string;
+  usedAt: string | null;
+  revokedAt: string | null;
+  createdByUserId: string;
+  createdAt: string;
+}
+
+/** Create-invitation response: the raw token, shown to the owner once. */
+export interface CreateInvitationResult {
+  token: string;
+  invitation: PlaylistInvitation;
+}
+
+export interface CollaborationSettings {
+  id: string;
+  isCollaborative: boolean;
+  revision: number;
+}
+
+export type PlaylistChangeAction =
+  | 'TRACK_ADDED'
+  | 'TRACK_REMOVED'
+  | 'TRACK_MOVED'
+  | 'COLLAB_ENABLED'
+  | 'COLLAB_DISABLED'
+  | 'MEMBER_ADDED'
+  | 'MEMBER_REMOVED'
+  | 'MEMBER_LEFT'
+  | 'INVITATION_CREATED'
+  | 'INVITATION_ACCEPTED'
+  | 'INVITATION_REVOKED';
+
+export interface PlaylistChange {
+  id: string;
+  actorUserId: string;
+  actorDisplayName: string;
+  action: PlaylistChangeAction;
+  trackId: string | null;
+  itemId: string | null;
+  revision: number;
+  createdAt: string;
 }
 
 /** Phase 7 — playback session. `token` is shown once; `hlsUrl` is a

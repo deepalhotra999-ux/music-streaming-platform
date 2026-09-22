@@ -6,7 +6,13 @@ import { fireEvent, render, screen } from '@testing-library/react-native';
 import { SearchResults, type SearchResultHandlers } from '../components/SearchResults';
 import { emptyResults, type CategorizedResults } from '../types';
 
-const artist = { id: 'a1', name: 'Neon Coastline', verified: true, followerCount: 1200, createdAt: '' };
+const artist = {
+  id: 'a1',
+  name: 'Neon Coastline',
+  verified: true,
+  followerCount: 1200,
+  createdAt: '',
+};
 const album = {
   id: 'al1',
   title: 'Glass Horizon',
@@ -45,6 +51,8 @@ const playlist = {
   trackCount: 8,
   createdAt: '',
   updatedAt: '',
+  isCollaborative: false,
+  revision: 0,
 };
 
 const results: CategorizedResults = {

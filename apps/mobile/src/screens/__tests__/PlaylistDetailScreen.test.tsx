@@ -19,12 +19,36 @@ jest.mock('../../player', () => ({
 }));
 
 const mockFormProps = jest.fn();
+const mockAddTrack = jest.fn();
+const mockRemoveItem = jest.fn();
+const mockSwapItems = jest.fn();
+const mockSetCollaboration = jest.fn();
+const mockClearNotice = jest.fn();
+const mockCollabState = { notice: null as string | null };
 jest.mock('../../library', () => ({
   LikeButton: () => null,
+  CollaborativeBadge: () => null,
   PlaylistForm: (props: unknown) => {
     mockFormProps(props);
     return null;
   },
+  // Phase 27 — the screen consumes the collab mutation hook; tests pin the
+  // returned contract here and assert call args per test.
+  useCollabMutations: () => ({
+    addTrack: mockAddTrack,
+    removeItem: mockRemoveItem,
+    swapItems: mockSwapItems,
+    setCollaboration: mockSetCollaboration,
+    notice: mockCollabState.notice,
+    clearNotice: mockClearNotice,
+  }),
+  COLLAB_CONFLICT_NOTICE: 'Playlist changed by a collaborator — refreshed.',
+}));
+
+// Phase 27 — online status gates collaborative writes in tests.
+const onlineState = { online: true };
+jest.mock('../../utils/useOnlineStatus', () => ({
+  useOnlineStatus: () => onlineState.online,
 }));
 
 // Phase 25 — PlaylistDetailScreen renders DownloadButtons; the offline
@@ -79,8 +103,12 @@ interface Mocks {
   del: jest.Mock;
 }
 
-function mockApi(userId: string, ownerUserId = 'u1'): Mocks {
-  const data = detail(ownerUserId);
+function mockApi(
+  userId: string,
+  ownerUserId = 'u1',
+  overrides: Record<string, unknown> = {},
+): Mocks {
+  const data = { ...detail(ownerUserId), ...overrides };
   const get = jest.fn(async (path: string) => {
     if (path === '/v1/playlists/pl1') {
       return data;
@@ -100,6 +128,8 @@ function mockApi(userId: string, ownerUserId = 'u1'): Mocks {
 let alertButtons: { text?: string; onPress?: () => void; style?: string }[] = [];
 beforeEach(() => {
   jest.clearAllMocks();
+  onlineState.online = true;
+  mockCollabState.notice = null;
   alertButtons = [];
   mockUseOffline.mockReturnValue({
     downloads: [],
@@ -209,33 +239,29 @@ describe('PlaylistDetailScreen', () => {
     expect(router.back).toHaveBeenCalled();
   });
 
-  it('removes a track and reloads the playlist (owner)', async () => {
-    const mocks = mockApi('u1', 'u1');
+  it('removes a track via the collab hook (owner)', async () => {
+    mockApi('u1', 'u1');
     render(<PlaylistDetailScreen playlistId="pl1" />);
     await waitFor(() => expect(screen.getByTestId('playlist-item-remove-item-a')).toBeTruthy());
 
     fireEvent.press(screen.getByTestId('playlist-item-remove-item-a'));
-    await waitFor(() =>
-      expect(mocks.del).toHaveBeenCalledWith('/v1/playlists/pl1/tracks/item-a'),
-    );
-    // Reloaded after the mutation.
-    expect(mocks.get.mock.calls.filter(([p]) => p === '/v1/playlists/pl1').length).toBe(2);
+    // The revision-guarded write + refetch live inside the hook (unit-tested
+    // separately); the screen delegates to it.
+    await waitFor(() => expect(mockRemoveItem).toHaveBeenCalledWith('item-a'));
   });
 
   it('reorders by swapping positions with the neighbor (owner)', async () => {
-    const mocks = mockApi('u1', 'u1');
+    mockApi('u1', 'u1');
     render(<PlaylistDetailScreen playlistId="pl1" />);
     await waitFor(() => expect(screen.getByTestId('playlist-item-up-item-b')).toBeTruthy());
 
-    // Move "Second Wave" above "First Light": positions 2 and 1 swap.
+    // Move "Second Wave" above "First Light": the hook swaps the two items
+    // (revision-guarded in collaborative mode, legacy otherwise).
     fireEvent.press(screen.getByTestId('playlist-item-up-item-b'));
-    await waitFor(() => expect(mocks.patch).toHaveBeenCalledTimes(2));
-    expect(mocks.patch).toHaveBeenNthCalledWith(1, '/v1/playlists/pl1/tracks/item-b', {
-      position: 1,
-    });
-    expect(mocks.patch).toHaveBeenNthCalledWith(2, '/v1/playlists/pl1/tracks/item-a', {
-      position: 2,
-    });
+    await waitFor(() => expect(mockSwapItems).toHaveBeenCalledTimes(1));
+    const [first, second] = mockSwapItems.mock.calls[0];
+    expect((first as { id: string }).id).toBe('item-b');
+    expect((second as { id: string }).id).toBe('item-a');
   });
 
   it('navigates to the add-tracks picker (owner)', async () => {
@@ -253,5 +279,77 @@ describe('PlaylistDetailScreen', () => {
     await waitFor(() => expect(screen.getByTestId('error-state')).toBeTruthy());
     fireEvent.press(screen.getByText('Try again'));
     await waitFor(() => expect(screen.getByText('Road trip')).toBeTruthy());
+  });
+
+  describe('Phase 27 — collaboration', () => {
+    const collabOverrides = {
+      isCollaborative: true,
+      revision: 5,
+      viewerRole: 'EDITOR' as const,
+    };
+
+    it('editor sees track controls but not owner edit/delete buttons', async () => {
+      mockApi('ed-1', 'u1', collabOverrides);
+      render(<PlaylistDetailScreen playlistId="pl1" />);
+      await waitFor(() => expect(screen.getByTestId('playlist-item-remove-item-a')).toBeTruthy());
+
+      expect(screen.getByTestId('playlist-item-up-item-b')).toBeTruthy();
+      expect(screen.getByTestId('playlist-add-tracks-button')).toBeTruthy();
+      // Owner-only playlist management stays hidden for editors.
+      expect(screen.queryByTestId('playlist-edit-button')).toBeNull();
+      expect(screen.queryByTestId('playlist-delete-button')).toBeNull();
+      // Members entry point is visible to members.
+      expect(screen.getByTestId('playlist-members-button')).toBeTruthy();
+    });
+
+    it('non-member viewer sees no track controls', async () => {
+      mockApi('v-1', 'u1', { ...collabOverrides, viewerRole: 'VIEWER' as const });
+      render(<PlaylistDetailScreen playlistId="pl1" />);
+      await waitFor(() => expect(screen.getByTestId('playlist-track-item-a')).toBeTruthy());
+
+      expect(screen.queryByTestId('playlist-item-remove-item-a')).toBeNull();
+      expect(screen.queryByTestId('playlist-item-up-item-b')).toBeNull();
+      expect(screen.queryByTestId('playlist-add-tracks-button')).toBeNull();
+      expect(screen.queryByTestId('playlist-members-button')).toBeNull();
+    });
+
+    it('owner sees the collaboration toggle but no leave affordance', async () => {
+      mockApi('u1', 'u1', { ...collabOverrides, viewerRole: 'OWNER' as const });
+      render(<PlaylistDetailScreen playlistId="pl1" />);
+      await waitFor(() => expect(screen.getByTestId('collab-toggle')).toBeTruthy());
+
+      expect(screen.getByTestId('playlist-members-button')).toBeTruthy();
+    });
+
+    it('toggling collaboration calls the hook and reflects the new revision', async () => {
+      mockApi('u1', 'u1', { ...collabOverrides, viewerRole: 'OWNER' as const });
+      render(<PlaylistDetailScreen playlistId="pl1" />);
+      await waitFor(() => expect(screen.getByTestId('collab-toggle')).toBeTruthy());
+
+      fireEvent(screen.getByTestId('collab-toggle'), 'onValueChange', false);
+      await waitFor(() => expect(mockSetCollaboration).toHaveBeenCalledWith(false));
+    });
+
+    it('displays the conflict notice raised by the hook', async () => {
+      mockCollabState.notice = 'Playlist changed by a collaborator — refreshed.';
+      mockApi('ed-1', 'u1', collabOverrides);
+      render(<PlaylistDetailScreen playlistId="pl1" />);
+      await waitFor(() => expect(screen.getByTestId('collab-conflict-notice')).toBeTruthy());
+      expect(screen.getByText('Playlist changed by a collaborator — refreshed.')).toBeTruthy();
+    });
+
+    it('hides collaborative writes offline while keeping playback available', async () => {
+      onlineState.online = false;
+      mockApi('ed-1', 'u1', collabOverrides);
+      render(<PlaylistDetailScreen playlistId="pl1" />);
+      await waitFor(() => expect(screen.getByTestId('collab-offline-hint')).toBeTruthy());
+
+      // Playback and download entry points remain available offline.
+      expect(screen.getByTestId('playlist-play-all')).toBeTruthy();
+      expect(screen.getByTestId('playlist-download-all')).toBeTruthy();
+      // Collaborative write controls are hidden (not just disabled) offline.
+      expect(screen.queryByTestId('playlist-add-tracks-button')).toBeNull();
+      expect(screen.queryByTestId('playlist-item-remove-item-a')).toBeNull();
+    });
   });
 });

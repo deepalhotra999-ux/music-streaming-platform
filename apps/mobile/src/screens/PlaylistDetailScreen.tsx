@@ -10,25 +10,25 @@
 // reached by URL either.
 
 import { useCallback, useState } from 'react';
-import { Alert, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Alert, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useFocusEffect, useRouter } from 'expo-router';
-import type { PlaylistDetail, PlaylistItem, PlaylistVisibility } from '../api';
-import {
-  apiErrorMessage,
-  deletePlaylist,
-  getPlaylist,
-  movePlaylistItem,
-  removePlaylistItem,
-  updatePlaylist,
-} from '../api';
+import type { PlaylistDetail, PlaylistItem, PlaylistVisibility, ViewerRole } from '../api';
+import { apiErrorMessage, deletePlaylist, getPlaylist, updatePlaylist } from '../api';
 import { useAuth } from '../auth';
 import { useQueueActions } from '../player';
 import { useOffline } from '../offline/OfflineProvider';
 import { DownloadButton } from '../offline/components/DownloadButton';
 import { ArtworkImage, formatDuration, formatTrackCount } from '../catalog';
 import { Button, ErrorState, LoadingState, Screen } from '../components';
-import { LikeButton, PlaylistForm, type PlaylistFormValues } from '../library';
+import {
+  CollaborativeBadge,
+  LikeButton,
+  PlaylistForm,
+  useCollabMutations,
+  type PlaylistFormValues,
+} from '../library';
+import { useOnlineStatus } from '../utils/useOnlineStatus';
 import { colors, fontSize, fontWeight, spacing } from '../theme';
 
 function visibilityLabel(visibility: PlaylistVisibility): string {
@@ -61,6 +61,10 @@ export function PlaylistDetailScreen({ playlistId }: { playlistId: string }) {
   const [formVisible, setFormVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+  // Phase 27 — connectivity gates collaborative editing only; offline
+  // downloads and playback keep working through the offline module.
+  const online = useOnlineStatus();
+  const [collabSaving, setCollabSaving] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -82,7 +86,19 @@ export function PlaylistDetailScreen({ playlistId }: { playlistId: string }) {
     }, [load]),
   );
 
+  // Phase 27 — revision-guarded mutations + conflict recovery. The hook
+  // reads the current revision from `playlist` at mutation time.
+  const collab = useCollabMutations(api, playlistId, playlist, load);
+
   const isOwner = Boolean(user && playlist && playlist.ownerUserId === user.id);
+  // Phase 27 — viewerRole is authoritative when the backend sends it;
+  // older fixtures omit it, so fall back to the ownership check.
+  const viewerRole: ViewerRole = playlist?.viewerRole ?? (isOwner ? 'OWNER' : null);
+  const isCollaborative = playlist?.isCollaborative === true;
+  const canEditTracks = viewerRole === 'OWNER' || viewerRole === 'EDITOR';
+  // Collaborative writes need the network; downloads/playback don't.
+  const collabEditingBlocked = isCollaborative && !online;
+  const canManageTracks = canEditTracks && !collabEditingBlocked;
   const sorted = playlist ? sortItems(playlist.items) : [];
 
   const playFrom = useCallback(
@@ -146,16 +162,18 @@ export function PlaylistDetailScreen({ playlistId }: { playlistId: string }) {
         return;
       }
       setMutating(true);
+      collab.clearNotice();
       try {
-        await removePlaylistItem(api, playlistId, item.id);
-        await load();
+        // Phase 27 — revision-guarded in collaborative mode (with
+        // conflict recovery); legacy owner-only write otherwise.
+        await collab.removeItem(item.id);
       } catch (err) {
         Alert.alert('Could not remove track', apiErrorMessage(err));
       } finally {
         setMutating(false);
       }
     },
-    [api, load, mutating, playlistId],
+    [collab, mutating],
   );
 
   const moveItem = useCallback(
@@ -165,21 +183,35 @@ export function PlaylistDetailScreen({ playlistId }: { playlistId: string }) {
         return;
       }
       setMutating(true);
+      collab.clearNotice();
       try {
-        const current = sorted[index];
-        const other = sorted[target];
         // Swap absolute positions so the ordering stays stable without
-        // renumbering the whole list.
-        await movePlaylistItem(api, playlistId, current.id, other.position);
-        await movePlaylistItem(api, playlistId, other.id, current.position);
-        await load();
+        // renumbering the whole list. In collaborative mode both writes
+        // are threaded through one revision chain.
+        await collab.swapItems(sorted[index], sorted[target]);
       } catch (err) {
         Alert.alert('Could not reorder track', apiErrorMessage(err));
       } finally {
         setMutating(false);
       }
     },
-    [api, load, mutating, playlistId, sorted],
+    [collab, mutating, sorted],
+  );
+
+  // Phase 27 — owner-only collaboration toggle. Disabling drops every
+  // member and revokes outstanding invitations server-side.
+  const toggleCollaboration = useCallback(
+    async (enabled: boolean) => {
+      setCollabSaving(true);
+      try {
+        await collab.setCollaboration(enabled);
+      } catch (err) {
+        Alert.alert('Could not update collaboration', apiErrorMessage(err));
+      } finally {
+        setCollabSaving(false);
+      }
+    },
+    [collab],
   );
 
   if (loading) {
@@ -203,7 +235,12 @@ export function PlaylistDetailScreen({ playlistId }: { playlistId: string }) {
       <Stack.Screen options={{ title: playlist.title }} />
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.header}>
-          <ArtworkImage uri={playlist.coverArtUrl} title={playlist.title} seed={playlist.id} size={160} />
+          <ArtworkImage
+            uri={playlist.coverArtUrl}
+            title={playlist.title}
+            seed={playlist.id}
+            size={160}
+          />
           <Text style={styles.title}>{playlist.title}</Text>
           {playlist.description ? (
             <Text style={styles.description}>{playlist.description}</Text>
@@ -221,15 +258,25 @@ export function PlaylistDetailScreen({ playlistId }: { playlistId: string }) {
               <Text style={styles.visibilityText}>{visibilityLabel(playlist.visibility)}</Text>
             </View>
           ) : null}
+          {isCollaborative ? <CollaborativeBadge viewerRole={viewerRole} /> : null}
         </View>
+
+        {collab.notice ? (
+          <Pressable
+            onPress={collab.clearNotice}
+            accessibilityRole="button"
+            accessibilityLabel="Dismiss notice"
+            style={styles.notice}
+            testID="collab-conflict-notice"
+          >
+            <Ionicons name="refresh" size={fontSize.sm} color={colors.text} />
+            <Text style={styles.noticeText}>{collab.notice}</Text>
+          </Pressable>
+        ) : null}
 
         {sorted.length > 0 ? (
           <View style={styles.playAllWrap}>
-            <Button
-              title="Play"
-              onPress={() => void playFrom(0)}
-              testID="playlist-play-all"
-            />
+            <Button title="Play" onPress={() => void playFrom(0)} testID="playlist-play-all" />
             <Button
               title="Download"
               variant="secondary"
@@ -239,18 +286,20 @@ export function PlaylistDetailScreen({ playlistId }: { playlistId: string }) {
           </View>
         ) : null}
 
-        {isOwner ? (
+        {canManageTracks ? (
           <View style={styles.ownerActions}>
-            <Pressable
-              onPress={() => setFormVisible(true)}
-              accessibilityRole="button"
-              accessibilityLabel="Edit playlist"
-              style={({ pressed }) => [styles.ownerButton, pressed && styles.pressed]}
-              testID="playlist-edit-button"
-            >
-              <Ionicons name="pencil" size={fontSize.md} color={colors.text} />
-              <Text style={styles.ownerButtonText}>Edit</Text>
-            </Pressable>
+            {isOwner ? (
+              <Pressable
+                onPress={() => setFormVisible(true)}
+                accessibilityRole="button"
+                accessibilityLabel="Edit playlist"
+                style={({ pressed }) => [styles.ownerButton, pressed && styles.pressed]}
+                testID="playlist-edit-button"
+              >
+                <Ionicons name="pencil" size={fontSize.md} color={colors.text} />
+                <Text style={styles.ownerButtonText}>Edit</Text>
+              </Pressable>
+            ) : null}
             <Pressable
               onPress={() => router.push(`/add-tracks/${playlistId}`)}
               accessibilityRole="button"
@@ -261,16 +310,57 @@ export function PlaylistDetailScreen({ playlistId }: { playlistId: string }) {
               <Ionicons name="add" size={fontSize.md} color={colors.text} />
               <Text style={styles.ownerButtonText}>Add tracks</Text>
             </Pressable>
+            {isOwner ? (
+              <Pressable
+                onPress={confirmDelete}
+                disabled={mutating}
+                accessibilityRole="button"
+                accessibilityLabel="Delete playlist"
+                style={({ pressed }) => [styles.ownerButton, pressed && styles.pressed]}
+                testID="playlist-delete-button"
+              >
+                <Ionicons name="trash" size={fontSize.md} color={colors.error} />
+                <Text style={[styles.ownerButtonText, styles.deleteText]}>Delete</Text>
+              </Pressable>
+            ) : null}
+          </View>
+        ) : null}
+
+        {canEditTracks && collabEditingBlocked ? (
+          <Text style={styles.offlineHint} testID="collab-offline-hint">
+            Collaborative editing is unavailable offline. Downloads and playback still work.
+          </Text>
+        ) : null}
+
+        {isOwner ? (
+          <View style={styles.collabRow}>
+            <View style={styles.collabToggleWrap}>
+              <Ionicons name="people" size={fontSize.md} color={colors.textMuted} />
+              <Text style={styles.collabToggleLabel}>Collaborative playlist</Text>
+              <Switch
+                value={isCollaborative}
+                disabled={collabSaving || !online}
+                onValueChange={(value) => void toggleCollaboration(value)}
+                testID="collab-toggle"
+              />
+            </View>
+            {!online ? (
+              <Text style={styles.offlineHint}>Go online to change collaboration settings.</Text>
+            ) : null}
+          </View>
+        ) : null}
+
+        {isCollaborative && canEditTracks ? (
+          <View style={styles.ownerActions}>
             <Pressable
-              onPress={confirmDelete}
-              disabled={mutating}
+              onPress={() => router.push(`/playlist/${playlistId}/members`)}
               accessibilityRole="button"
-              accessibilityLabel="Delete playlist"
+              accessibilityLabel="View playlist members"
               style={({ pressed }) => [styles.ownerButton, pressed && styles.pressed]}
-              testID="playlist-delete-button"
+              testID="playlist-members-button"
             >
-              <Ionicons name="trash" size={fontSize.md} color={colors.error} />
-              <Text style={[styles.ownerButtonText, styles.deleteText]}>Delete</Text>
+              <Ionicons name="people-outline" size={fontSize.md} color={colors.text} />
+              <Text style={styles.ownerButtonText}>Members</Text>
             </Pressable>
           </View>
         ) : null}
@@ -278,7 +368,7 @@ export function PlaylistDetailScreen({ playlistId }: { playlistId: string }) {
         <View style={styles.tracks}>
           {sorted.length === 0 ? (
             <Text style={styles.emptyTracks} testID="playlist-empty-tracks">
-              {isOwner
+              {canManageTracks
                 ? 'This playlist is empty. Add some tracks to get started.'
                 : 'This playlist has no tracks yet.'}
             </Text>
@@ -312,7 +402,7 @@ export function PlaylistDetailScreen({ playlistId }: { playlistId: string }) {
                 </Pressable>
                 <LikeButton trackId={item.track.id} />
                 <DownloadButton track={item.track} />
-                {isOwner ? (
+                {canManageTracks ? (
                   <View style={styles.manageButtons}>
                     <Pressable
                       onPress={() => void moveItem(i, -1)}
@@ -455,6 +545,47 @@ const styles = StyleSheet.create({
   },
   deleteText: { color: colors.error },
   pressed: { opacity: 0.6 },
+  // Phase 27 — collaborative playlist UI.
+  notice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginHorizontal: spacing.lg,
+    marginTop: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 8,
+    backgroundColor: colors.surface,
+  },
+  noticeText: {
+    flex: 1,
+    color: colors.text,
+    fontSize: fontSize.sm,
+  },
+  offlineHint: {
+    color: colors.textMuted,
+    fontSize: fontSize.sm,
+    textAlign: 'center',
+    paddingHorizontal: spacing.xl,
+    marginTop: spacing.sm,
+  },
+  collabRow: {
+    paddingHorizontal: spacing.lg,
+    marginTop: spacing.md,
+  },
+  collabToggleWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  collabToggleLabel: {
+    flex: 1,
+    color: colors.text,
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.medium,
+  },
   tracks: { marginTop: spacing.md },
   emptyTracks: {
     color: colors.textMuted,

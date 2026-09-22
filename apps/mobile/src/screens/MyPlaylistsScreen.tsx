@@ -10,7 +10,7 @@ import type { PlaylistDetail, PlaylistListItem, PlaylistVisibility } from '../ap
 import { apiErrorMessage, createPlaylist, listMyPlaylists } from '../api';
 import { useAuth } from '../auth';
 import { ArtworkImage, formatTrackCount, usePaginatedList } from '../catalog';
-import { PlaylistForm, type PlaylistFormValues } from '../library';
+import { CollaborativeBadge, PlaylistForm, type PlaylistFormValues } from '../library';
 import { LibraryList } from '../library/components/LibraryList';
 import { Button } from '../components';
 import { colors, fontSize, fontWeight, spacing } from '../theme';
@@ -76,6 +76,13 @@ export function MyPlaylistsScreen() {
               onPress={() => setFormVisible(true)}
               testID="my-playlists-new"
             />
+            <Button
+              title="Join"
+              variant="secondary"
+              size="md"
+              onPress={() => router.push('/invitation')}
+              testID="my-playlists-join"
+            />
           </View>
         }
         renderItem={(item) => (
@@ -94,6 +101,9 @@ export function MyPlaylistsScreen() {
               <Text style={styles.subtitle} numberOfLines={1}>
                 {visibilityLabel(item.visibility)} • {formatTrackCount(item.trackCount)}
               </Text>
+              {item.isCollaborative === true ? (
+                <CollaborativeBadge testID={`my-playlist-collab-${item.id}`} />
+              ) : null}
             </View>
             <Ionicons name="chevron-forward" size={fontSize.md} color={colors.textFaint} />
           </Pressable>
@@ -119,7 +129,8 @@ const styles = StyleSheet.create({
   header: {
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.sm,
-    alignItems: 'flex-start',
+    flexDirection: 'row',
+    gap: spacing.sm,
   },
   row: {
     flexDirection: 'row',

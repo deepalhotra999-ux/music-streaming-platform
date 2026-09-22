@@ -32,12 +32,12 @@ const playlist = {
   updatedAt: '2026-01-01T00:00:00.000Z',
 };
 
-function mockApi(overrides: Record<string, unknown> = {}) {
+function mockApi(items: unknown[] = [playlist], overrides: Record<string, unknown> = {}) {
   const get = jest.fn(async (path: string) => {
     if (path.startsWith('/v1/me/playlists')) {
       return {
-        data: [playlist],
-        pagination: { page: 1, limit: 20, total: 1, totalPages: 1 },
+        data: items,
+        pagination: { page: 1, limit: 20, total: items.length, totalPages: 1 },
       };
     }
     throw new Error(`unexpected GET ${path}`);
@@ -102,7 +102,7 @@ describe('MyPlaylistsScreen', () => {
   });
 
   it('surfaces a server error without closing the form', async () => {
-    mockApi({ post: new Error('title taken') });
+    mockApi([playlist], { post: new Error('title taken') });
     render(<MyPlaylistsScreen />);
     await waitFor(() => expect(screen.getByText('Road trip')).toBeTruthy());
 
@@ -116,5 +116,33 @@ describe('MyPlaylistsScreen', () => {
       expect(screen.getByTestId('playlist-form-error')).toHaveTextContent('title taken'),
     );
     expect(screen.getByTestId('playlist-form-modal')).toBeTruthy();
+  });
+
+  describe('Phase 27 — collaboration', () => {
+    const collabPlaylist = {
+      ...playlist,
+      id: 'pl-collab',
+      title: 'Party mix',
+      isCollaborative: true,
+      revision: 4,
+    };
+
+    it('marks collaborative playlists with a badge on their rows', async () => {
+      mockApi([playlist, collabPlaylist]);
+      render(<MyPlaylistsScreen />);
+      await waitFor(() => expect(screen.getByText('Party mix')).toBeTruthy());
+
+      expect(screen.getByTestId('my-playlist-collab-pl-collab')).toBeTruthy();
+      expect(screen.queryByTestId('my-playlist-collab-pl1')).toBeNull();
+    });
+
+    it('Join navigates to the invitation screen', async () => {
+      mockApi();
+      render(<MyPlaylistsScreen />);
+      await waitFor(() => expect(screen.getByTestId('my-playlists-join')).toBeTruthy());
+
+      fireEvent.press(screen.getByTestId('my-playlists-join'));
+      expect(router.push).toHaveBeenCalledWith('/invitation');
+    });
   });
 });

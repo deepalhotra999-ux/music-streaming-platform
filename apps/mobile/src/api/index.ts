@@ -1,7 +1,7 @@
 // Phase 5 — API layer public surface.
 export { getApiBaseUrl } from './config';
-export { ApiClient, ApiError, apiErrorMessage } from './client';
-export type { ApiClientOptions, HttpMethod, RequestOptions } from './client';
+export { ApiClient, ApiError, apiErrorMessage, isRevisionConflict } from './client';
+export type { ApiClientOptions, HttpMethod, RequestOptions, ResponseWithHeaders } from './client';
 export { getMe, login, logout, refreshTokens, register } from './auth';
 export { createPlaybackSession, reportPlayEvent } from './playback';
 export {
@@ -88,6 +88,22 @@ export {
   unlikeTrack,
   updatePlaylist,
 } from './library';
+export {
+  PLAYLIST_REVISION_HEADER,
+  acceptInvitation,
+  addTrackCollaborative,
+  createInvitation,
+  leavePlaylist,
+  listInvitations,
+  listMembers,
+  listPlaylistChanges,
+  movePlaylistItemCollaborative,
+  removeMember,
+  removePlaylistItemCollaborative,
+  revokeInvitation,
+  setCollaborationEnabled,
+} from './collab';
+export type { CollaborativeMutation, RevisionedResult } from './collab';
 export type {
   AddTrackInput,
   AlbumDetail,
@@ -100,6 +116,9 @@ export type {
   ArtistSummary,
   AuthResult,
   AudioIngestStatus,
+  CollaborationSettings,
+  CollaboratorRole,
+  CreateInvitationResult,
   CreatePlaylistInput,
   FieldError,
   FollowItem,
@@ -111,9 +130,13 @@ export type {
   PageInfo,
   PlaybackSession,
   PlayEventType,
+  PlaylistChange,
+  PlaylistChangeAction,
   PlaylistDetail,
+  PlaylistInvitation,
   PlaylistItem,
   PlaylistListItem,
+  PlaylistMember,
   PlaylistVisibility,
   ProblemDetail,
   RegisterInput,
@@ -135,4 +158,5 @@ export type {
   UpdatePlaylistInput,
   User,
   UserRole,
+  ViewerRole,
 } from './types';

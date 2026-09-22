@@ -23,6 +23,12 @@ export interface RequestOptions {
   auth?: boolean;
 }
 
+/** Phase 27 — a parsed body plus the raw response headers. */
+export interface ResponseWithHeaders<T> {
+  data: T;
+  headers: Headers;
+}
+
 export interface ApiClientOptions {
   baseUrl: string;
   /** Defaults to global fetch. */
@@ -88,6 +94,15 @@ export function apiErrorMessage(error: unknown): string {
   return 'Something went wrong. Please try again.';
 }
 
+/**
+ * Phase 27 — true when the error is a stale optimistic-concurrency write
+ * (RFC 7807 409 from a collaborative playlist mutation). The write was
+ * rejected server-side and must never be treated as committed.
+ */
+export function isRevisionConflict(error: unknown): boolean {
+  return error instanceof ApiError && error.status === 409;
+}
+
 function isProblemBody(value: unknown): value is ProblemDetail {
   return (
     typeof value === 'object' &&
@@ -113,11 +128,35 @@ export class ApiClient {
     const useAuth = options.auth ?? true;
     const hasBody = options.body !== undefined;
     const serialized = hasBody ? JSON.stringify(options.body) : undefined;
-    return this.execute<T>(path, useAuth, (token) => ({
+    const response = await this.executeRaw(path, useAuth, (token) => ({
       method,
       headers: this.buildHeaders(hasBody, token),
       body: serialized,
     }));
+    return this.readBody<T>(response);
+  }
+
+  /**
+   * Phase 27 — like request(), but also returns the raw response headers.
+   * Collaborative playlist mutations carry the new playlist revision in
+   * the `x-playlist-revision` header, which the caller needs for the next
+   * optimistic-concurrency write.
+   */
+  async requestWithHeaders<T>(
+    method: HttpMethod,
+    path: string,
+    options: RequestOptions = {},
+  ): Promise<ResponseWithHeaders<T>> {
+    const useAuth = options.auth ?? true;
+    const hasBody = options.body !== undefined;
+    const serialized = hasBody ? JSON.stringify(options.body) : undefined;
+    const response = await this.executeRaw(path, useAuth, (token) => ({
+      method,
+      headers: this.buildHeaders(hasBody, token),
+      body: serialized,
+    }));
+    const data = await this.readBody<T>(response);
+    return { data, headers: response.headers };
   }
 
   /**
@@ -207,6 +246,36 @@ export class ApiClient {
     return this.request<T>('DELETE', path, options);
   }
 
+  /** Phase 27 — header-exposing variants (see requestWithHeaders). */
+  postWithHeaders<T>(
+    path: string,
+    body?: unknown,
+    options: Omit<RequestOptions, 'body'> = {},
+  ): Promise<ResponseWithHeaders<T>> {
+    return this.requestWithHeaders<T>('POST', path, { ...options, body });
+  }
+
+  patchWithHeaders<T>(
+    path: string,
+    body?: unknown,
+    options: Omit<RequestOptions, 'body'> = {},
+  ): Promise<ResponseWithHeaders<T>> {
+    return this.requestWithHeaders<T>('PATCH', path, { ...options, body });
+  }
+
+  /**
+   * Phase 27 — DELETE with an optional JSON body (collaborative track
+   * removal carries `expectedRevision`). Fastify accepts JSON bodies on
+   * DELETE; the plain delete() stays bodyless.
+   */
+  deleteWithHeaders<T>(
+    path: string,
+    body?: unknown,
+    options: Omit<RequestOptions, 'body'> = {},
+  ): Promise<ResponseWithHeaders<T>> {
+    return this.requestWithHeaders<T>('DELETE', path, { ...options, body });
+  }
+
   private buildHeaders(hasBody: boolean, token: string | null): Record<string, string> {
     const headers: Record<string, string> = { Accept: 'application/json' };
     if (hasBody) {
@@ -227,11 +296,11 @@ export class ApiClient {
     return headers;
   }
 
-  private async execute<T>(
+  private async executeRaw(
     path: string,
     useAuth: boolean,
     buildInit: (token: string | null) => RequestInit,
-  ): Promise<T> {
+  ): Promise<Response> {
     const token = useAuth ? (this.getAccessToken?.() ?? null) : null;
     try {
       const response = await this.fetchFn(this.baseUrl + path, buildInit(token));
@@ -239,10 +308,10 @@ export class ApiClient {
         // Single transparent retry with a rotated token pair.
         const refreshed = await this.onTokenRefresh().catch(() => null);
         if (refreshed) {
-          return this.readBody<T>(await this.fetchFn(this.baseUrl + path, buildInit(refreshed)));
+          return this.fetchFn(this.baseUrl + path, buildInit(refreshed));
         }
       }
-      return this.readBody<T>(response);
+      return response;
     } catch (error) {
       if (error instanceof ApiError) {
         throw error;
@@ -256,6 +325,14 @@ export class ApiClient {
         error,
       );
     }
+  }
+
+  private async execute<T>(
+    path: string,
+    useAuth: boolean,
+    buildInit: (token: string | null) => RequestInit,
+  ): Promise<T> {
+    return this.readBody<T>(await this.executeRaw(path, useAuth, buildInit));
   }
 
   private async readBody<T>(response: Response): Promise<T> {

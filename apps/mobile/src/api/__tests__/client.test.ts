@@ -1,7 +1,7 @@
 // Phase 5 — ApiClient unit tests.
 // fetch is injected, so these run without any network or React Native.
 
-import { ApiClient, ApiError, apiErrorMessage } from '../client';
+import { ApiClient, ApiError, apiErrorMessage, isRevisionConflict } from '../client';
 
 interface CapturedCall {
   url: string;
@@ -159,6 +159,66 @@ describe('ApiClient', () => {
     const { fetchFn } = makeFetch([{ ok: true, status: 204, json: async () => null }]);
     const client = new ApiClient({ baseUrl: 'http://api.test', fetchFn });
 
-    await expect(client.post<void>('/v1/auth/logout', { refreshToken: 'r' })).resolves.toBeUndefined();
+    await expect(
+      client.post<void>('/v1/auth/logout', { refreshToken: 'r' }),
+    ).resolves.toBeUndefined();
+  });
+
+  it('requestWithHeaders returns the parsed body plus raw response headers', async () => {
+    const headerMap = new Map([['x-playlist-revision', '12']]);
+    const response = {
+      ok: true,
+      status: 201,
+      json: async () => ({ id: 'item-1' }),
+      headers: { get: (name: string) => headerMap.get(name) ?? null },
+    };
+    const fetchFn = jest.fn(async (_url: string, _init?: unknown) => response);
+    const client = new ApiClient({
+      baseUrl: 'http://api.test',
+      fetchFn: fetchFn as unknown as typeof fetch,
+    });
+
+    const result = await client.requestWithHeaders<{ id: string }>(
+      'POST',
+      '/v1/playlists/p/tracks',
+      {
+        body: { trackId: 't1', expectedRevision: 11 },
+      },
+    );
+
+    expect(result.data).toEqual({ id: 'item-1' });
+    expect(result.headers.get('x-playlist-revision')).toBe('12');
+    const init = fetchFn.mock.calls[0]?.[1] as { method?: string; body?: string } | undefined;
+    expect(init?.method).toBe('POST');
+    expect(JSON.parse(init?.body ?? '{}')).toEqual({ trackId: 't1', expectedRevision: 11 });
+  });
+
+  it('deleteWithHeaders serializes an optional DELETE body', async () => {
+    const calls: Array<{ init: { method?: string; body?: string } }> = [];
+    const fetchFn = jest.fn(async (_url: string, init: { method?: string; body?: string }) => {
+      calls.push({ init });
+      return {
+        ok: true,
+        status: 204,
+        json: async () => null,
+        headers: { get: () => null },
+      };
+    });
+    const client = new ApiClient({
+      baseUrl: 'http://api.test',
+      fetchFn: fetchFn as unknown as typeof fetch,
+    });
+
+    await client.deleteWithHeaders<void>('/v1/playlists/p/tracks/i1', { expectedRevision: 5 });
+
+    expect(calls[0].init.method).toBe('DELETE');
+    expect(JSON.parse(calls[0].init.body ?? '{}')).toEqual({ expectedRevision: 5 });
+  });
+
+  it('isRevisionConflict matches only RFC 7807 409 errors', () => {
+    expect(isRevisionConflict(new ApiError(409, { title: 'Conflict' }))).toBe(true);
+    expect(isRevisionConflict(new ApiError(400, { title: 'Bad Request' }))).toBe(false);
+    expect(isRevisionConflict(new Error('nope'))).toBe(false);
+    expect(isRevisionConflict(null)).toBe(false);
   });
 });

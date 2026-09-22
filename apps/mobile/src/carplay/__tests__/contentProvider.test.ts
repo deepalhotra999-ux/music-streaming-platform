@@ -254,4 +254,55 @@ describe('CarPlayContentProvider', () => {
     expect(trackRows.map((i) => i.id)).toEqual(['track:t1']);
     expect(containers[0].target).toBe('album:album1');
   });
+
+  // Phase 27 — collaborative playlists stay read-only and playable from the
+  // car: they list and resolve tracks exactly like regular playlists, and no
+  // collaboration write endpoint (members, invitations, revision-guarded
+  // track writes) is ever touched.
+  test('collaborative playlists remain readable and playable, with no editing surface', async () => {
+    const requested: string[] = [];
+    const api = createApi((url) => {
+      requested.push(url);
+      if (url.includes('/v1/playlists/p-collab')) {
+        return ok({
+          id: 'p-collab',
+          title: 'Party mix',
+          isCollaborative: true,
+          revision: 9,
+          viewerRole: 'EDITOR',
+          items: [{ id: 'item-1', position: 1, track: track('t1') }],
+        });
+      }
+      if (url.includes('/v1/me/playlists')) {
+        return page([
+          {
+            id: 'p-collab',
+            title: 'Party mix',
+            isCollaborative: true,
+            revision: 9,
+            viewerRole: 'EDITOR',
+          },
+        ]);
+      }
+      return page([]);
+    });
+    const provider = new CarPlayContentProvider(api);
+
+    const list = await provider.getNode('myplaylists', { shuffle: false, repeatMode: 'off' });
+    const listed = list.sections.flatMap((s) => s.items);
+    expect(listed.some((i) => i.kind === 'container' && i.target === 'playlist:p-collab')).toBe(
+      true,
+    );
+
+    const node = await provider.getNode('playlist:p-collab', {
+      shuffle: false,
+      repeatMode: 'off',
+    });
+    expect(node.title).toBe('Party mix');
+    const tracks = node.sections.flatMap((s) => s.items).filter((i) => i.kind === 'track');
+    expect(tracks.map((i) => i.id)).toEqual(['track:t1']);
+    expect(provider.getCachedTracks('playlist:p-collab')!.map((t) => t.id)).toEqual(['t1']);
+
+    expect(requested.some((u) => /invitation|member|collaboration/.test(u))).toBe(false);
+  });
 });

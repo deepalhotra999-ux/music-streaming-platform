@@ -5,19 +5,28 @@
 
 import type { FastifyInstance } from 'fastify';
 import type { Config } from '../../config.js';
-import { problemSchema } from '../../http/errors.js';
+import { badRequest, problemSchema } from '../../http/errors.js';
 import { pageOf, paginationQuerySchema, type PaginationQuery } from '../../http/pagination.js';
 import { apiRateLimit } from '../../http/limits.js';
 import {
+  acceptInvitationBody,
   addTrackBody,
+  createInvitationResponseSchema,
   createPlaylistBody,
   moveTrackBody,
+  playlistChangeSchema,
+  playlistChangesQuery,
   playlistDetailSchema,
   playlistIdParams,
+  playlistInvitationParams,
+  playlistInvitationSchema,
   playlistItemParams,
   playlistItemSchema,
   playlistListItemSchema,
+  playlistMemberParams,
+  playlistMemberSchema,
   publicPlaylistQuery,
+  setCollaborativeBody,
   updatePlaylistBody,
 } from './schemas.js';
 import {
@@ -35,6 +44,17 @@ import {
   type ListPublicPlaylistsQuery,
   type UpdatePlaylistInput,
 } from './service.js';
+import {
+  acceptInvitation,
+  createInvitation,
+  leavePlaylist,
+  listChanges,
+  listInvitations,
+  listMembers,
+  removeMember,
+  revokeInvitation,
+  setCollaborative,
+} from './collab.js';
 
 interface PlaylistIdParams {
   id: string;
@@ -43,6 +63,16 @@ interface PlaylistIdParams {
 interface PlaylistItemParams {
   id: string;
   itemId: string;
+}
+
+interface PlaylistMemberParams {
+  id: string;
+  memberUserId: string;
+}
+
+interface PlaylistInvitationParams {
+  id: string;
+  invitationId: string;
 }
 
 export async function playlistsRoutes(app: FastifyInstance, config: Config): Promise<void> {
@@ -199,8 +229,10 @@ export async function playlistsRoutes(app: FastifyInstance, config: Config): Pro
         tags: ['Playlists'],
         summary: 'Add a track to a playlist',
         description:
-          'Owner only. Appends at max(position) + 1 when no position is given. ' +
-          'The track must exist and not be deleted.',
+          'Owner or editor. Appends at max(position) + 1 when no position is given. ' +
+          'The track must exist and not be deleted. On collaborative playlists ' +
+          'expectedRevision is required; stale writes get a 409 conflict. ' +
+          'The new revision is returned in the x-playlist-revision header.',
         security: [{ bearerAuth: [] }],
         params: playlistIdParams,
         body: addTrackBody,
@@ -209,30 +241,128 @@ export async function playlistsRoutes(app: FastifyInstance, config: Config): Pro
           400: problemSchema,
           401: problemSchema,
           404: problemSchema,
+          409: problemSchema,
         },
       },
       config: { rateLimit: limit },
     },
     async (req, reply) => {
-      return reply
-        .code(201)
-        .send(await addTrackToPlaylist(req.params.id, req.authUser!.id, req.body));
+      const { item, revision } = await addTrackToPlaylist(
+        req.params.id,
+        req.authUser!.id,
+        req.body,
+      );
+      return reply.code(201).header('x-playlist-revision', String(revision)).send(item);
     },
   );
 
-  app.patch<{ Params: PlaylistItemParams; Body: { position: number } }>(
+  app.patch<{ Params: PlaylistItemParams; Body: { position: number; expectedRevision?: number } }>(
     '/v1/playlists/:id/tracks/:itemId',
     {
       preHandler: [app.authenticate],
       schema: {
         tags: ['Playlists'],
         summary: 'Move a playlist item',
-        description: 'Owner only. Repositions an existing playlist item.',
+        description:
+          'Owner or editor. Repositions an existing playlist item. On collaborative ' +
+          'playlists expectedRevision is required; stale writes get a 409 conflict. ' +
+          'The new revision is returned in the x-playlist-revision header.',
         security: [{ bearerAuth: [] }],
         params: playlistItemParams,
         body: moveTrackBody,
         response: {
           200: playlistItemSchema,
+          400: problemSchema,
+          401: problemSchema,
+          404: problemSchema,
+          409: problemSchema,
+        },
+      },
+      config: { rateLimit: limit },
+    },
+    async (req, reply) => {
+      const { item, revision } = await movePlaylistItem(
+        req.params.id,
+        req.params.itemId,
+        req.authUser!.id,
+        req.body.position,
+        req.body.expectedRevision,
+      );
+      return reply.code(200).header('x-playlist-revision', String(revision)).send(item);
+    },
+  );
+
+  app.delete<{ Params: PlaylistItemParams; Body: { expectedRevision?: number } }>(
+    '/v1/playlists/:id/tracks/:itemId',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ['Playlists'],
+        summary: 'Remove a track from a playlist',
+        description:
+          'Owner or editor. Removes the playlist item. On collaborative playlists ' +
+          'expectedRevision is required; stale writes get a 409 conflict. ' +
+          'The new revision is returned in the x-playlist-revision header. ' +
+          'The body is optional: a bodyless DELETE keeps the pre-Phase-27 ' +
+          'behavior for non-collaborative playlists.',
+        security: [{ bearerAuth: [] }],
+        params: playlistItemParams,
+        response: {
+          400: problemSchema,
+          401: problemSchema,
+          404: problemSchema,
+          409: problemSchema,
+        },
+      },
+      config: { rateLimit: limit },
+    },
+    async (req, reply) => {
+      // No body schema is declared on purpose: a bodyless DELETE must keep
+      // working (legacy behavior). When a body is present, expectedRevision
+      // — the only field the service reads — is validated here.
+      const rawRevision = (req.body as { expectedRevision?: unknown } | undefined)
+        ?.expectedRevision;
+      if (
+        rawRevision !== undefined &&
+        (!Number.isInteger(rawRevision) || (rawRevision as number) < 0)
+      ) {
+        throw badRequest('expectedRevision must be a non-negative integer.');
+      }
+      const { revision } = await removePlaylistItem(
+        req.params.id,
+        req.params.itemId,
+        req.authUser!.id,
+        rawRevision as number | undefined,
+      );
+      return reply.code(204).header('x-playlist-revision', String(revision)).send();
+    },
+  );
+
+  // Phase 27 — collaboration endpoints.
+
+  app.patch<{ Params: PlaylistIdParams; Body: { isCollaborative: boolean } }>(
+    '/v1/playlists/:id/collaboration',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ['Playlists'],
+        summary: 'Enable or disable collaboration',
+        description:
+          'Owner only. Disabling collaboration removes all members and revokes ' +
+          'outstanding invitations immediately.',
+        security: [{ bearerAuth: [] }],
+        params: playlistIdParams,
+        body: setCollaborativeBody,
+        response: {
+          200: {
+            type: 'object',
+            required: ['isCollaborative', 'revision'],
+            additionalProperties: false,
+            properties: {
+              isCollaborative: { type: 'boolean' },
+              revision: { type: 'integer', minimum: 0 },
+            },
+          },
           400: problemSchema,
           401: problemSchema,
           404: problemSchema,
@@ -243,28 +373,22 @@ export async function playlistsRoutes(app: FastifyInstance, config: Config): Pro
     async (req, reply) => {
       return reply
         .code(200)
-        .send(
-          await movePlaylistItem(
-            req.params.id,
-            req.params.itemId,
-            req.authUser!.id,
-            req.body.position,
-          ),
-        );
+        .send(await setCollaborative(req.params.id, req.authUser!.id, req.body.isCollaborative));
     },
   );
 
-  app.delete<{ Params: PlaylistItemParams }>(
-    '/v1/playlists/:id/tracks/:itemId',
+  app.get<{ Params: PlaylistIdParams }>(
+    '/v1/playlists/:id/members',
     {
       preHandler: [app.authenticate],
       schema: {
         tags: ['Playlists'],
-        summary: 'Remove a track from a playlist',
-        description: 'Owner only. Removes the playlist item.',
+        summary: 'List playlist members',
+        description: 'Members only. Non-members get 404.',
         security: [{ bearerAuth: [] }],
-        params: playlistItemParams,
+        params: playlistIdParams,
         response: {
+          200: { type: 'array', items: playlistMemberSchema },
           401: problemSchema,
           404: problemSchema,
         },
@@ -272,8 +396,185 @@ export async function playlistsRoutes(app: FastifyInstance, config: Config): Pro
       config: { rateLimit: limit },
     },
     async (req, reply) => {
-      await removePlaylistItem(req.params.id, req.params.itemId, req.authUser!.id);
+      return reply.code(200).send(await listMembers(req.params.id, req.authUser!.id));
+    },
+  );
+
+  app.post<{ Params: PlaylistIdParams }>(
+    '/v1/playlists/:id/invitations',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ['Playlists'],
+        summary: 'Create an invitation',
+        description:
+          'Owner only. Returns the raw bearer token exactly once — it is never ' +
+          'stored server-side, only its SHA-256 hash. Tokens expire after 7 days ' +
+          'and are single-use.',
+        security: [{ bearerAuth: [] }],
+        params: playlistIdParams,
+        response: {
+          201: createInvitationResponseSchema,
+          400: problemSchema,
+          401: problemSchema,
+          404: problemSchema,
+        },
+      },
+      config: { rateLimit: limit },
+    },
+    async (req, reply) => {
+      return reply.code(201).send(await createInvitation(req.params.id, req.authUser!.id));
+    },
+  );
+
+  app.get<{ Params: PlaylistIdParams }>(
+    '/v1/playlists/:id/invitations',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ['Playlists'],
+        summary: 'List invitations',
+        description: 'Owner only. Never includes token material.',
+        security: [{ bearerAuth: [] }],
+        params: playlistIdParams,
+        response: {
+          200: { type: 'array', items: playlistInvitationSchema },
+          401: problemSchema,
+          404: problemSchema,
+        },
+      },
+      config: { rateLimit: limit },
+    },
+    async (req, reply) => {
+      return reply.code(200).send(await listInvitations(req.params.id, req.authUser!.id));
+    },
+  );
+
+  app.post<{ Body: { token: string } }>(
+    '/v1/playlists/invitations/accept',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ['Playlists'],
+        summary: 'Accept an invitation',
+        description:
+          'The caller is derived from the auth token; the invitation token alone ' +
+          'grants nothing without a signed-in user. Expired, revoked, or reused ' +
+          'tokens are rejected.',
+        security: [{ bearerAuth: [] }],
+        body: acceptInvitationBody,
+        response: {
+          200: playlistDetailSchema,
+          400: problemSchema,
+          401: problemSchema,
+          403: problemSchema,
+          404: problemSchema,
+          409: problemSchema,
+        },
+      },
+      config: { rateLimit: limit },
+    },
+    async (req, reply) => {
+      return reply.code(200).send(await acceptInvitation(req.body.token, req.authUser!));
+    },
+  );
+
+  app.delete<{ Params: PlaylistInvitationParams }>(
+    '/v1/playlists/:id/invitations/:invitationId',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ['Playlists'],
+        summary: 'Revoke an invitation',
+        description: 'Owner only. Already-used invitations cannot be revoked.',
+        security: [{ bearerAuth: [] }],
+        params: playlistInvitationParams,
+        response: {
+          401: problemSchema,
+          404: problemSchema,
+          409: problemSchema,
+        },
+      },
+      config: { rateLimit: limit },
+    },
+    async (req, reply) => {
+      await revokeInvitation(req.params.id, req.params.invitationId, req.authUser!.id);
       return reply.code(204).send();
+    },
+  );
+
+  app.delete<{ Params: PlaylistIdParams }>(
+    '/v1/playlists/:id/members/me',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ['Playlists'],
+        summary: 'Leave a collaborative playlist',
+        description: 'Editors only. Owners cannot leave; they delete the playlist instead.',
+        security: [{ bearerAuth: [] }],
+        params: playlistIdParams,
+        response: {
+          400: problemSchema,
+          401: problemSchema,
+          404: problemSchema,
+        },
+      },
+      config: { rateLimit: limit },
+    },
+    async (req, reply) => {
+      await leavePlaylist(req.params.id, req.authUser!.id);
+      return reply.code(204).send();
+    },
+  );
+
+  app.delete<{ Params: PlaylistMemberParams }>(
+    '/v1/playlists/:id/members/:memberUserId',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ['Playlists'],
+        summary: 'Remove a member',
+        description:
+          'Owner only. The owner can never be removed. Removed members lose ' +
+          'access immediately.',
+        security: [{ bearerAuth: [] }],
+        params: playlistMemberParams,
+        response: {
+          400: problemSchema,
+          401: problemSchema,
+          404: problemSchema,
+        },
+      },
+      config: { rateLimit: limit },
+    },
+    async (req, reply) => {
+      await removeMember(req.params.id, req.params.memberUserId, req.authUser!.id);
+      return reply.code(204).send();
+    },
+  );
+
+  app.get<{ Params: PlaylistIdParams; Querystring: { limit?: string } }>(
+    '/v1/playlists/:id/changes',
+    {
+      preHandler: [app.authenticate],
+      schema: {
+        tags: ['Playlists'],
+        summary: 'List change history',
+        description: 'Members only. Append-only history, newest first. Non-members get 404.',
+        security: [{ bearerAuth: [] }],
+        params: playlistIdParams,
+        querystring: playlistChangesQuery,
+        response: {
+          200: { type: 'array', items: playlistChangeSchema },
+          401: problemSchema,
+          404: problemSchema,
+        },
+      },
+      config: { rateLimit: limit },
+    },
+    async (req, reply) => {
+      const limit = req.query.limit ? parseInt(req.query.limit, 10) : 50;
+      return reply.code(200).send(await listChanges(req.params.id, req.authUser!.id, limit));
     },
   );
 }

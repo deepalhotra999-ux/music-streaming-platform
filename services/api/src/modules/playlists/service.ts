@@ -7,9 +7,15 @@
 // Non-owners asking for a PRIVATE playlist — or any write they don't own —
 // get 404 rather than 403, so playlist existence cannot be probed.
 
-import type { PlaylistVisibility, PrismaClient, TrackStatus } from '@prisma/client';
+import type {
+  PlaylistChangeAction,
+  PlaylistVisibility,
+  Prisma,
+  PrismaClient,
+  TrackStatus,
+} from '@prisma/client';
 import { prisma } from '../../db.js';
-import { notFound, unauthorized } from '../../http/errors.js';
+import { badRequest, conflict, notFound, unauthorized } from '../../http/errors.js';
 import type { AuthUser } from '../../http/auth.js';
 import {
   pageEnvelope,
@@ -47,6 +53,9 @@ interface PlaylistRowBase {
   coverArtUrl: string | null;
   visibility: PlaylistVisibility;
   ownerUserId: string;
+  // Phase 27 — collaboration flag + optimistic-concurrency revision.
+  isCollaborative: boolean;
+  revision: number;
   owner: { displayName: string };
   createdAt: Date;
   updatedAt: Date;
@@ -72,13 +81,20 @@ export interface PlaylistListDto {
   visibility: PlaylistVisibility;
   ownerUserId: string;
   ownerDisplayName: string;
+  // Phase 27 — collaboration flag + optimistic-concurrency revision.
+  isCollaborative: boolean;
+  revision: number;
   trackCount: number;
   createdAt: Date;
   updatedAt: Date;
 }
 
+export type ViewerRole = 'OWNER' | 'EDITOR' | null;
+
 export interface PlaylistDetailDto extends PlaylistListDto {
   items: PlaylistItemDto[];
+  /** Phase 27 — the viewer's collaboration role, null for non-members. */
+  viewerRole: ViewerRole;
 }
 
 /** Artist/album names needed by toTrackSummary. */
@@ -122,16 +138,19 @@ function toListDto(row: PlaylistRowBase): PlaylistListDto {
     visibility: row.visibility,
     ownerUserId: row.ownerUserId,
     ownerDisplayName: row.owner.displayName,
+    isCollaborative: row.isCollaborative,
+    revision: row.revision,
     trackCount: row._count.items,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
 }
 
-function toDetailDto(row: PlaylistDetailRow): PlaylistDetailDto {
+function toDetailDto(row: PlaylistDetailRow, viewerRole: ViewerRole = null): PlaylistDetailDto {
   return {
     ...toListDto(row),
     items: row.items.filter((item) => !item.track.deletedAt).map(toItemDto),
+    viewerRole,
   };
 }
 
@@ -153,6 +172,69 @@ async function loadOwnedPlaylist(db: Db, id: string, userId: string): Promise<Pl
     throw notFound('Playlist not found.');
   }
   return row;
+}
+
+type Tx = Prisma.TransactionClient;
+
+/**
+ * Phase 27 — resolve the caller's collaboration role, if any. The playlist
+ * owner is always OWNER; on collaborative playlists membership rows grant
+ * EDITOR. Non-collaborative playlists have no editors.
+ */
+export async function getCollaboratorRole(
+  db: Db | Tx,
+  playlist: { id: string; ownerUserId: string; isCollaborative: boolean },
+  userId: string,
+): Promise<Exclude<ViewerRole, null> | null> {
+  if (playlist.ownerUserId === userId) return 'OWNER';
+  if (!playlist.isCollaborative) return null;
+  const member = await db.playlistMember.findUnique({
+    where: { playlistId_userId: { playlistId: playlist.id, userId } },
+  });
+  return member ? member.role : null;
+}
+
+/**
+ * Phase 27 — optimistic-concurrency guard. Atomically bumps the playlist
+ * revision only when it still matches the caller's expected revision and
+ * returns the new revision. Stale writes get a 409 conflict, never a silent
+ * overwrite.
+ */
+export async function bumpRevision(
+  tx: Tx,
+  playlistId: string,
+  expectedRevision: number,
+): Promise<number> {
+  const updated = await tx.playlist.updateMany({
+    where: { id: playlistId, revision: expectedRevision, deletedAt: null },
+    data: { revision: { increment: 1 } },
+  });
+  if (updated.count === 0) {
+    throw conflict('This playlist changed since you last loaded it. Reload and try again.');
+  }
+  return expectedRevision + 1;
+}
+
+/** Phase 27 — append one row to the append-only playlist change history. */
+export async function recordChange(
+  tx: Tx,
+  playlistId: string,
+  actorUserId: string,
+  action: PlaylistChangeAction,
+  revision: number,
+  trackId?: string,
+  itemId?: string,
+): Promise<void> {
+  await tx.playlistChange.create({
+    data: {
+      playlistId,
+      actorUserId,
+      action,
+      revision,
+      trackId: trackId ?? null,
+      itemId: itemId ?? null,
+    },
+  });
 }
 
 export interface ListPublicPlaylistsQuery extends PaginationQuery {
@@ -188,7 +270,12 @@ export async function listMyPlaylists(
   db: Db = prisma,
 ): Promise<PageEnvelope<PlaylistListDto>> {
   const p = parsePagination(query);
-  const where = { deletedAt: null, ownerUserId: userId };
+  // Phase 27 — "my playlists" includes playlists the caller owns AND
+  // collaborative playlists they are a member of.
+  const where = {
+    deletedAt: null,
+    OR: [{ ownerUserId: userId }, { members: { some: { userId } } }],
+  };
   const [rows, total] = await Promise.all([
     db.playlist.findMany({
       where,
@@ -208,8 +295,12 @@ export async function getPlaylistDetail(
   db: Db = prisma,
 ): Promise<PlaylistDetailDto> {
   const row = await loadPlaylistRow(db, id);
+  // Phase 27 — resolve the viewer's collaboration role (null for anonymous
+  // viewers and non-members). Members may read PRIVATE collaborative
+  // playlists; everyone else keeps the existing visibility behavior.
+  const viewerRole: ViewerRole = viewer ? await getCollaboratorRole(db, row, viewer.id) : null;
   if (row.visibility === 'PUBLIC') {
-    return toDetailDto(row);
+    return toDetailDto(row, viewerRole);
   }
   if (!viewer) {
     // UNLISTED requires a signed-in viewer; PRIVATE must not leak existence.
@@ -218,10 +309,10 @@ export async function getPlaylistDetail(
     }
     throw notFound('Playlist not found.');
   }
-  if (row.visibility === 'PRIVATE' && row.ownerUserId !== viewer.id) {
+  if (row.visibility === 'PRIVATE' && !viewerRole) {
     throw notFound('Playlist not found.');
   }
-  return toDetailDto(row);
+  return toDetailDto(row, viewerRole);
 }
 
 export interface CreatePlaylistInput {
@@ -285,6 +376,8 @@ export async function deletePlaylist(id: string, userId: string, db: Db = prisma
 export interface AddTrackInput {
   trackId: string;
   position?: number;
+  /** Phase 27 — required on collaborative playlists for optimistic concurrency. */
+  expectedRevision?: number;
 }
 
 export async function addTrackToPlaylist(
@@ -292,8 +385,13 @@ export async function addTrackToPlaylist(
   userId: string,
   input: AddTrackInput,
   db: Db = prisma,
-): Promise<PlaylistItemDto> {
-  await loadOwnedPlaylist(db, playlistId, userId);
+): Promise<{ item: PlaylistItemDto; revision: number }> {
+  const playlist = await loadPlaylistRow(db, playlistId);
+  const role = await getCollaboratorRole(db, playlist, userId);
+  if (!role) {
+    // Non-members get 404, never 403: private playlist existence stays hidden.
+    throw notFound('Playlist not found.');
+  }
   const track = await db.track.findFirst({
     where: { id: input.trackId, deletedAt: null },
     include: trackNames,
@@ -301,24 +399,55 @@ export async function addTrackToPlaylist(
   if (!track) {
     throw notFound('Track not found.');
   }
-  let position = input.position;
-  if (position === undefined) {
-    const agg = await db.playlistTrack.aggregate({
-      where: { playlistId },
-      _max: { position: true },
+
+  // Phase 27 — non-collaborative playlists keep the legacy owner-only path:
+  // no revision check, no history row, identical behavior to before.
+  if (!playlist.isCollaborative) {
+    let position = input.position;
+    if (position === undefined) {
+      const agg = await db.playlistTrack.aggregate({
+        where: { playlistId },
+        _max: { position: true },
+      });
+      position = (agg._max.position ?? 0) + 1;
+    }
+    const item = await db.playlistTrack.create({
+      data: {
+        playlistId,
+        trackId: track.id,
+        position,
+        addedByUserId: userId,
+      },
+      include: { track: { include: trackNames } },
     });
-    position = (agg._max.position ?? 0) + 1;
+    return { item: toItemDto(item), revision: playlist.revision };
   }
-  const item = await db.playlistTrack.create({
-    data: {
-      playlistId,
-      trackId: track.id,
-      position,
-      addedByUserId: userId,
-    },
-    include: { track: { include: trackNames } },
+
+  if (input.expectedRevision === undefined) {
+    throw badRequest('expectedRevision is required for collaborative playlists.');
+  }
+  return prisma.$transaction(async (tx) => {
+    const revision = await bumpRevision(tx, playlistId, input.expectedRevision!);
+    let position = input.position;
+    if (position === undefined) {
+      const agg = await tx.playlistTrack.aggregate({
+        where: { playlistId },
+        _max: { position: true },
+      });
+      position = (agg._max.position ?? 0) + 1;
+    }
+    const item = await tx.playlistTrack.create({
+      data: {
+        playlistId,
+        trackId: track.id,
+        position,
+        addedByUserId: userId,
+      },
+      include: { track: { include: trackNames } },
+    });
+    await recordChange(tx, playlistId, userId, 'TRACK_ADDED', revision, track.id, item.id);
+    return { item: toItemDto(item), revision };
   });
-  return toItemDto(item);
 }
 
 export async function movePlaylistItem(
@@ -326,9 +455,14 @@ export async function movePlaylistItem(
   itemId: string,
   userId: string,
   position: number,
+  expectedRevision?: number,
   db: Db = prisma,
-): Promise<PlaylistItemDto> {
-  await loadOwnedPlaylist(db, playlistId, userId);
+): Promise<{ item: PlaylistItemDto; revision: number }> {
+  const playlist = await loadPlaylistRow(db, playlistId);
+  const role = await getCollaboratorRole(db, playlist, userId);
+  if (!role) {
+    throw notFound('Playlist not found.');
+  }
   const item = await db.playlistTrack.findFirst({
     where: { id: itemId, playlistId },
     include: { track: { include: trackNames } },
@@ -336,24 +470,60 @@ export async function movePlaylistItem(
   if (!item) {
     throw notFound('Playlist item not found.');
   }
-  const updated = await db.playlistTrack.update({
-    where: { id: item.id },
-    data: { position },
-    include: { track: { include: trackNames } },
+
+  if (!playlist.isCollaborative) {
+    const updated = await db.playlistTrack.update({
+      where: { id: item.id },
+      data: { position },
+      include: { track: { include: trackNames } },
+    });
+    return { item: toItemDto(updated), revision: playlist.revision };
+  }
+
+  if (expectedRevision === undefined) {
+    throw badRequest('expectedRevision is required for collaborative playlists.');
+  }
+  return prisma.$transaction(async (tx) => {
+    const revision = await bumpRevision(tx, playlistId, expectedRevision);
+    const updated = await tx.playlistTrack.update({
+      where: { id: item.id },
+      data: { position },
+      include: { track: { include: trackNames } },
+    });
+    await recordChange(tx, playlistId, userId, 'TRACK_MOVED', revision, item.trackId, item.id);
+    return { item: toItemDto(updated), revision };
   });
-  return toItemDto(updated);
 }
 
 export async function removePlaylistItem(
   playlistId: string,
   itemId: string,
   userId: string,
+  expectedRevision?: number,
   db: Db = prisma,
-): Promise<void> {
-  await loadOwnedPlaylist(db, playlistId, userId);
+): Promise<{ revision: number }> {
+  const playlist = await loadPlaylistRow(db, playlistId);
+  const role = await getCollaboratorRole(db, playlist, userId);
+  if (!role) {
+    throw notFound('Playlist not found.');
+  }
   const item = await db.playlistTrack.findFirst({ where: { id: itemId, playlistId } });
   if (!item) {
     throw notFound('Playlist item not found.');
   }
-  await db.playlistTrack.delete({ where: { id: item.id } });
+
+  if (!playlist.isCollaborative) {
+    await db.playlistTrack.delete({ where: { id: item.id } });
+    return { revision: playlist.revision };
+  }
+
+  if (expectedRevision === undefined) {
+    throw badRequest('expectedRevision is required for collaborative playlists.');
+  }
+  return prisma.$transaction(async (tx) => {
+    const revision = await bumpRevision(tx, playlistId, expectedRevision);
+    await tx.playlistTrack.delete({ where: { id: item.id } });
+    await recordChange(tx, playlistId, userId, 'TRACK_REMOVED', revision, item.trackId, item.id);
+    return { revision };
+  });
 }

@@ -11,8 +11,16 @@ import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack } from 'expo-router';
 import type { TrackListItem } from '../api';
-import { addTrackToPlaylist, apiErrorMessage, getPlaylist, listTracks } from '../api';
+import {
+  addTrackCollaborative,
+  addTrackToPlaylist,
+  apiErrorMessage,
+  getPlaylist,
+  isRevisionConflict,
+  listTracks,
+} from '../api';
 import { useAuth } from '../auth';
+import { useOnlineStatus } from '../utils/useOnlineStatus';
 import { TextInput } from '../components';
 import { TrackRow, usePaginatedList } from '../catalog';
 import { LibraryList } from '../library/components/LibraryList';
@@ -20,10 +28,14 @@ import { colors, fontSize, fontWeight, spacing } from '../theme';
 
 export function AddTracksScreen({ playlistId }: { playlistId: string }) {
   const { api } = useAuth();
+  // Phase 27 — collaborative add is disabled while offline.
+  const online = useOnlineStatus();
   const [query, setQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [addedIds, setAddedIds] = useState<Set<string>>(new Set());
   const [addingId, setAddingId] = useState<string | null>(null);
+  // Phase 27 — revision for collaborative playlists (null until seeded).
+  const [collab, setCollab] = useState<{ isCollaborative: boolean; revision: number } | null>(null);
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query.trim()), 300);
@@ -31,13 +43,18 @@ export function AddTracksScreen({ playlistId }: { playlistId: string }) {
   }, [query]);
 
   // Seed the "already added" set from the playlist detail so the picker
-  // never offers a duplicate add for tracks already present.
+  // never offers a duplicate add for tracks already present. Phase 27:
+  // also seeds the collaboration flag + revision for guarded writes.
   useEffect(() => {
     let cancelled = false;
     getPlaylist(api, playlistId)
       .then((detail) => {
         if (!cancelled) {
           setAddedIds(new Set(detail.items.map((item) => item.track.id)));
+          setCollab({
+            isCollaborative: detail.isCollaborative === true,
+            revision: detail.revision ?? 0,
+          });
         }
       })
       .catch(() => {
@@ -68,20 +85,56 @@ export function AddTracksScreen({ playlistId }: { playlistId: string }) {
       setAddingId(track.id);
       setAddedIds((prev) => new Set(prev).add(track.id));
       try {
-        await addTrackToPlaylist(api, playlistId, { trackId: track.id });
+        if (collab?.isCollaborative === true) {
+          // Phase 27 — revision-guarded write; the authoritative new
+          // revision feeds the next add.
+          const result = await addTrackCollaborative(api, playlistId, {
+            trackId: track.id,
+            expectedRevision: collab.revision,
+          });
+          setCollab({ isCollaborative: true, revision: result.revision });
+        } else {
+          await addTrackToPlaylist(api, playlistId, { trackId: track.id });
+        }
       } catch (err) {
-        setAddedIds((prev) => {
-          const next = new Set(prev);
-          next.delete(track.id);
-          return next;
-        });
-        Alert.alert('Could not add track', apiErrorMessage(err));
+        if (collab?.isCollaborative === true && isRevisionConflict(err)) {
+          // Stale revision: the write was rejected server-side, so
+          // nothing is committed. Refetch the fresh playlist, rebuild
+          // the added set from it, and ask the user to retry.
+          try {
+            const detail = await getPlaylist(api, playlistId);
+            setAddedIds(new Set(detail.items.map((item) => item.track.id)));
+            setCollab({
+              isCollaborative: detail.isCollaborative === true,
+              revision: detail.revision ?? 0,
+            });
+          } catch {
+            setAddedIds((prev) => {
+              const next = new Set(prev);
+              next.delete(track.id);
+              return next;
+            });
+          }
+          Alert.alert(
+            'Playlist changed',
+            'A collaborator changed this playlist — it was refreshed. Please try adding the track again.',
+          );
+        } else {
+          setAddedIds((prev) => {
+            const next = new Set(prev);
+            next.delete(track.id);
+            return next;
+          });
+          Alert.alert('Could not add track', apiErrorMessage(err));
+        }
       } finally {
         setAddingId(null);
       }
     },
-    [addingId, api, playlistId],
+    [addingId, api, collab, playlistId],
   );
+
+  const collabAddBlocked = collab?.isCollaborative === true && !online;
 
   const header = useMemo(
     () => (
@@ -94,9 +147,14 @@ export function AddTracksScreen({ playlistId }: { playlistId: string }) {
           returnKeyType="search"
           testID="add-tracks-search"
         />
+        {collabAddBlocked ? (
+          <Text style={styles.offlineHint} testID="add-tracks-offline-hint">
+            Collaborative editing is unavailable offline.
+          </Text>
+        ) : null}
       </View>
     ),
-    [query],
+    [query, collabAddBlocked],
   );
 
   return (
@@ -107,9 +165,7 @@ export function AddTracksScreen({ playlistId }: { playlistId: string }) {
         testID="add-tracks-screen"
         keyExtractor={(item) => item.id}
         emptyTitle="No tracks found"
-        emptyMessage={
-          debouncedQuery ? 'Try a different filter.' : 'No tracks are available yet.'
-        }
+        emptyMessage={debouncedQuery ? 'Try a different filter.' : 'No tracks are available yet.'}
         listHeader={header}
         renderItem={(track) => {
           const added = addedIds.has(track.id);
@@ -131,7 +187,7 @@ export function AddTracksScreen({ playlistId }: { playlistId: string }) {
               ) : (
                 <Pressable
                   onPress={() => void add(track)}
-                  disabled={busy}
+                  disabled={busy || collabAddBlocked}
                   accessibilityRole="button"
                   accessibilityLabel={`Add ${track.title} to playlist`}
                   style={({ pressed }) => [styles.addButton, pressed && !busy && styles.pressed]}
@@ -140,9 +196,9 @@ export function AddTracksScreen({ playlistId }: { playlistId: string }) {
                   <Ionicons
                     name="add"
                     size={fontSize.md}
-                    color={busy ? colors.textFaint : colors.primary}
+                    color={busy || collabAddBlocked ? colors.textFaint : colors.primary}
                   />
-                  <Text style={[styles.addText, busy && styles.addTextBusy]}>
+                  <Text style={[styles.addText, (busy || collabAddBlocked) && styles.addTextBusy]}>
                     {busy ? 'Adding…' : 'Add'}
                   </Text>
                 </Pressable>
@@ -192,5 +248,11 @@ const styles = StyleSheet.create({
     color: colors.primary,
     fontSize: fontSize.sm,
     fontWeight: fontWeight.medium,
+  },
+  offlineHint: {
+    color: colors.textMuted,
+    fontSize: fontSize.sm,
+    paddingHorizontal: spacing.xs,
+    paddingTop: spacing.xs,
   },
 });

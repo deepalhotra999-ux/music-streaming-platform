@@ -237,4 +237,49 @@ describe('AndroidAutoContentProvider', () => {
     expect(provider.getSearchTracks('q')!.map((t) => t.id)).toEqual(['t1', 't2']);
     expect(provider.getSearchQueries()).toContain('q');
   });
+
+  // Phase 27 — collaborative playlists stay read-only and playable from the
+  // car: they list and resolve tracks exactly like regular playlists, and no
+  // collaboration write endpoint (members, invitations, revision-guarded
+  // track writes) is ever touched.
+  test('collaborative playlists remain readable and playable, with no editing surface', async () => {
+    const requested: string[] = [];
+    const api = createApi((url) => {
+      requested.push(url);
+      if (url.includes('/v1/playlists/p-collab')) {
+        return ok({
+          id: 'p-collab',
+          title: 'Party mix',
+          isCollaborative: true,
+          revision: 9,
+          viewerRole: 'EDITOR',
+          items: [{ id: 'item-1', position: 1, track: track('t1') }],
+        });
+      }
+      if (url.includes('/v1/me/playlists')) {
+        return page([
+          {
+            id: 'p-collab',
+            title: 'Party mix',
+            isCollaborative: true,
+            revision: 9,
+            viewerRole: 'EDITOR',
+          },
+        ]);
+      }
+      return page([]);
+    });
+    const provider = new AndroidAutoContentProvider(api);
+
+    const list = await provider.getChildren('waveform:playlists', 0, 50);
+    expect(list.ok).toBe(true);
+    expect(list.items.map((i) => i.mediaId)).toContain('waveform:playlist:p-collab');
+
+    const children = await provider.getChildren('waveform:playlist:p-collab', 0, 50);
+    expect(children.ok).toBe(true);
+    expect(children.items.map((i) => i.mediaId)).toEqual(['waveform:track:t1']);
+    expect(children.items.every((i) => i.playable)).toBe(true);
+
+    expect(requested.some((u) => /invitation|member|collaboration/.test(u))).toBe(false);
+  });
 });

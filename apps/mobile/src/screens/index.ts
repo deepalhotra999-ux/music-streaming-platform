@@ -1,4 +1,5 @@
 // Phase 6 — screens public surface.
+export { AcceptInvitationScreen } from './AcceptInvitationScreen';
 export { AddTracksScreen } from './AddTracksScreen';
 export { AlbumDetailScreen } from './AlbumDetailScreen';
 export { AlbumListScreen } from './AlbumListScreen';
@@ -19,6 +20,7 @@ export { LoginScreen } from './LoginScreen';
 export { MyPlaylistsScreen } from './MyPlaylistsScreen';
 export { PlaylistDetailScreen } from './PlaylistDetailScreen';
 export { PlaylistListScreen } from './PlaylistListScreen';
+export { PlaylistMembersScreen } from './PlaylistMembersScreen';
 export { ProfileScreen } from './ProfileScreen';
 export { RecentlyPlayedScreen } from './RecentlyPlayedScreen';
 export { RegisterScreen } from './RegisterScreen';
