@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-22
 **Status:** Complete (with honest limitations documented below)
-**Commit:** (to be filled on commit)
+**Commit:** `0fcdca5` (phase work) — report finalized on top
 
 ## Summary
 
