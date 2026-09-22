@@ -10,6 +10,7 @@ import { useSyncExternalStore } from 'react';
 import { getApiBaseUrl, type ApiClient } from '../api';
 import { PlaybackEngine } from './PlaybackEngine';
 import { createExpoAudioDriver } from './expoAudioDriver';
+import { setActiveEngine } from './engineRegistry';
 import type { EngineSnapshot, QueueTrack, RepeatMode } from './types';
 
 export interface PlaybackContextValue extends EngineSnapshot {
@@ -66,11 +67,15 @@ export function PlaybackProvider({ children, api, baseUrl }: PlaybackProviderPro
     // Native audio-mode setup; failures are non-fatal here (the engine
     // surfaces playback errors itself).
     engine.initialize().catch(() => undefined);
+    // Phase 23 — register the single engine instance so CarPlay drives
+    // this exact engine (no second player/queue/session flow).
+    setActiveEngine(engine);
     // On unmount (e.g. sign-out) stop playback and release the player and
     // any pending loads, so audio never keeps playing for a signed-out
     // user. The engine instance is discarded with the provider, so a full
     // stop (not destroy) keeps strict-mode remounts safe.
     return () => {
+      setActiveEngine(null);
       engine.stop();
     };
   }, [engine]);
@@ -91,8 +96,7 @@ export function PlaybackProvider({ children, api, baseUrl }: PlaybackProviderPro
       previous: () => engine.previous(),
       stop: () => engine.stop(),
       retry: () => engine.retry(),
-      setQueue: (tracks: QueueTrack[], startIndex?: number) =>
-        engine.setQueue(tracks, startIndex),
+      setQueue: (tracks: QueueTrack[], startIndex?: number) => engine.setQueue(tracks, startIndex),
       enqueue: (track: QueueTrack) => engine.enqueue(track),
       clearQueue: () => engine.clearQueue(),
       removeAt: (index: number) => engine.removeAt(index),

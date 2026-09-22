@@ -14,6 +14,7 @@ import { AuthProvider, useAuth } from '../auth';
 import { PlaybackProvider } from '../playback';
 import { LibraryProvider } from '../library';
 import { MiniPlayerHost } from '../player';
+import { CarPlayHost } from '../carplay/CarPlayHost';
 import { colors } from '../theme';
 
 /**
@@ -37,6 +38,10 @@ function PlaybackShell({ children }: { children: ReactNode }) {
       <LibraryProvider api={api}>
         {children}
         <MiniPlayerHost />
+        {/* Phase 23 — headless CarPlay controller: drives the native
+            CarPlay templates with the shared PlaybackEngine. No UI here,
+            no second player. Unmounts with the provider on sign-out. */}
+        <CarPlayHost />
       </LibraryProvider>
     </PlaybackProvider>
   );

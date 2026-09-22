@@ -19,6 +19,42 @@ export default [
     },
   },
   {
+    // Phase 23 — the CarPlay config plugin is plain Node, like babel.config.
+    files: ['modules/waveform-carplay/app.plugin.js'],
+    languageOptions: {
+      globals: {
+        module: 'writable',
+        require: 'readonly',
+        process: 'readonly',
+        __dirname: 'readonly',
+      },
+    },
+    rules: {
+      // Config plugins idiomatically use require(); this is tooling, not app source.
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
+  {
+    // Phase 23 — plugin unit tests run under Jest like every other test.
+    files: ['modules/waveform-carplay/__tests__/**/*.js'],
+    languageOptions: {
+      globals: {
+        jest: 'readonly',
+        describe: 'readonly',
+        test: 'readonly',
+        expect: 'readonly',
+        require: 'readonly',
+        module: 'writable',
+        process: 'readonly',
+        __dirname: 'readonly',
+        structuredClone: 'readonly',
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
+  {
     files: ['jest.setup.js'],
     languageOptions: {
       globals: {

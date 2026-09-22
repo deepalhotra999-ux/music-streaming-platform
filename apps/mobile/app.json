@@ -47,7 +47,11 @@
       ],
       "expo-asset",
       "expo-iap",
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "waveform-carplay",
+        {}
+      ]
     ],
     "scheme": "waveform",
     "slug": "waveform",
