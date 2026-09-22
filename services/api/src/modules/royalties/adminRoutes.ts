@@ -17,6 +17,7 @@ import {
   createPolicy,
   createRevenueInput,
   getPeriod,
+  getReconciliation,
   getRun,
   getRunArtistTotals,
   getRunTrackTotals,
@@ -30,6 +31,7 @@ import {
   createPolicySchema,
   createRevenueInputSchema,
   paginationQuerySchema,
+  reconciliationSchema,
   royaltyPolicySchema,
   royaltyRunSchema,
   runIdParamSchema,
@@ -461,6 +463,24 @@ export async function royaltyAdminRoutes(app: FastifyInstance, config: Config): 
     async (req) => {
       const { id } = req.params as { id: string };
       return getRunTrackTotals(id, q(req), deps);
+    },
+  );
+
+  app.get(
+    '/v1/admin/royalties/runs/:id/reconciliation',
+    {
+      preHandler: [...guard],
+      config: { rateLimit: limit },
+      schema: {
+        tags: ['Royalties (admin)'],
+        summary: 'Read-only reconciliation: pool = allocations + residual',
+        params: runIdParamSchema,
+        response: { 200: reconciliationSchema },
+      },
+    },
+    async (req) => {
+      const { id } = req.params as { id: string };
+      return getReconciliation(id, deps);
     },
   );
 }

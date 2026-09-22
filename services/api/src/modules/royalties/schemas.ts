@@ -299,3 +299,167 @@ export const triggerRunSchema = {
   required: ['periodId'],
   additionalProperties: false,
 } as const;
+
+// --- Phase 22: Artist statements ---
+
+export const artistPolicySchema = {
+  type: 'object',
+  properties: {
+    version: { type: 'integer' },
+    name: { type: 'string' },
+    effectiveFrom: { type: 'string', format: 'date-time' },
+    streamEligibilityRule: { type: 'string' },
+    allocationMethodology: { type: 'string' },
+    roundingMethodology: { type: 'string' },
+    isTestPolicy: { type: 'boolean' },
+    minimumStreams: { type: ['integer', 'null'] },
+  },
+  required: [
+    'version',
+    'name',
+    'effectiveFrom',
+    'streamEligibilityRule',
+    'allocationMethodology',
+    'roundingMethodology',
+    'isTestPolicy',
+    'minimumStreams',
+  ],
+  additionalProperties: false,
+} as const;
+
+export const calculationStepSchema = {
+  type: 'object',
+  properties: {
+    label: { type: 'string' },
+    value: { type: 'string' },
+    explanation: { type: 'string' },
+  },
+  required: ['label', 'value', 'explanation'],
+  additionalProperties: false,
+} as const;
+
+export const artistStatementSchema = {
+  type: 'object',
+  properties: {
+    statementReference: { type: 'string' },
+    artistId: { type: 'string', format: 'uuid' },
+    artistName: { type: 'string' },
+    periodId: { type: 'string', format: 'uuid' },
+    periodStart: { type: 'string', format: 'date-time' },
+    periodEnd: { type: 'string', format: 'date-time' },
+    currency: { type: 'string' },
+    status: { type: 'string', enum: ['COMPLETED', 'PENDING', 'RUNNING', 'FAILED'] },
+    finalizedAt: { type: ['string', 'null'], format: 'date-time' },
+    policy: {
+      type: ['object', 'null'],
+      properties: artistPolicySchema.properties,
+      required: artistPolicySchema.required,
+      additionalProperties: false,
+    },
+    eligibleStreams: { type: 'integer', minimum: 0 },
+    totalEligibleStreams: { type: 'integer', minimum: 0 },
+    artistSharePercentage: { type: 'string' },
+    royaltyPool: moneySchema,
+    artistAllocation: moneySchema,
+    adjustmentsTotal: moneySchema,
+    residualAmount: moneySchema,
+    finalEarnings: moneySchema,
+    calculation: { type: 'array', items: calculationStepSchema },
+  },
+  required: [
+    'statementReference',
+    'artistId',
+    'artistName',
+    'periodId',
+    'periodStart',
+    'periodEnd',
+    'currency',
+    'status',
+    'finalizedAt',
+    'policy',
+    'eligibleStreams',
+    'totalEligibleStreams',
+    'artistSharePercentage',
+    'royaltyPool',
+    'artistAllocation',
+    'adjustmentsTotal',
+    'residualAmount',
+    'finalEarnings',
+    'calculation',
+  ],
+  additionalProperties: false,
+} as const;
+
+export const statementTrackSchema = {
+  type: 'object',
+  properties: {
+    trackId: { type: 'string', format: 'uuid' },
+    title: { type: 'string' },
+    eligibleStreams: { type: 'integer', minimum: 0 },
+    shareOfArtistStreams: { type: 'string' },
+    grossAmount: moneySchema,
+    adjustmentsTotal: moneySchema,
+    finalAmount: moneySchema,
+    currency: { type: 'string' },
+  },
+  required: [
+    'trackId',
+    'title',
+    'eligibleStreams',
+    'shareOfArtistStreams',
+    'grossAmount',
+    'adjustmentsTotal',
+    'finalAmount',
+    'currency',
+  ],
+  additionalProperties: false,
+} as const;
+
+export const statementTrackQuerySchema = {
+  type: 'object',
+  properties: {
+    page: { type: 'string', pattern: '^[0-9]+$' },
+    limit: { type: 'string', pattern: '^[0-9]+$' },
+    sort: { type: 'string', enum: ['earnings', 'streams'] },
+  },
+  additionalProperties: false,
+} as const;
+
+export const reconciliationSchema = {
+  type: 'object',
+  properties: {
+    runId: { type: 'string', format: 'uuid' },
+    periodId: { type: 'string', format: 'uuid' },
+    periodStart: { type: 'string', format: 'date-time' },
+    periodEnd: { type: 'string', format: 'date-time' },
+    policyVersion: { type: 'integer' },
+    status: { type: 'string' },
+    currency: { type: 'string' },
+    royaltyPool: moneySchema,
+    totalAllocated: moneySchema,
+    residualAmount: moneySchema,
+    reconciled: { type: 'boolean' },
+    artistCount: { type: 'integer', minimum: 0 },
+    trackCount: { type: 'integer', minimum: 0 },
+    totalEligibleStreams: { type: 'integer', minimum: 0 },
+    completedAt: { type: ['string', 'null'], format: 'date-time' },
+  },
+  required: [
+    'runId',
+    'periodId',
+    'periodStart',
+    'periodEnd',
+    'policyVersion',
+    'status',
+    'currency',
+    'royaltyPool',
+    'totalAllocated',
+    'residualAmount',
+    'reconciled',
+    'artistCount',
+    'trackCount',
+    'totalEligibleStreams',
+    'completedAt',
+  ],
+  additionalProperties: false,
+} as const;

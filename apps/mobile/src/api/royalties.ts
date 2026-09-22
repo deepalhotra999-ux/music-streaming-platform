@@ -105,12 +105,91 @@ export async function getRoyaltyPeriodTracks(
   );
 }
 
-export async function getRoyaltyRun(
+export interface ArtistPolicyInfo {
+  version: number;
+  name: string;
+  effectiveFrom: string;
+  streamEligibilityRule: string;
+  allocationMethodology: string;
+  roundingMethodology: string;
+  isTestPolicy: boolean;
+  minimumStreams: number | null;
+}
+
+export interface CalculationStep {
+  label: string;
+  value: string;
+  explanation: string;
+}
+
+export interface RoyaltyStatement {
+  statementReference: string;
+  artistId: string;
+  artistName: string;
+  periodId: string;
+  periodStart: string;
+  periodEnd: string;
+  currency: string;
+  status: 'COMPLETED' | 'PENDING' | 'RUNNING' | 'FAILED';
+  finalizedAt: string | null;
+  policy: ArtistPolicyInfo | null;
+  eligibleStreams: number;
+  totalEligibleStreams: number;
+  artistSharePercentage: string;
+  royaltyPool: string;
+  artistAllocation: string;
+  adjustmentsTotal: string;
+  residualAmount: string;
+  finalEarnings: string;
+  calculation: CalculationStep[];
+}
+
+export interface StatementTrack {
+  trackId: string;
+  title: string;
+  eligibleStreams: number;
+  shareOfArtistStreams: string;
+  grossAmount: string;
+  adjustmentsTotal: string;
+  finalAmount: string;
+  currency: string;
+}
+
+export async function getRoyaltyStatement(
   client: ApiClient,
   artistId: string,
-  runId: string,
-): Promise<RoyaltyRun> {
-  return client.get<RoyaltyRun>(`/v1/artists/${artistId}/royalties/runs/${runId}`);
+  periodId: string,
+): Promise<RoyaltyStatement> {
+  return client.get<RoyaltyStatement>(
+    `/v1/artists/${artistId}/royalties/periods/${periodId}/statement`,
+  );
+}
+
+export async function getStatementTracks(
+  client: ApiClient,
+  artistId: string,
+  periodId: string,
+  page?: number,
+  limit?: number,
+  sort?: 'earnings' | 'streams',
+): Promise<Page<StatementTrack>> {
+  const params = new URLSearchParams();
+  if (page !== undefined) params.set('page', String(page));
+  if (limit !== undefined) params.set('limit', String(limit));
+  if (sort) params.set('sort', sort);
+  const qs = params.toString();
+  return client.get<Page<StatementTrack>>(
+    `/v1/artists/${artistId}/royalties/periods/${periodId}/statement/tracks${qs ? `?${qs}` : ''}`,
+  );
+}
+
+/** Download the CSV statement as text. */
+export async function downloadStatementCsv(
+  client: ApiClient,
+  artistId: string,
+  periodId: string,
+): Promise<string> {
+  return client.getText(`/v1/artists/${artistId}/royalties/periods/${periodId}/statement.csv`);
 }
 
 /** Format a major-unit decimal string as a currency amount. */

@@ -8,17 +8,16 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useRouter } from 'expo-router';
 import {
   apiErrorMessage,
   formatMoney,
   getRoyaltyOverview,
   getRoyaltyPeriods,
-  getRoyaltyPeriodTracks,
   listMyArtists,
   type ArtistListItem,
   type RoyaltyOverview,
   type RoyaltyPeriodItem,
-  type RoyaltyTrackEarning,
 } from '../api';
 import { useAuth } from '../auth';
 import { EmptyState, ErrorState, LoadingState, Screen } from '../components';
@@ -49,6 +48,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 export function ArtistRoyaltiesScreen({ initialArtistId }: Props) {
   const { api } = useAuth();
+  const router = useRouter();
   const [loadState, setLoadState] = useState<LoadState>('loading');
   const [error, setError] = useState<string | null>(null);
   const [unauthorized, setUnauthorized] = useState(false);
@@ -56,10 +56,6 @@ export function ArtistRoyaltiesScreen({ initialArtistId }: Props) {
   const [selectedId, setSelectedId] = useState<string | null>(initialArtistId ?? null);
   const [overview, setOverview] = useState<RoyaltyOverview | null>(null);
   const [periods, setPeriods] = useState<RoyaltyPeriodItem[]>([]);
-  const [expandedPeriodId, setExpandedPeriodId] = useState<string | null>(null);
-  const [tracks, setTracks] = useState<RoyaltyTrackEarning[]>([]);
-  const [tracksLoading, setTracksLoading] = useState(false);
-  const [tracksError, setTracksError] = useState<string | null>(null);
   const bootstrapped = useRef(false);
 
   const load = useCallback(
@@ -67,8 +63,6 @@ export function ArtistRoyaltiesScreen({ initialArtistId }: Props) {
       setLoadState('loading');
       setError(null);
       setUnauthorized(false);
-      setExpandedPeriodId(null);
-      setTracks([]);
       try {
         const [ov, per] = await Promise.all([
           getRoyaltyOverview(api, artistId),
@@ -118,45 +112,14 @@ export function ArtistRoyaltiesScreen({ initialArtistId }: Props) {
 
   const togglePeriod = useCallback(
     async (period: RoyaltyPeriodItem) => {
-      if (expandedPeriodId === period.periodId) {
-        setExpandedPeriodId(null);
-        return;
-      }
-      setExpandedPeriodId(period.periodId);
-      if (period.status !== 'COMPLETED' || !selectedId) {
-        setTracks([]);
-        return;
-      }
-      setTracksLoading(true);
-      setTracksError(null);
-      try {
-        const res = await getRoyaltyPeriodTracks(api, selectedId, period.periodId, 1, 50);
-        setTracks(res.data);
-      } catch (e) {
-        setTracksError(apiErrorMessage(e));
-      } finally {
-        setTracksLoading(false);
-      }
+      // Phase 22: navigate to the full statement detail screen.
+      if (!selectedId) return;
+      router.push({
+        pathname: '/(artist)/royalties/[periodId]',
+        params: { artistId: selectedId, periodId: period.periodId },
+      });
     },
-    [api, expandedPeriodId, selectedId],
-  );
-
-  /** Retry loading tracks for an already-expanded period (without collapsing). */
-  const retryTracks = useCallback(
-    async (period: RoyaltyPeriodItem) => {
-      if (!selectedId || period.status !== 'COMPLETED') return;
-      setTracksLoading(true);
-      setTracksError(null);
-      try {
-        const res = await getRoyaltyPeriodTracks(api, selectedId, period.periodId, 1, 50);
-        setTracks(res.data);
-      } catch (e) {
-        setTracksError(apiErrorMessage(e));
-      } finally {
-        setTracksLoading(false);
-      }
-    },
-    [api, selectedId],
+    [router, selectedId],
   );
 
   const retry = useCallback(() => {
@@ -270,12 +233,11 @@ export function ArtistRoyaltiesScreen({ initialArtistId }: Props) {
           <View>
             <Text style={styles.sectionTitle}>Periods</Text>
             {periods.map((p) => {
-              const expanded = expandedPeriodId === p.periodId;
               return (
                 <View key={p.periodId} style={styles.periodCard}>
                   <TouchableOpacity
                     accessibilityRole="button"
-                    accessibilityLabel={`${formatPeriodLabel(p.periodStart, p.periodEnd)}, ${STATUS_LABELS[p.status] ?? p.status}`}
+                    accessibilityLabel={`${formatPeriodLabel(p.periodStart, p.periodEnd)}, ${STATUS_LABELS[p.status] ?? p.status}. View statement.`}
                     onPress={() => void togglePeriod(p)}
                     style={styles.periodHeader}
                   >
@@ -290,43 +252,13 @@ export function ArtistRoyaltiesScreen({ initialArtistId }: Props) {
                     </View>
                     <View style={styles.periodAmounts}>
                       <Text style={styles.periodEarnings}>
-                        {formatMoney(p.earnings, p.currency)}
+                        {p.status === 'COMPLETED'
+                          ? formatMoney(p.earnings, p.currency)
+                          : STATUS_LABELS[p.status] ?? p.status}
                       </Text>
                       <Text style={styles.subtle}>{p.streams.toLocaleString()} streams</Text>
                     </View>
                   </TouchableOpacity>
-                  {expanded && (
-                    <View style={styles.tracksBox}>
-                      {tracksLoading ? (
-                        <LoadingState message="Loading tracks…" />
-                      ) : tracksError ? (
-                        <ErrorState message={tracksError} onRetry={() => void retryTracks(p)} />
-                      ) : tracks.length === 0 ? (
-                        <Text style={styles.subtle}>
-                          {p.status === 'COMPLETED'
-                            ? 'No track earnings in this period.'
-                            : 'Track breakdown is available once the period calculation completes.'}
-                        </Text>
-                      ) : (
-                        tracks.map((t) => (
-                          <View key={t.trackId} style={styles.trackRow}>
-                            <View style={styles.trackInfo}>
-                              <Text style={styles.trackTitle} numberOfLines={1}>
-                                {t.title}
-                              </Text>
-                              <Text style={styles.subtle}>
-                                {t.eligibleStreams.toLocaleString()} streams ·{' '}
-                                {t.allocationPercentage}%
-                              </Text>
-                            </View>
-                            <Text style={styles.trackAmount}>
-                              {formatMoney(t.finalAmount, t.currency)}
-                            </Text>
-                          </View>
-                        ))
-                      )}
-                    </View>
-                  )}
                 </View>
               );
             })}

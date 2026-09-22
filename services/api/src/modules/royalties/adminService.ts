@@ -617,3 +617,88 @@ export async function getPeriod(periodId: string, deps: RoyaltyDeps): Promise<Pe
     runs,
   };
 }
+
+// --- Reconciliation (Phase 22, read-only) ---
+
+export interface ReconciliationDto {
+  runId: string;
+  periodId: string;
+  periodStart: string;
+  periodEnd: string;
+  policyVersion: number;
+  status: string;
+  currency: string;
+  /** Royalty pool (from the run record). */
+  royaltyPool: string;
+  /** Sum of artist allocations (from the run record). */
+  totalAllocated: string;
+  /** Residual/unallocated amount (from the run record). */
+  residualAmount: string;
+  /**
+   * True when pool == totalAllocated + residual using the stored values.
+   * If false, the calculation is marked inconsistent — never auto-fixed.
+   */
+  reconciled: boolean;
+  artistCount: number;
+  trackCount: number;
+  totalEligibleStreams: number;
+  completedAt: string | null;
+}
+
+/**
+ * Read-only reconciliation view for a calculation run.
+ * Values come directly from Phase 21 records; the invariant is verified,
+ * never adjusted. If reconciliation fails, reconciled=false.
+ */
+export async function getReconciliation(
+  runId: string,
+  deps: RoyaltyDeps,
+): Promise<ReconciliationDto> {
+  const { db } = deps;
+  const run = await db.royaltyCalculationRun.findUnique({
+    where: { id: runId },
+    select: {
+      id: true,
+      periodId: true,
+      status: true,
+      currency: true,
+      totalEligibleStreams: true,
+      royaltyPool: true,
+      totalAllocated: true,
+      residualAmount: true,
+      completedAt: true,
+      policy: { select: { version: true } },
+      period: { select: { periodStart: true, periodEnd: true } },
+      _count: { select: { earnings: true } },
+    },
+  });
+  if (!run) throw notFound('Royalty calculation run not found.');
+
+  const pool = toMinor(run.royaltyPool);
+  const allocated = toMinor(run.totalAllocated);
+  const residual = toMinor(run.residualAmount);
+  const reconciled = pool === allocated + residual;
+
+  const artists = await db.royaltyEarning.groupBy({
+    by: ['artistId'],
+    where: { runId },
+  });
+
+  return {
+    runId: run.id,
+    periodId: run.periodId,
+    periodStart: run.period.periodStart.toISOString(),
+    periodEnd: run.period.periodEnd.toISOString(),
+    policyVersion: run.policy.version,
+    status: run.status,
+    currency: run.currency,
+    royaltyPool: fmt(pool),
+    totalAllocated: fmt(allocated),
+    residualAmount: fmt(residual),
+    reconciled,
+    artistCount: artists.length,
+    trackCount: run._count.earnings,
+    totalEligibleStreams: Number(run.totalEligibleStreams),
+    completedAt: run.completedAt?.toISOString() ?? null,
+  };
+}

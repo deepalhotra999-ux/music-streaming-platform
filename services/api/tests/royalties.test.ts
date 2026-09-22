@@ -894,3 +894,359 @@ describe('policy versioning', () => {
     expect(detail2.royaltyPool).toBe('800.00');
   });
 });
+
+// --- Phase 22: Royalty Transparency tests ---
+
+describe('royalty statements (Phase 22)', () => {
+  it('returns a completed statement with explainable calculation', async () => {
+    const admin = await createUser('admin-stmt', 'ADMIN');
+    const artistUser = await createUser('artist-stmt', 'ARTIST');
+    const listener = await createUser('listener-stmt', 'LISTENER');
+
+    const artist = await createArtist(artistUser, 'Stmt Artist');
+    const trackA = await createTrack(artist.id, 'Stmt Track A');
+    const trackB = await createTrack(artist.id, 'Stmt Track B');
+
+    const policy = await createPolicy(admin);
+    await activatePolicy(admin, policy.id);
+    const { start: ps, end: pe } = uniquePeriod();
+    const periodId = await createPeriod(admin, ps, pe);
+    await addRevenue(admin, periodId, '1000.00', '100.00', `phase22-rev-${Date.now()}-1`);
+
+    const streamDate = new Date(new Date(ps).getTime() + 15 * 24 * 60 * 60 * 1000);
+    for (let i = 0; i < 6; i++) await createCompletedSession(listener.id, trackA.id, streamDate);
+    for (let i = 0; i < 3; i++) await createCompletedSession(listener.id, trackB.id, streamDate);
+
+    const runRes = await triggerRun(admin, periodId);
+    expect(runRes.statusCode).toBe(200);
+
+    const stmtRes = await app.inject({
+      method: 'GET',
+      url: `/v1/artists/${artist.id}/royalties/periods/${periodId}/statement`,
+      headers: auth(artistUser),
+    });
+    expect(stmtRes.statusCode).toBe(200);
+    const stmt = stmtRes.json();
+
+    expect(stmt.status).toBe('COMPLETED');
+    expect(stmt.statementReference).toMatch(/^STMT-\d{6}-[A-Z0-9]{6}$/);
+    expect(stmt.statementReference).not.toContain('run');
+    expect(stmt.artistId).toBe(artist.id);
+    expect(stmt.artistName).toBe('Stmt Artist');
+    expect(stmt.finalizedAt).not.toBeNull();
+
+    // Policy (safe DTO)
+    expect(stmt.policy.version).toBe(policy.version);
+    expect(stmt.policy.isTestPolicy).toBe(true);
+    expect(stmt.policy.streamEligibilityRule).toContain('completed play');
+    expect(stmt.policy.allocationMethodology).toContain('proportionally');
+    expect(stmt.policy.roundingMethodology).toContain('integer');
+
+    // Streams and share
+    expect(stmt.eligibleStreams).toBe(9);
+    expect(stmt.totalEligibleStreams).toBe(9);
+    expect(stmt.artistSharePercentage).toBe('100');
+
+    // Money: pool = $900 × 70% = $630, artist gets all of it
+    expect(stmt.royaltyPool).toBe('630.00');
+    expect(stmt.artistAllocation).toBe('630.00');
+    expect(stmt.finalEarnings).toBe('630.00');
+    expect(stmt.residualAmount).toBe('0.00');
+
+    // Explainable calculation uses exact values
+    expect(Array.isArray(stmt.calculation)).toBe(true);
+    expect(stmt.calculation.length).toBeGreaterThan(0);
+    const labels = stmt.calculation.map((s: { label: string }) => s.label);
+    expect(labels).toContain('Your eligible streams');
+    expect(labels).toContain('Your final earnings');
+    const streamsStep = stmt.calculation.find((s: { label: string }) => s.label === 'Your eligible streams');
+    expect(streamsStep.value).toBe('9');
+
+    // No internal secrets leaked
+    const serialized = JSON.stringify(stmt);
+    expect(serialized).not.toMatch(/runKey/i);
+    expect(serialized).not.toMatch(/tokenHash/i);
+    expect(serialized).not.toMatch(/revenueSnapshot/i);
+  });
+
+  it('returns PENDING status for open periods without finalized earnings', async () => {
+    const admin = await createUser('admin-pend', 'ADMIN');
+    const artistUser = await createUser('artist-pend', 'ARTIST');
+    const artist = await createArtist(artistUser, 'Pend Artist');
+    const { start: ps, end: pe } = uniquePeriod();
+    const periodId = await createPeriod(admin, ps, pe);
+
+    const stmtRes = await app.inject({
+      method: 'GET',
+      url: `/v1/artists/${artist.id}/royalties/periods/${periodId}/statement`,
+      headers: auth(artistUser),
+    });
+    expect(stmtRes.statusCode).toBe(200);
+    const stmt = stmtRes.json();
+    expect(stmt.status).toBe('PENDING');
+    expect(stmt.finalEarnings).toBe('0.00');
+    expect(stmt.finalizedAt).toBeNull();
+    expect(stmt.calculation).toHaveLength(0);
+  });
+
+  it('returns track-level breakdown with share of artist streams', async () => {
+    const admin = await createUser('admin-trk', 'ADMIN');
+    const artistUser = await createUser('artist-trk', 'ARTIST');
+    const listener = await createUser('listener-trk', 'LISTENER');
+
+    const artist = await createArtist(artistUser, 'Track Artist');
+    const trackA = await createTrack(artist.id, 'Trk A');
+    const trackB = await createTrack(artist.id, 'Trk B');
+
+    const policy = await createPolicy(admin);
+    await activatePolicy(admin, policy.id);
+    const { start: ps, end: pe } = uniquePeriod();
+    const periodId = await createPeriod(admin, ps, pe);
+    await addRevenue(admin, periodId, '1000.00', '0.00', `phase22-rev-${Date.now()}-3`);
+
+    const streamDate = new Date(new Date(ps).getTime() + 15 * 24 * 60 * 60 * 1000);
+    for (let i = 0; i < 6; i++) await createCompletedSession(listener.id, trackA.id, streamDate);
+    for (let i = 0; i < 3; i++) await createCompletedSession(listener.id, trackB.id, streamDate);
+
+    const runRes = await triggerRun(admin, periodId);
+    expect(runRes.statusCode).toBe(200);
+
+    const tracksRes = await app.inject({
+      method: 'GET',
+      url: `/v1/artists/${artist.id}/royalties/periods/${periodId}/statement/tracks`,
+      headers: auth(artistUser),
+    });
+    expect(tracksRes.statusCode).toBe(200);
+    const page = tracksRes.json();
+    expect(page.data).toHaveLength(2);
+    expect(page.pagination.total).toBe(2);
+
+    const byTitle = Object.fromEntries(page.data.map((t: { title: string }) => [t.title, t]));
+    expect(byTitle['Trk A'].eligibleStreams).toBe(6);
+    expect(byTitle['Trk A'].shareOfArtistStreams).toBe('66.666666');
+    expect(byTitle['Trk B'].eligibleStreams).toBe(3);
+    expect(byTitle['Trk B'].shareOfArtistStreams).toBe('33.333333');
+
+    // Sort by streams
+    const sortedRes = await app.inject({
+      method: 'GET',
+      url: `/v1/artists/${artist.id}/royalties/periods/${periodId}/statement/tracks?sort=streams`,
+      headers: auth(artistUser),
+    });
+    expect(sortedRes.statusCode).toBe(200);
+    expect(sortedRes.json().data[0].title).toBe('Trk A');
+  });
+
+  it('exports a CSV statement matching the JSON statement values', async () => {
+    const admin = await createUser('admin-csv', 'ADMIN');
+    const artistUser = await createUser('artist-csv', 'ARTIST');
+    const listener = await createUser('listener-csv', 'LISTENER');
+
+    const artist = await createArtist(artistUser, 'Csv Artist');
+    const track = await createTrack(artist.id, 'Csv Track');
+
+    const policy = await createPolicy(admin);
+    await activatePolicy(admin, policy.id);
+    const { start: ps, end: pe } = uniquePeriod();
+    const periodId = await createPeriod(admin, ps, pe);
+    await addRevenue(admin, periodId, '500.00', '0.00', `phase22-rev-${Date.now()}-4`);
+
+    const streamDate = new Date(new Date(ps).getTime() + 15 * 24 * 60 * 60 * 1000);
+    for (let i = 0; i < 4; i++) await createCompletedSession(listener.id, track.id, streamDate);
+
+    const runRes = await triggerRun(admin, periodId);
+    expect(runRes.statusCode).toBe(200);
+
+    const csvRes = await app.inject({
+      method: 'GET',
+      url: `/v1/artists/${artist.id}/royalties/periods/${periodId}/statement.csv`,
+      headers: auth(artistUser),
+    });
+    expect(csvRes.statusCode).toBe(200);
+    expect(csvRes.headers['content-type']).toContain('text/csv');
+    expect(csvRes.headers['content-disposition']).toContain('.csv');
+
+    const csv = csvRes.body;
+    expect(csv).toContain('Royalty Statement');
+    expect(csv).toContain('Csv Artist');
+    expect(csv).toContain('Csv Track');
+    // Pool = $500 × 70% = $350, artist gets all
+    expect(csv).toContain('350.00');
+    // No internal secrets
+    expect(csv).not.toMatch(/runKey/i);
+    expect(csv).not.toMatch(/tokenHash/i);
+  });
+
+  it('rejects CSV export for incomplete periods', async () => {
+    const admin = await createUser('admin-csv2', 'ADMIN');
+    const artistUser = await createUser('artist-csv2', 'ARTIST');
+    const artist = await createArtist(artistUser, 'Csv2 Artist');
+    const { start: ps, end: pe } = uniquePeriod();
+    const periodId = await createPeriod(admin, ps, pe);
+
+    const csvRes = await app.inject({
+      method: 'GET',
+      url: `/v1/artists/${artist.id}/royalties/periods/${periodId}/statement.csv`,
+      headers: auth(artistUser),
+    });
+    expect(csvRes.statusCode).toBe(404);
+  });
+
+  it('enforces ownership isolation on statements (A cannot see B)', async () => {
+    const admin = await createUser('admin-iso', 'ADMIN');
+    const artistUserA = await createUser('artist-iso-a', 'ARTIST');
+    const artistUserB = await createUser('artist-iso-b', 'ARTIST');
+    const listener = await createUser('listener-iso', 'LISTENER');
+
+    const artistA = await createArtist(artistUserA, 'Iso Artist A');
+    const artistB = await createArtist(artistUserB, 'Iso Artist B');
+    const trackA = await createTrack(artistA.id, 'Iso Track A');
+    const trackB = await createTrack(artistB.id, 'Iso Track B');
+
+    const policy = await createPolicy(admin);
+    await activatePolicy(admin, policy.id);
+    const { start: ps, end: pe } = uniquePeriod();
+    const periodId = await createPeriod(admin, ps, pe);
+    await addRevenue(admin, periodId, '1000.00', '0.00', `phase22-rev-${Date.now()}-5`);
+
+    const streamDate = new Date(new Date(ps).getTime() + 15 * 24 * 60 * 60 * 1000);
+    for (let i = 0; i < 5; i++) await createCompletedSession(listener.id, trackA.id, streamDate);
+    for (let i = 0; i < 5; i++) await createCompletedSession(listener.id, trackB.id, streamDate);
+
+    const runRes = await triggerRun(admin, periodId);
+    expect(runRes.statusCode).toBe(200);
+
+    // B tries to access A's statement → 403
+    const crossRes = await app.inject({
+      method: 'GET',
+      url: `/v1/artists/${artistA.id}/royalties/periods/${periodId}/statement`,
+      headers: auth(artistUserB),
+    });
+    expect(crossRes.statusCode).toBe(403);
+
+    // B tries to access A's CSV → 403
+    const crossCsv = await app.inject({
+      method: 'GET',
+      url: `/v1/artists/${artistA.id}/royalties/periods/${periodId}/statement.csv`,
+      headers: auth(artistUserB),
+    });
+    expect(crossCsv.statusCode).toBe(403);
+
+    // LISTENER → 403
+    const listenerRes = await app.inject({
+      method: 'GET',
+      url: `/v1/artists/${artistA.id}/royalties/periods/${periodId}/statement`,
+      headers: auth(listener),
+    });
+    expect(listenerRes.statusCode).toBe(403);
+
+    // A sees only their own data
+    const ownRes = await app.inject({
+      method: 'GET',
+      url: `/v1/artists/${artistA.id}/royalties/periods/${periodId}/statement`,
+      headers: auth(artistUserA),
+    });
+    expect(ownRes.statusCode).toBe(200);
+    const stmt = ownRes.json();
+    expect(stmt.eligibleStreams).toBe(5);
+    expect(stmt.artistName).toBe('Iso Artist A');
+    expect(JSON.stringify(stmt)).not.toContain('Iso Artist B');
+  });
+
+  it('ADMIN can access artist statements', async () => {
+    const admin = await createUser('admin-acc', 'ADMIN');
+    const artistUser = await createUser('artist-acc', 'ARTIST');
+    const listener = await createUser('listener-acc', 'LISTENER');
+    const artist = await createArtist(artistUser, 'Acc Artist');
+    const track = await createTrack(artist.id, 'Acc Track');
+
+    const policy = await createPolicy(admin);
+    await activatePolicy(admin, policy.id);
+    const { start: ps, end: pe } = uniquePeriod();
+    const periodId = await createPeriod(admin, ps, pe);
+    await addRevenue(admin, periodId, '100.00', '0.00', `phase22-rev-${Date.now()}-6`);
+    const streamDate = new Date(new Date(ps).getTime() + 15 * 24 * 60 * 60 * 1000);
+    await createCompletedSession(listener.id, track.id, streamDate);
+    await triggerRun(admin, periodId);
+
+    const res = await app.inject({
+      method: 'GET',
+      url: `/v1/artists/${artist.id}/royalties/periods/${periodId}/statement`,
+      headers: auth(admin),
+    });
+    expect(res.statusCode).toBe(200);
+  });
+});
+
+describe('royalty reconciliation (Phase 22)', () => {
+  it('returns reconciliation with pool = allocations + residual', async () => {
+    const admin = await createUser('admin-rec', 'ADMIN');
+    const artistUser = await createUser('artist-rec', 'ARTIST');
+    const listener = await createUser('listener-rec', 'LISTENER');
+    const artist = await createArtist(artistUser, 'Rec Artist');
+    const track = await createTrack(artist.id, 'Rec Track');
+
+    const policy = await createPolicy(admin);
+    await activatePolicy(admin, policy.id);
+    const { start: ps, end: pe } = uniquePeriod();
+    const periodId = await createPeriod(admin, ps, pe);
+    await addRevenue(admin, periodId, '1000.00', '0.00', `phase22-rev-${Date.now()}-7`);
+    const streamDate = new Date(new Date(ps).getTime() + 15 * 24 * 60 * 60 * 1000);
+    for (let i = 0; i < 3; i++) await createCompletedSession(listener.id, track.id, streamDate);
+
+    const runRes = await triggerRun(admin, periodId);
+    const { runId } = runRes.json();
+
+    const recRes = await app.inject({
+      method: 'GET',
+      url: `/v1/admin/royalties/runs/${runId}/reconciliation`,
+      headers: auth(admin),
+    });
+    expect(recRes.statusCode).toBe(200);
+    const rec = recRes.json();
+
+    expect(rec.runId).toBe(runId);
+    expect(rec.periodId).toBe(periodId);
+    expect(rec.policyVersion).toBe(policy.version);
+    expect(rec.royaltyPool).toBe('700.00');
+    expect(rec.totalAllocated).toBe('700.00');
+    expect(rec.residualAmount).toBe('0.00');
+    expect(rec.reconciled).toBe(true);
+    expect(rec.artistCount).toBe(1);
+    expect(rec.trackCount).toBe(1);
+    expect(rec.totalEligibleStreams).toBe(3);
+    expect(rec.status).toBe('COMPLETED');
+
+    // Verify the invariant arithmetically (no float)
+    const poolCents = BigInt(rec.royaltyPool.replace('.', ''));
+    const allocCents = BigInt(rec.totalAllocated.replace('.', ''));
+    const residCents = BigInt(rec.residualAmount.replace('.', ''));
+    expect(poolCents).toBe(allocCents + residCents);
+  });
+
+  it('LISTENER and ARTIST cannot access reconciliation', async () => {
+    const admin = await createUser('admin-rec2', 'ADMIN');
+    const artistUser = await createUser('artist-rec2', 'ARTIST');
+    const listener = await createUser('listener-rec2', 'LISTENER');
+    const artist = await createArtist(artistUser, 'Rec2 Artist');
+    const track = await createTrack(artist.id, 'Rec2 Track');
+
+    const policy = await createPolicy(admin);
+    await activatePolicy(admin, policy.id);
+    const { start: ps, end: pe } = uniquePeriod();
+    const periodId = await createPeriod(admin, ps, pe);
+    await addRevenue(admin, periodId, '100.00', '0.00', `phase22-rev-${Date.now()}-8`);
+    const streamDate = new Date(new Date(ps).getTime() + 15 * 24 * 60 * 60 * 1000);
+    await createCompletedSession(listener.id, track.id, streamDate);
+    const { runId } = (await triggerRun(admin, periodId)).json();
+
+    for (const user of [listener, artistUser]) {
+      const res = await app.inject({
+        method: 'GET',
+        url: `/v1/admin/royalties/runs/${runId}/reconciliation`,
+        headers: auth(user),
+      });
+      expect(res.statusCode).toBe(403);
+    }
+  });
+});

@@ -4,6 +4,7 @@
 
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { useAuth } from '../../auth';
+import { useRouter } from 'expo-router';
 import { formatMoney } from '../../api/royalties';
 import { ArtistRoyaltiesScreen } from '../ArtistRoyaltiesScreen';
 
@@ -11,7 +12,12 @@ jest.mock('../../auth', () => ({
   useAuth: jest.fn(),
 }));
 
+jest.mock('expo-router', () => ({
+  useRouter: jest.fn(),
+}));
+
 const mockUseAuth = useAuth as jest.Mock;
+const mockUseRouter = useRouter as jest.Mock;
 
 function pageOf<T>(items: T[]) {
   return {
@@ -93,6 +99,7 @@ function route(path: string) {
 describe('ArtistRoyaltiesScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUseRouter.mockReturnValue({ push: jest.fn() });
   });
 
   it('renders overview with total earnings and latest period', async () => {
@@ -108,7 +115,9 @@ describe('ArtistRoyaltiesScreen', () => {
     expect(screen.getByText(/9 eligible streams/)).toBeTruthy();
   });
 
-  it('expands a period to show track breakdown', async () => {
+  it('navigates to period detail on tap', async () => {
+    const mockPush = jest.fn();
+    mockUseRouter.mockReturnValue({ push: mockPush });
     mockApi(async (p) => route(p));
     render(<ArtistRoyaltiesScreen initialArtistId="a1" />);
 
@@ -116,7 +125,7 @@ describe('ArtistRoyaltiesScreen', () => {
     await waitFor(() => {
       expect(screen.getByText(/Completed/)).toBeTruthy();
     });
-    // Tap the period header to expand (use the one in the periods list,
+    // Tap the period header (use the one in the periods list,
     // not the latest-period summary — getAllByText returns both)
     const headers = screen.getAllByText(/Aug 2026/);
     // The period list header is the last one (latest-period box comes first)
@@ -124,9 +133,11 @@ describe('ArtistRoyaltiesScreen', () => {
     fireEvent.press(periodHeader);
 
     await waitFor(() => {
-      expect(screen.getByText('Track A')).toBeTruthy();
+      expect(mockPush).toHaveBeenCalledWith({
+        pathname: '/(artist)/royalties/[periodId]',
+        params: { artistId: 'a1', periodId: 'p1' },
+      });
     });
-    expect(screen.getByText('Track B')).toBeTruthy();
   });
 
   it('shows empty state when no earnings yet', async () => {

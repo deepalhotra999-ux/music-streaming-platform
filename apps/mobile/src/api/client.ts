@@ -143,6 +143,54 @@ export class ApiClient {
     return this.request<T>('GET', path, options);
   }
 
+  /**
+   * Phase 22 — GET a text (non-JSON) response, e.g. CSV export.
+   * Same Bearer injection and single 401-refresh retry as request().
+   */
+  async getText(path: string, options: Omit<RequestOptions, 'body'> = {}): Promise<string> {
+    const useAuth = options.auth ?? true;
+    const token = useAuth ? (this.getAccessToken?.() ?? null) : null;
+    const doFetch = async (t: string | null): Promise<Response> =>
+      this.fetchFn(this.baseUrl + path, {
+        method: 'GET',
+        headers: t ? { Authorization: `Bearer ${t}`, Accept: 'text/csv' } : { Accept: 'text/csv' },
+      });
+    try {
+      let response = await doFetch(token);
+      if (response.status === 401 && useAuth && this.onTokenRefresh) {
+        const refreshed = await this.onTokenRefresh().catch(() => null);
+        if (refreshed) {
+          response = await doFetch(refreshed);
+        }
+      }
+      if (!response.ok) {
+        let data: unknown = null;
+        try {
+          data = await response.json();
+        } catch {
+          data = null;
+        }
+        throw new ApiError(
+          response.status,
+          isProblemBody(data) ? data : { title: `Request failed (${response.status})` },
+        );
+      }
+      return response.text();
+    } catch (error) {
+      if (error instanceof ApiError) {
+        throw error;
+      }
+      throw new ApiError(
+        0,
+        {
+          title: 'Network error',
+          detail: 'Could not reach the server. Check your connection and try again.',
+        },
+        error,
+      );
+    }
+  }
+
   post<T>(path: string, body?: unknown, options: Omit<RequestOptions, 'body'> = {}): Promise<T> {
     return this.request<T>('POST', path, { ...options, body });
   }

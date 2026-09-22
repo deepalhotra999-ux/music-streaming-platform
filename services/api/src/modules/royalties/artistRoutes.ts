@@ -19,15 +19,19 @@ import {
   getRoyaltyPeriodTracks,
   getRoyaltyRun,
 } from './artistService.js';
+import { getArtistStatement, getStatementCsv, getStatementTracks } from './statementService.js';
 import {
   artistIdParamSchema,
   artistRoyaltyRunSchema,
+  artistStatementSchema,
   paginationQuerySchema,
   periodIdParamSchema,
   royaltyOverviewSchema,
   royaltyPeriodItemSchema,
   royaltyTrackEarningSchema,
   runIdParamSchema,
+  statementTrackQuerySchema,
+  statementTrackSchema,
 } from './schemas.js';
 
 export async function royaltyArtistRoutes(app: FastifyInstance, config: Config): Promise<void> {
@@ -133,6 +137,90 @@ export async function royaltyArtistRoutes(app: FastifyInstance, config: Config):
     async (req) => {
       const { id, runId } = req.params as { id: string; runId: string };
       return getRoyaltyRun(id, runId, req.authUser!, deps);
+    },
+  );
+
+  // --- Phase 22: statements ---
+
+  app.get(
+    '/v1/artists/:id/royalties/periods/:periodId/statement',
+    {
+      preHandler: [...guard],
+      config: { rateLimit: limit },
+      schema: {
+        tags: ['Royalties'],
+        summary: 'Artist royalty statement for a period (explainable calculation)',
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            periodId: { type: 'string', format: 'uuid' },
+          },
+          required: ['id', 'periodId'],
+          additionalProperties: false,
+        },
+        response: { 200: artistStatementSchema },
+      },
+    },
+    async (req) => {
+      const { id, periodId } = req.params as { id: string; periodId: string };
+      return getArtistStatement(id, periodId, req.authUser!, deps);
+    },
+  );
+
+  app.get(
+    '/v1/artists/:id/royalties/periods/:periodId/statement/tracks',
+    {
+      preHandler: [...guard],
+      config: { rateLimit: limit },
+      schema: {
+        tags: ['Royalties'],
+        summary: 'Per-track breakdown for an artist royalty statement',
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            periodId: { type: 'string', format: 'uuid' },
+          },
+          required: ['id', 'periodId'],
+          additionalProperties: false,
+        },
+        querystring: statementTrackQuerySchema,
+        response: { 200: pageOf(statementTrackSchema) },
+      },
+    },
+    async (req) => {
+      const { id, periodId } = req.params as { id: string; periodId: string };
+      const q = (req.query ?? {}) as { page?: string; limit?: string; sort?: string };
+      return getStatementTracks(id, periodId, req.authUser!, q, deps);
+    },
+  );
+
+  app.get(
+    '/v1/artists/:id/royalties/periods/:periodId/statement.csv',
+    {
+      preHandler: [...guard],
+      config: { rateLimit: limit },
+      schema: {
+        tags: ['Royalties'],
+        summary: 'Downloadable CSV royalty statement (completed periods only)',
+        params: {
+          type: 'object',
+          properties: {
+            id: { type: 'string', format: 'uuid' },
+            periodId: { type: 'string', format: 'uuid' },
+          },
+          required: ['id', 'periodId'],
+          additionalProperties: false,
+        },
+      },
+    },
+    async (req, reply) => {
+      const { id, periodId } = req.params as { id: string; periodId: string };
+      const { filename, csv } = await getStatementCsv(id, periodId, req.authUser!, deps);
+      reply.header('Content-Type', 'text/csv; charset=utf-8');
+      reply.header('Content-Disposition', `attachment; filename="${filename}"`);
+      return csv;
     },
   );
 
