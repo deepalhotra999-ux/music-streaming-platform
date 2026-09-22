@@ -2,8 +2,8 @@
 
 **Date:** 2026-09-22
 **Baseline:** `178e6d3` (Phase 25: offline downloads & offline playback)
-**Status:** Complete, verified, documented, awaiting commit. Stopped at
-the phase boundary — Phase 27 was not started.
+**Status:** Complete, verified, documented, committed (`f390989`).
+Stopped at the phase boundary — Phase 27 was not started.
 
 ## What was built
 
