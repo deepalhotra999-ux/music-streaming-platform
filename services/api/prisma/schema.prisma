@@ -179,6 +179,9 @@ model Artist {
   albums    Album[]
   tracks    Track[]
   followers Follow[]
+  royaltyEarnings   RoyaltyEarning[] @relation("ArtistRoyaltyEarnings")
+  royaltyAdjustments RoyaltyAdjustment[] @relation("ArtistRoyaltyAdjustments")
+  royaltyEligibleStreams RoyaltyEligibleStream[] @relation("ArtistRoyaltyEligibleStreams")
 
   @@index([ownerUserId])
   @@index([name])
@@ -253,6 +256,8 @@ model Track {
   likes            Like[]
   listeningHistory ListeningHistory[]
   playbackSessions PlaybackSession[]
+  royaltyEarnings  RoyaltyEarning[] @relation("TrackRoyaltyEarnings")
+  royaltyEligibleStreams RoyaltyEligibleStream[]
 
   @@index([artistId])
   @@index([albumId, trackNumber])
@@ -543,4 +548,158 @@ model ModerationReport {
   @@index([targetType, targetId])
   @@index([createdAt(sort: Desc)])
   @@map("moderation_reports")
+}
+
+// Phase 21 — Royalty Engine & Auditable Artist Earnings.
+// Financial accounting foundation. All money is NUMERIC(19,4); the
+// calculation service works in integer minor units and rounds per policy.
+// royalty_revenue_inputs, royalty_earnings, and royalty_adjustments are
+// append-only (DB triggers reject UPDATE/DELETE). Policies are immutable
+// once used. See migration 20260922000004_phase21_royalties.
+
+model RoyaltyPolicy {
+  id                   String   @id @default(uuid()) @db.Uuid
+  version              Int      @unique
+  name                 String
+  status               String   @default("DRAFT")
+  // Percentage of net revenue for the artist pool (e.g., 70.00 = 70%).
+  // PLACEHOLDER — production value must be configured before launch.
+  artistPoolPercentage Decimal  @map("artist_pool_percentage") @db.Decimal(7, 4)
+  minimumStreams       Int?     @map("minimum_streams")
+  currency             String   @default("USD")
+  roundingMode         String   @default("HALF_UP") @map("rounding_mode")
+  config               Json     @default("{}")
+  effectiveFrom        DateTime @map("effective_from") @db.Timestamptz(6)
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy            String?  @map("created_by") @db.Uuid
+
+  runs RoyaltyCalculationRun[]
+
+  @@map("royalty_policies")
+}
+
+model RoyaltyPeriod {
+  id          String   @id @default(uuid()) @db.Uuid
+  periodStart DateTime @map("period_start") @db.Timestamptz(6)
+  periodEnd   DateTime @map("period_end") @db.Timestamptz(6)
+  currency    String   @default("USD")
+  status      String   @default("OPEN")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy   String?  @map("created_by") @db.Uuid
+
+  revenueInputs RoyaltyRevenueInput[]
+  runs          RoyaltyCalculationRun[]
+
+  @@unique([periodStart, periodEnd])
+  @@map("royalty_periods")
+}
+
+model RoyaltyRevenueInput {
+  id          String   @id @default(uuid()) @db.Uuid
+  periodId    String   @map("period_id") @db.Uuid
+  period      RoyaltyPeriod @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  source      String
+  currency    String
+  grossAmount Decimal  @map("gross_amount") @db.Decimal(19, 4)
+  deductions  Decimal  @default(0) @map("deductions") @db.Decimal(19, 4)
+  netAmount   Decimal  @map("net_amount") @db.Decimal(19, 4)
+  referenceId String   @unique @map("reference_id")
+  fxReference String?  @map("fx_reference")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy   String?  @map("created_by") @db.Uuid
+
+  @@index([periodId])
+  @@map("royalty_revenue_inputs")
+}
+
+model RoyaltyCalculationRun {
+  id                  String   @id @default(uuid()) @db.Uuid
+  periodId            String   @map("period_id") @db.Uuid
+  period              RoyaltyPeriod @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  policyId            String   @map("policy_id") @db.Uuid
+  policy              RoyaltyPolicy @relation(fields: [policyId], references: [id], onDelete: Restrict)
+  status              String   @default("PENDING")
+  runKey              String   @unique @map("run_key")
+  revenueSnapshot     Json     @default("{}") @map("revenue_snapshot")
+  totalEligibleStreams BigInt  @default(0) @map("total_eligible_streams")
+  royaltyPool         Decimal  @default(0) @map("royalty_pool") @db.Decimal(19, 4)
+  totalAllocated      Decimal  @default(0) @map("total_allocated") @db.Decimal(19, 4)
+  residualAmount      Decimal  @default(0) @map("residual_amount") @db.Decimal(19, 4)
+  currency            String
+  startedAt           DateTime? @map("started_at") @db.Timestamptz(6)
+  completedAt         DateTime? @map("completed_at") @db.Timestamptz(6)
+  error               String?
+  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy           String?  @map("created_by") @db.Uuid
+
+  earnings RoyaltyEarning[]
+  adjustments RoyaltyAdjustment[]
+  eligibleStreams RoyaltyEligibleStream[]
+
+  @@index([periodId])
+  @@map("royalty_calculation_runs")
+}
+
+model RoyaltyEarning {
+  id                   String   @id @default(uuid()) @db.Uuid
+  runId                String   @map("run_id") @db.Uuid
+  run                  RoyaltyCalculationRun @relation(fields: [runId], references: [id], onDelete: Restrict)
+  artistId             String   @map("artist_id") @db.Uuid
+  artist               Artist   @relation("ArtistRoyaltyEarnings", fields: [artistId], references: [id], onDelete: Restrict)
+  trackId              String   @map("track_id") @db.Uuid
+  track                Track    @relation("TrackRoyaltyEarnings", fields: [trackId], references: [id], onDelete: Restrict)
+  eligibleStreams      BigInt   @map("eligible_streams")
+  allocationPercentage Decimal  @map("allocation_percentage") @db.Decimal(9, 6)
+  grossAmount          Decimal  @map("gross_amount") @db.Decimal(19, 4)
+  adjustmentsTotal     Decimal  @default(0) @map("adjustments_total") @db.Decimal(19, 4)
+  finalAmount          Decimal  @map("final_amount") @db.Decimal(19, 4)
+  currency             String
+  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  adjustments RoyaltyAdjustment[]
+
+  @@unique([runId, artistId, trackId])
+  @@index([runId])
+  @@index([artistId])
+  @@index([trackId])
+  @@map("royalty_earnings")
+}
+
+model RoyaltyAdjustment {
+  id          String   @id @default(uuid()) @db.Uuid
+  runId       String   @map("run_id") @db.Uuid
+  run         RoyaltyCalculationRun @relation(fields: [runId], references: [id], onDelete: Restrict)
+  earningId   String?  @map("earning_id") @db.Uuid
+  earning     RoyaltyEarning? @relation(fields: [earningId], references: [id], onDelete: Restrict)
+  artistId    String   @map("artist_id") @db.Uuid
+  artist      Artist   @relation("ArtistRoyaltyAdjustments", fields: [artistId], references: [id], onDelete: Restrict)
+  amount      Decimal  @db.Decimal(19, 4)
+  currency    String
+  reason      String
+  referenceId String   @unique @map("reference_id")
+  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy   String?  @map("created_by") @db.Uuid
+
+  @@index([runId])
+  @@index([earningId])
+  @@map("royalty_adjustments")
+}
+
+model RoyaltyEligibleStream {
+  id                String   @id @default(uuid()) @db.Uuid
+  runId             String   @map("run_id") @db.Uuid
+  run               RoyaltyCalculationRun @relation(fields: [runId], references: [id], onDelete: Restrict)
+  playbackSessionId String   @map("playback_session_id") @db.Uuid
+  trackId           String   @map("track_id") @db.Uuid
+  track             Track    @relation(fields: [trackId], references: [id], onDelete: Restrict)
+  artistId          String   @map("artist_id") @db.Uuid
+  artist            Artist   @relation("ArtistRoyaltyEligibleStreams", fields: [artistId], references: [id], onDelete: Restrict)
+  sessionCreatedAt  DateTime @map("session_created_at") @db.Timestamptz(6)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@unique([runId, playbackSessionId], map: "royalty_eligible_streams_run_session_key")
+  @@index([runId])
+  @@index([trackId])
+  @@index([artistId])
+  @@map("royalty_eligible_streams")
 }

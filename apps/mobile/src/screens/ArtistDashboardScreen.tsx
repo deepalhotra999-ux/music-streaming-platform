@@ -212,6 +212,17 @@ export function ArtistDashboardScreen() {
             testID="view-analytics-button"
           />
           <Button
+            title="View royalties"
+            variant="secondary"
+            onPress={() =>
+              router.push({
+                pathname: '/(artist)/royalties',
+                params: selectedId ? { artistId: selectedId } : {},
+              })
+            }
+            testID="view-royalties-button"
+          />
+          <Button
             title="Edit profile"
             variant="secondary"
             onPress={() => router.push('/(artist)/profile')}

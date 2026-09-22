@@ -20,6 +20,7 @@ export {
   getArtistTrend,
   getPlatformOverview,
 } from './analytics';
+export * from './royalties';
 export type {
   AlbumAnalytics,
   AnalyticsOverview,

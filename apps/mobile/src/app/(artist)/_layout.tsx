@@ -29,6 +29,7 @@ export default function ArtistLayout() {
       <Stack.Screen name="albums" options={{ title: 'Manage albums' }} />
       <Stack.Screen name="tracks" options={{ title: 'Manage tracks' }} />
       <Stack.Screen name="analytics" options={{ title: 'Analytics' }} />
+      <Stack.Screen name="royalties" options={{ title: 'Royalties' }} />
     </Stack>
   );
 }
