@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Phase 24 — Android Auto app descriptor (phone-projected).
+
+  Declares this app as a media app to the Android Auto host. Only the
+  "media" category is used: no navigation, messaging, or other car app
+  types, and nothing Automotive-OS specific.
+-->
+<automotiveApp>
+    <uses name="media" />
+</automotiveApp>

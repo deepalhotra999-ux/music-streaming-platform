@@ -1,0 +1,37 @@
+// Phase 24 — local Expo module: Android Auto (phone-projected) media service.
+//
+// Modeled on expo-audio's build.gradle (same Expo SDK, same Media3 major
+// line). The Media3 version is pinned to exactly what expo-audio 57.0.5
+// ships (1.9.0) so the session library never conflicts with the audio
+// driver's copy at Gradle resolution time.
+
+plugins {
+  id 'com.android.library'
+  id 'expo-module-gradle-plugin'
+}
+
+group = 'com.musicstreaming.waveform.auto'
+version = '0.1.0'
+
+android {
+  namespace "com.musicstreaming.waveform.auto"
+  defaultConfig {
+    versionCode 1
+    versionName "0.1.0"
+  }
+
+  compileOptions {
+    targetCompatibility JavaVersion.VERSION_1_8
+  }
+}
+
+repositories {
+  mavenCentral()
+}
+
+dependencies {
+  // Must match expo-audio's androidxMedia3Version (1.9.0). Only the
+  // session artifact is needed: the module implements a virtual Player
+  // projection and never decodes audio itself (ADR-018).
+  implementation "androidx.media3:media3-session:1.9.0"
+}

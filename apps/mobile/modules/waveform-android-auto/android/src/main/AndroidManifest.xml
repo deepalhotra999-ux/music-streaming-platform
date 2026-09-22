@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Phase 24 — Android Auto (phone-projected) media declaration.
+
+  This library manifest merges into the app manifest at Gradle build time.
+  It declares ONLY the phone-projected Android Auto media capability:
+
+  - WaveformMediaLibraryService with the Media3 MediaLibraryService intent
+    filter (plus the legacy browse-service action for older head units).
+  - The automotive_app_desc.xml descriptor advertising the "media" app type.
+
+  Deliberately absent:
+  - No <uses-feature android.hardware.type.automotive> (that targets
+    Android Automotive OS builds — explicitly out of scope for Phase 24).
+  - No extra permissions. Background audio permissions
+    (FOREGROUND_SERVICE, FOREGROUND_SERVICE_MEDIA_PLAYBACK) come from the
+    expo-audio config plugin (Phase 10); no microphone permission exists.
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <application>
+        <service
+            android:name="com.musicstreaming.waveform.auto.WaveformMediaLibraryService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaLibraryService" />
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+        </service>
+
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+    </application>
+
+</manifest>

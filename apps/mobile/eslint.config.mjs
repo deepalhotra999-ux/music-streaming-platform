@@ -55,6 +55,27 @@ export default [
     },
   },
   {
+    // Phase 24 — native-module static tests are plain Node, like the
+    // CarPlay plugin tests above.
+    files: ['modules/waveform-android-auto/__tests__/**/*.js'],
+    languageOptions: {
+      globals: {
+        jest: 'readonly',
+        describe: 'readonly',
+        test: 'readonly',
+        expect: 'readonly',
+        require: 'readonly',
+        module: 'writable',
+        process: 'readonly',
+        __dirname: 'readonly',
+        structuredClone: 'readonly',
+      },
+    },
+    rules: {
+      '@typescript-eslint/no-require-imports': 'off',
+    },
+  },
+  {
     files: ['jest.setup.js'],
     languageOptions: {
       globals: {
