@@ -1,9 +1,12 @@
 // Phase 5 — Profile placeholder: account summary + sign out.
 // Phase 18 — adds the subscription section (server-reported state only).
 // Phase 19 — adds the store purchase sheet (expo-iap + server verification).
+// Phase 20 — adds a Manage subscription entry point to the full
+// subscription screen (plans, restore, refresh, store management).
 
 import { useState } from 'react';
 import { Modal, StyleSheet, Text, View } from 'react-native';
+import { router } from 'expo-router';
 import { apiErrorMessage } from '../api';
 import { useAuth } from '../auth';
 import { Button, Screen } from '../components';
@@ -88,6 +91,20 @@ export function ProfileScreen() {
           />
         </View>
       )}
+
+      {/* Phase 20 — full subscription management (plans, restore, refresh,
+          store billing). The screen reads server state; it never decides
+          entitlement. */}
+      <View style={styles.subscribeRow}>
+        <Button
+          title="Manage subscription"
+          testID="manage-subscription-button"
+          variant="secondary"
+          accessibilityLabel="Manage subscription"
+          accessibilityHint="Opens subscription details, plans, restore, and store billing management"
+          onPress={() => router.push('/subscription')}
+        />
+      </View>
 
       <Modal
         visible={purchaseVisible}

@@ -66,6 +66,7 @@ function RootNavigator() {
           <Stack.Screen name="(catalog)" />
           <Stack.Screen name="(artist)" />
           <Stack.Screen name="player" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="subscription" options={{ presentation: 'modal' }} />
         </Stack.Protected>
       </Stack>
     </>

@@ -18,6 +18,10 @@ interface ButtonProps {
   disabled?: boolean;
   testID?: string;
   style?: StyleProp<ViewStyle>;
+  /** Phase 20 — accessibility label for screen readers. */
+  accessibilityLabel?: string;
+  /** Phase 20 — accessibility hint describing the action's result. */
+  accessibilityHint?: string;
 }
 
 export function Button({
@@ -29,12 +33,16 @@ export function Button({
   disabled = false,
   testID,
   style,
+  accessibilityLabel,
+  accessibilityHint,
 }: ButtonProps) {
   const isDisabled = disabled || loading;
   return (
     <Pressable
       testID={testID}
       accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? title}
+      accessibilityHint={accessibilityHint}
       accessibilityState={{ disabled: isDisabled, busy: loading }}
       onPress={onPress}
       disabled={isDisabled}
@@ -53,7 +61,9 @@ export function Button({
           color={variant === 'primary' ? colors.onPrimary : colors.text}
         />
       ) : (
-        <Text style={[styles.label, styles[`${variant}Label`], styles[`${size}Label`]]}>{title}</Text>
+        <Text style={[styles.label, styles[`${variant}Label`], styles[`${size}Label`]]}>
+          {title}
+        </Text>
       )}
     </Pressable>
   );

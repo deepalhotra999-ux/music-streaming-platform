@@ -252,4 +252,87 @@ describe('usePurchaseFlow', () => {
     expect(result.current.error).toMatch(/No restorable purchases/);
     expect(api.post).not.toHaveBeenCalled();
   });
+
+  // Phase 20 — silent purchase recovery.
+
+  it('recoverPending verifies store purchases silently and returns true', async () => {
+    const api = createMockApi();
+    const iap = createMockIap();
+    iap.getAvailablePurchases.mockResolvedValue([{ transactionId: 'txn-pending-1' }]);
+    const onVerified = jest.fn();
+    const { result } = renderHook(() => usePurchaseFlow(api, onVerified, { iap }));
+
+    let recovered: boolean = false;
+    await act(async () => {
+      recovered = await result.current.recoverPending();
+    });
+
+    expect(recovered).toBe(true);
+    expect(api.post).toHaveBeenCalledWith('/v1/subscriptions/verify-purchase', {
+      provider: 'apple',
+      purchaseToken: 'txn-pending-1',
+    });
+    // Caller refreshes server state; the hook itself stays out of the UI.
+    expect(onVerified).toHaveBeenCalled();
+    expect(result.current.state).toBe('idle');
+    expect(result.current.error).toBeNull();
+  });
+
+  it('recoverPending is silent when there is nothing to recover', async () => {
+    const api = createMockApi();
+    const iap = createMockIap();
+    iap.getAvailablePurchases.mockResolvedValue([]);
+    const onVerified = jest.fn();
+    const { result } = renderHook(() => usePurchaseFlow(api, onVerified, { iap }));
+
+    let recovered: boolean = true;
+    await act(async () => {
+      recovered = await result.current.recoverPending();
+    });
+
+    expect(recovered).toBe(false);
+    expect(api.post).not.toHaveBeenCalled();
+    expect(onVerified).not.toHaveBeenCalled();
+    // No error state — the normal case stays quiet.
+    expect(result.current.state).toBe('idle');
+    expect(result.current.error).toBeNull();
+  });
+
+  it('recoverPending returns false when the store is unavailable', async () => {
+    const api = createMockApi();
+    const iap = createMockIap();
+    iap.getAvailablePurchases.mockRejectedValue(new Error('Store unavailable'));
+    const { result } = renderHook(() => usePurchaseFlow(api, undefined, { iap }));
+
+    let recovered: boolean = true;
+    await act(async () => {
+      recovered = await result.current.recoverPending();
+    });
+
+    expect(recovered).toBe(false);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('recoverPending skips bad tokens without blocking the rest', async () => {
+    const api = createMockApi({
+      post: jest.fn(async (_path: string, body: { purchaseToken: string }) => {
+        if (body.purchaseToken === 'txn-bad') throw new Error('Invalid token');
+        return { subscription: { id: 'sub-1' }, created: true };
+      }) as never,
+    });
+    const iap = createMockIap();
+    iap.getAvailablePurchases.mockResolvedValue([
+      { transactionId: 'txn-bad' },
+      { transactionId: 'txn-good' },
+    ]);
+    const { result } = renderHook(() => usePurchaseFlow(api, undefined, { iap }));
+
+    let recovered: boolean = false;
+    await act(async () => {
+      recovered = await result.current.recoverPending();
+    });
+
+    expect(recovered).toBe(true);
+    expect(api.post).toHaveBeenCalledTimes(2);
+  });
 });

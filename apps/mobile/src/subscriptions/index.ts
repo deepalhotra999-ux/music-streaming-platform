@@ -6,3 +6,6 @@ export type { SubscriptionLoadState, UseSubscriptionResult } from './useSubscrip
 export { usePurchaseFlow } from './purchases';
 export type { PurchaseFlowState, PurchaseFlowResult } from './purchases';
 export { PurchaseSheet } from './PurchaseSheet';
+// Phase 20 — subscription management screen + store deep links.
+export { SubscriptionScreen } from './SubscriptionScreen';
+export { openStoreSubscriptionManagement } from './manageSubscription';

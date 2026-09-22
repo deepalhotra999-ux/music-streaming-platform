@@ -60,6 +60,16 @@ export interface PurchaseFlowResult {
   purchase: (storeProductId: string) => void;
   /** Restore previous purchases (sends each token to the backend). */
   restore: () => void;
+  /**
+   * Phase 20 — silent purchase recovery. Checks the store for available
+   * purchases and reconciles each with the backend, then refreshes server
+   * state if anything verified. Unlike `restore`, this is silent when
+   * there is nothing to recover (the normal case) — it never sets an
+   * error for "no purchases found". Safe to run on screen mount / login.
+   *
+   * Returns true if at least one purchase was verified and reconciled.
+   */
+  recoverPending: () => Promise<boolean>;
   /** Reset to idle (e.g. after dismissing the sheet). */
   reset: () => void;
 }
@@ -228,6 +238,38 @@ export function usePurchaseFlow(
     pendingPurchase.current = null;
   }, []);
 
+  /**
+   * Phase 20 — silent recovery. Reconciles store-side purchases with the
+   * backend without disturbing the UI unless something was actually
+   * recovered. Never assumes entitlement from local purchase state — every
+   * token goes through server verification, and the caller refreshes server
+   * state via `onVerified`.
+   */
+  const recoverPending = useCallback(async (): Promise<boolean> => {
+    if (!api) return false;
+    try {
+      const purchases = await iap.getAvailablePurchases();
+      let verifiedAny = false;
+      for (const p of purchases) {
+        try {
+          const ok = await verifyToken(p);
+          verifiedAny = verifiedAny || ok;
+        } catch {
+          // A single bad token must not block the rest, and recovery
+          // stays silent — the user can retry explicitly via Restore.
+        }
+      }
+      if (verifiedAny && mounted.current) {
+        onVerified?.();
+      }
+      return verifiedAny;
+    } catch {
+      // Store unavailable during recovery is not an error the user needs
+      // to see on every screen mount; explicit Restore surfaces errors.
+      return false;
+    }
+  }, [api, iap, verifyToken, onVerified]);
+
   // Wire store callbacks once. A purchase callback alone NEVER grants
   // entitlement — it only triggers server verification.
   useEffect(() => {
@@ -266,5 +308,5 @@ export function usePurchaseFlow(
     // only deps; the listener closure must not re-register on product changes.
   }, [iap, verifyToken, onVerified, state]);
 
-  return { state, products, storeDetails, error, load, purchase, restore, reset };
+  return { state, products, storeDetails, error, load, purchase, restore, recoverPending, reset };
 }
