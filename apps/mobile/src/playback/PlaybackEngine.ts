@@ -55,6 +55,25 @@ function toNowPlaying(track: QueueTrack): NowPlayingMetadata {
   };
 }
 
+/** Phase 25 — offline playback hooks. The engine consults the offline
+ *  source BEFORE minting a streaming session; a hit plays the local file
+ *  with no network and no playback session. Events for offline playback
+ *  are handed to `enqueueEvent` for persisted, idempotent upload later.
+ *  The engine still owns exactly one driver/player either way. */
+export interface OfflinePlaybackHooks {
+  resolveTrack: (trackId: string) => Promise<{
+    uri: string;
+    authorizationId: string;
+    audioVersion: number;
+  } | null>;
+  enqueueEvent: (event: {
+    offlineAuthorizationId: string;
+    offlineSessionKey: string;
+    type: PlayEventType;
+    positionMs: number;
+  }) => void;
+}
+
 export interface PlaybackEngineOptions {
   api: ApiClient;
   /** API origin, e.g. getApiBaseUrl(). Session hlsUrl values are relative. */
@@ -64,6 +83,13 @@ export interface PlaybackEngineOptions {
   heartbeatIntervalMs?: number;
   /** Optional diagnostics hook; the engine never throws from event paths. */
   onEngineError?: (error: unknown, context: string) => void;
+  /** Phase 25 — when omitted, the engine is online-only (previous behavior). */
+  offline?: OfflinePlaybackHooks;
+}
+
+/** Non-cryptographic grouping key for one offline playback session. */
+function newOfflineSessionKey(): string {
+  return `off-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
 interface ActiveSession {
@@ -101,6 +127,12 @@ export class PlaybackEngine {
   private initialized = false;
 
   private readonly listeners = new Set<EngineListener>();
+  private readonly offline?: OfflinePlaybackHooks;
+  /**
+   * Phase 25 — set when the current track plays from an offline download.
+   * Replaces `session` for event attribution; cleared on teardown.
+   */
+  private offlineContext: { authorizationId: string; sessionKey: string } | null = null;
 
   constructor(options: PlaybackEngineOptions) {
     this.api = options.api;
@@ -108,6 +140,7 @@ export class PlaybackEngine {
     this.driver = options.driver;
     this.heartbeatIntervalMs = options.heartbeatIntervalMs ?? HEARTBEAT_INTERVAL_MS;
     this.onEngineError = options.onEngineError ?? (() => undefined);
+    this.offline = options.offline;
   }
 
   /** One-time native audio-mode setup. Called by the provider on mount. */
@@ -141,6 +174,9 @@ export class PlaybackEngine {
       isBuffering: this.isBuffering,
       error: this.error,
       locked: this.locked,
+      // Phase 25 — true when the current track plays from a local
+      // download (no streaming session, events queued for later upload).
+      isOfflinePlayback: this.offlineContext !== null,
       // With repeat-all the edges wrap, so next/previous stay available
       // at the end/head of the queue.
       canNext:
@@ -406,32 +442,49 @@ export class PlaybackEngine {
     this.setState('loading');
     this.emit();
 
-    let sessionId: string;
-    let hlsUrl: string;
-    try {
-      const session = await createPlaybackSession(this.api, track.trackId);
-      sessionId = session.id;
-      hlsUrl = session.hlsUrl;
-    } catch (error) {
-      if (generation !== this.loadGeneration) {
-        return; // superseded by a newer load (or stop/destroy)
-      }
-      // Phase 18 — subscription denial is a distinct locked state, not a
-      // generic playback error. The track stays queued; the UI offers the
-      // subscription screen instead of a retry.
-      if (error instanceof ApiError && error.isSubscriptionRequired) {
-        this.locked = true;
-      }
-      this.fail(apiErrorMessage(error));
-      return;
-    }
+    let sessionId: string | null = null;
+    let mediaUri: string;
+    // Phase 25 — offline first: a valid local download plays with no
+    // network and no streaming session. The authorization gate lives in
+    // resolveTrack (SecureStore record + file existence, fail-closed).
+    const offlineSource = this.offline
+      ? await this.offline.resolveTrack(track.trackId).catch(() => null)
+      : null;
     if (generation !== this.loadGeneration) {
-      return; // superseded while the session was minted
+      return; // superseded while resolving the offline source
     }
-    this.session = { id: sessionId, trackId: track.trackId };
-    // ADR-006: hlsUrl is a relative, session-scoped path. Resolve it against
-    // the API origin. The raw token lives only inside this URL.
-    const uri = `${this.baseUrl}${hlsUrl}`;
+    if (offlineSource) {
+      this.offlineContext = {
+        authorizationId: offlineSource.authorizationId,
+        sessionKey: newOfflineSessionKey(),
+      };
+      mediaUri = offlineSource.uri;
+    } else {
+      this.offlineContext = null;
+      try {
+        const session = await createPlaybackSession(this.api, track.trackId);
+        sessionId = session.id;
+        // ADR-006: hlsUrl is a relative, session-scoped path. Resolve it
+        // against the API origin. The raw token lives only inside this URL.
+        mediaUri = `${this.baseUrl}${session.hlsUrl}`;
+      } catch (error) {
+        if (generation !== this.loadGeneration) {
+          return; // superseded by a newer load (or stop/destroy)
+        }
+        // Phase 18 — subscription denial is a distinct locked state, not a
+        // generic playback error. The track stays queued; the UI offers the
+        // subscription screen instead of a retry.
+        if (error instanceof ApiError && error.isSubscriptionRequired) {
+          this.locked = true;
+        }
+        this.fail(apiErrorMessage(error));
+        return;
+      }
+      if (generation !== this.loadGeneration) {
+        return; // superseded while the session was minted
+      }
+      this.session = { id: sessionId, trackId: track.trackId };
+    }
     // Set the resume target BEFORE load: the driver publishes its initial
     // status synchronously during load(), so a later assignment would be
     // missed by handleDriverStatus. A user seek issued while the session
@@ -443,7 +496,7 @@ export class PlaybackEngine {
       this.unsubscribeDriver = this.driver.onStatusChange((status) =>
         this.handleDriverStatus(status),
       );
-      await this.driver.load(uri);
+      await this.driver.load(mediaUri);
     } catch (error) {
       if (generation !== this.loadGeneration) {
         return;
@@ -477,11 +530,13 @@ export class PlaybackEngine {
     // track is genuinely gone during the load gap (a new registration
     // follows in loadTrackAt). Skipped when no track was ever registered.
     // The driver destroys the native player: no second instance survives.
-    if (this.session) {
+    // Phase 25 — offline playback registers now-playing too; clear it the same.
+    if (this.session || this.offlineContext) {
       this.driver.setNowPlaying(null);
     }
     this.driver.destroy();
     this.session = null;
+    this.offlineContext = null;
     this.startedReported = false;
     this.finishedNaturally = false;
     this.pendingSeekMs = null;
@@ -502,7 +557,9 @@ export class PlaybackEngine {
   // -- driver status ---------------------------------------------------------
 
   private handleDriverStatus(status: DriverStatus): void {
-    if (!this.session) {
+    // Phase 25 — offline playback has no streaming session; the offline
+    // context is the equivalent "a track is loaded" signal.
+    if (!this.session && !this.offlineContext) {
       return; // stale update from a torn-down track
     }
     this.positionMs = Math.max(0, Math.round(status.currentTimeSec * 1000));
@@ -586,20 +643,24 @@ export class PlaybackEngine {
     this.error = message;
     this.setState('error');
     this.emit();
-    if (this.session) {
-      this.reportEvent('ERROR', this.positionMs);
-    }
+    // Phase 25 — reportEvent routes to the offline queue when an offline
+    // context is active, and no-ops when nothing is attributed. Calling it
+    // unconditionally keeps ERROR telemetry for both paths.
+    this.reportEvent('ERROR', this.positionMs);
   }
 
   // -- play events -----------------------------------------------------------
 
   /** Start the heartbeat cadence if it is not already running. */
   private ensureHeartbeat(): void {
-    if (this.heartbeatTimer !== null || !this.session || this.finishedNaturally) {
+    // Phase 25 — heartbeats run for streaming sessions AND offline
+    // playback (offline events queue locally until sync).
+    const attributed = this.session !== null || this.offlineContext !== null;
+    if (this.heartbeatTimer !== null || !attributed || this.finishedNaturally) {
       return;
     }
     this.heartbeatTimer = setInterval(() => {
-      if (this.session && !this.finishedNaturally) {
+      if ((this.session || this.offlineContext) && !this.finishedNaturally) {
         this.reportEvent('HEARTBEAT', this.positionMs);
       }
     }, this.heartbeatIntervalMs);
@@ -614,15 +675,29 @@ export class PlaybackEngine {
 
   /** Fire-and-forget: telemetry failures must never break playback. */
   private reportEvent(type: PlayEventType, positionMs: number): void {
+    const pos = Math.max(0, Math.round(positionMs));
+    // Phase 25 — offline playback attributes to the offline session
+    // context; events are queued locally for idempotent upload later.
+    if (this.offlineContext && this.offline) {
+      try {
+        this.offline.enqueueEvent({
+          offlineAuthorizationId: this.offlineContext.authorizationId,
+          offlineSessionKey: this.offlineContext.sessionKey,
+          type,
+          positionMs: pos,
+        });
+      } catch (error) {
+        this.onEngineError(error, `enqueueOfflineEvent(${type})`);
+      }
+      return;
+    }
     const session = this.session;
     if (!session) {
       return;
     }
-    reportPlayEvent(this.api, session.id, type, Math.max(0, Math.round(positionMs))).catch(
-      (error: unknown) => {
-        this.onEngineError(error, `reportPlayEvent(${type})`);
-      },
-    );
+    reportPlayEvent(this.api, session.id, type, pos).catch((error: unknown) => {
+      this.onEngineError(error, `reportPlayEvent(${type})`);
+    });
   }
 
   private setState(state: PlaybackState): void {

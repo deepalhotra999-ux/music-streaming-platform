@@ -20,6 +20,7 @@ import { likesRoutes } from '../modules/likes/routes.js';
 import { followsRoutes } from '../modules/follows/routes.js';
 import { historyRoutes } from '../modules/history/routes.js';
 import { streamingRoutes } from '../modules/streaming/routes.js';
+import { offlineRoutes } from '../modules/offline/routes.js';
 import { ingestionRoutes } from '../modules/ingestion/routes.js';
 import { analyticsRoutes } from '../modules/analytics/routes.js';
 import { auditRoutes } from '../modules/audit/routes.js';
@@ -104,6 +105,7 @@ export async function buildApp(config: Config): Promise<FastifyInstance> {
     await followsRoutes(instance, config);
     await historyRoutes(instance, config);
     await streamingRoutes(instance, config);
+    await offlineRoutes(instance, config);
     await ingestionRoutes(instance, config);
     await analyticsRoutes(instance, config);
     await auditRoutes(instance, config);

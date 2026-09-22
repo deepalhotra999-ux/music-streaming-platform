@@ -65,6 +65,11 @@ export interface EngineSnapshot {
    * renders locked playback instead of a generic error.
    */
   locked: boolean;
+  /**
+   * Phase 25 — true when the current track plays from a local download
+   * (no streaming session; events are queued for later upload).
+   */
+  isOfflinePlayback: boolean;
   canNext: boolean;
   canPrevious: boolean;
   /** Repeat mode; owned by the engine because it controls auto-advance. */

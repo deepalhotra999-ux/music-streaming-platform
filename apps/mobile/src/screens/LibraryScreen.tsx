@@ -37,6 +37,9 @@ import {
 } from '../catalog';
 import { Button, EmptyState, Screen } from '../components';
 import { LikeButton, PlaylistForm, type PlaylistFormValues } from '../library';
+import { DownloadButton } from '../offline/components/DownloadButton';
+import { useOffline } from '../offline/OfflineProvider';
+import { formatBytes } from '../offline/format';
 import { colors, fontSize, fontWeight, spacing } from '../theme';
 
 const PREVIEW_LIMIT = 5;
@@ -96,6 +99,7 @@ export function LibraryScreen() {
   const { api } = useAuth();
   const router = useRouter();
   const { playTracks, addToQueue } = useQueueActions();
+  const offline = useOffline();
   const [refreshKey, setRefreshKey] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [formVisible, setFormVisible] = useState(false);
@@ -164,6 +168,39 @@ export function LibraryScreen() {
           <Text style={styles.headingText}>Your Library</Text>
         </View>
 
+        {/* Phase 25 — offline downloads overview. */}
+        <View style={styles.section} testID="library-section-downloads">
+          <SectionHeader
+            title="Downloads"
+            onSeeAll={() => router.push('/downloads')}
+            testID="library-section-downloads-header"
+          />
+          {offline.downloads.length === 0 ? (
+            <EmptyState
+              title="Nothing downloaded"
+              message="Download tracks to listen offline — no network needed."
+            />
+          ) : (
+            <Pressable
+              onPress={() => router.push('/downloads')}
+              accessibilityRole="button"
+              accessibilityLabel="Open downloads"
+              testID="library-downloads-summary"
+              style={({ pressed }) => [pressed && styles.pressed]}
+            >
+              <View style={styles.downloadsSummaryRow}>
+                <Ionicons name="arrow-down-circle" size={fontSize.xl} color={colors.primary} />
+                <Text style={styles.downloadsSummaryText}>
+                  {offline.downloads.filter((d) => d.status === 'complete').length} of{' '}
+                  {offline.downloads.length} downloaded
+                  {offline.usedBytes !== null ? ` · ${formatBytes(offline.usedBytes)}` : ''}
+                </Text>
+                <Ionicons name="chevron-forward" size={fontSize.lg} color={colors.textMuted} />
+              </View>
+            </Pressable>
+          )}
+        </View>
+
         <Section
           title="Liked tracks"
           testID="library-section-liked"
@@ -186,6 +223,7 @@ export function LibraryScreen() {
                     onLongPress={() => void addToQueue(item.track)}
                   />
                 </View>
+                <DownloadButton track={item.track} />
                 <LikeButton trackId={item.trackId} />
               </View>
             ))
@@ -214,6 +252,7 @@ export function LibraryScreen() {
                     onLongPress={() => void addToQueue(item.track)}
                   />
                 </View>
+                <DownloadButton track={item.track} />
                 <LikeButton trackId={item.trackId} />
               </View>
             ))
@@ -329,6 +368,18 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.bold,
   },
   section: { marginTop: spacing.lg },
+  downloadsSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
+  },
+  downloadsSummaryText: {
+    flex: 1,
+    color: colors.text,
+    fontSize: fontSize.md,
+  },
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',

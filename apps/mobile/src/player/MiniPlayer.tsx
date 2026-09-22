@@ -19,6 +19,8 @@ export interface MiniPlayerViewProps {
   state: PlaybackState;
   positionMs: number;
   durationMs: number;
+  /** Phase 25 — show the offline badge when playing a local download. */
+  isOfflinePlayback?: boolean;
   onToggle: () => void;
   onClose: () => void;
   onExpand: () => void;
@@ -29,6 +31,7 @@ export function MiniPlayerView({
   state,
   positionMs,
   durationMs,
+  isOfflinePlayback = false,
   onToggle,
   onClose,
   onExpand,
@@ -63,6 +66,7 @@ export function MiniPlayerView({
           </Text>
           <Text style={styles.artist} numberOfLines={1}>
             {track.artistName}
+            {isOfflinePlayback ? ' · Offline' : ''}
           </Text>
         </View>
         {busy ? (
@@ -120,6 +124,7 @@ export function MiniPlayer() {
       state={playback.state}
       positionMs={playback.positionMs}
       durationMs={playback.durationMs}
+      isOfflinePlayback={playback.isOfflinePlayback}
       onToggle={playback.toggle}
       onClose={playback.stop}
       onExpand={() => router.push('/player')}

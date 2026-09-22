@@ -156,6 +156,7 @@ model User {
   playbackSessions   PlaybackSession[]
   auditEvents        AdminAuditLog[]
   playEvents         PlayEvent[]
+  offlineDownloadAuthorizations OfflineDownloadAuthorization[]
   reportsCreated     ModerationReport[] @relation("ModerationReportCreatedBy")
   reportsReviewed    ModerationReport[] @relation("ModerationReportReviewedBy")
 
@@ -245,6 +246,11 @@ model Track {
   audioError     String?           @map("audio_error")
   audioSourceKey String?           @map("audio_source_key")
   audioReadyAt   DateTime?         @map("audio_ready_at") @db.Timestamptz(6)
+  // Phase 25 — stable audio version. Incremented on every successful
+  // re-ingestion where audio was already READY (a genuine replacement).
+  // Offline download authorizations pin this version; a mismatch marks
+  // the local download stale so it can never silently play outdated audio.
+  audioVersion   Int               @default(1) @map("audio_version")
   createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
   deletedAt   DateTime?   @map("deleted_at") @db.Timestamptz(6)
@@ -258,6 +264,7 @@ model Track {
   playbackSessions PlaybackSession[]
   royaltyEarnings  RoyaltyEarning[] @relation("TrackRoyaltyEarnings")
   royaltyEligibleStreams RoyaltyEligibleStream[]
+  offlineDownloadAuthorizations OfflineDownloadAuthorization[]
 
   @@index([artistId])
   @@index([albumId, trackNumber])
@@ -464,7 +471,11 @@ model PlaybackSession {
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   trackId   String   @map("track_id") @db.Uuid
   track     Track    @relation(fields: [trackId], references: [id], onDelete: Restrict)
-  tokenHash String   @unique @map("token_hash")
+  // Phase 25 — null for synthetic offline sessions (no delivery token).
+  tokenHash String?  @unique @map("token_hash")
+  // Phase 25 — identifies the synthetic session for one offline playback
+  // session; null for online sessions. Unique per user.
+  offlineSessionKey String? @map("offline_session_key")
   expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
@@ -473,6 +484,7 @@ model PlaybackSession {
   @@index([userId])
   @@index([expiresAt])
   @@index([trackId, createdAt])
+  @@unique([userId, offlineSessionKey])
   @@map("playback_sessions")
 }
 
@@ -489,6 +501,10 @@ enum PlayEventType {
 
 model PlayEvent {
   id         String        @id @default(uuid()) @db.Uuid
+  // Phase 25 — sessionId is always set. Events uploaded from offline
+  // playback attach to a synthetic server-side PlaybackSession created for
+  // their offlineSessionKey, so Phase 15 session/stream analytics keep
+  // working unchanged. The authorization linkage is kept alongside.
   sessionId  String        @map("session_id") @db.Uuid
   session    PlaybackSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   userId     String        @map("user_id") @db.Uuid
@@ -497,11 +513,56 @@ model PlayEvent {
   eventType  PlayEventType @map("event_type")
   positionMs Int?          @map("position_ms")
   createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  // Phase 25 — offline event sync. offlineEventKey is a client-generated
+  // UUID; its unique constraint is the idempotency mechanism for uploads
+  // retried after network loss. offlineSessionKey groups the events of one
+  // offline playback session (the "stream" unit for royalty semantics).
+  // occurredAt is when playback actually happened offline; for offline
+  // events createdAt is set from occurredAt so analytics bucket on actual
+  // playback time, not upload time.
+  offlineEventKey       String?  @unique @map("offline_event_key")
+  offlineAuthorizationId String? @map("offline_authorization_id") @db.Uuid
+  offlineAuthorization  OfflineDownloadAuthorization? @relation(fields: [offlineAuthorizationId], references: [id], onDelete: SetNull)
+  offlineSessionKey     String?  @map("offline_session_key")
+  occurredAt            DateTime? @map("occurred_at") @db.Timestamptz(6)
 
   @@index([sessionId, createdAt])
   @@index([trackId, createdAt])
   @@index([createdAt])
+  @@index([offlineAuthorizationId])
+  @@index([userId, offlineSessionKey])
   @@map("play_events")
+}
+
+// Phase 25 — offline downloads. A download authorization is a
+// server-minted grant, distinct from playback sessions. It binds an
+// authenticated user to a track at a pinned audio version, with two
+// separate lifetimes (ADR-019):
+// - downloadTokenExpiresAt: short delivery window for the opaque token
+//   that fetches HLS segments (hash stored, raw token shown once).
+// - expiresAt: the offline entitlement window (30 days, sliding on
+//   successful revalidation). Offline playback is allowed only inside it.
+model OfflineDownloadAuthorization {
+  id                     String    @id @default(uuid()) @db.Uuid
+  userId                 String    @map("user_id") @db.Uuid
+  user                   User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trackId                String    @map("track_id") @db.Uuid
+  track                  Track     @relation(fields: [trackId], references: [id], onDelete: Cascade)
+  audioVersion           Int       @map("audio_version")
+  tokenHash              String    @unique @map("token_hash")
+  downloadTokenExpiresAt DateTime  @map("download_token_expires_at") @db.Timestamptz(6)
+  issuedAt               DateTime  @default(now()) @map("issued_at") @db.Timestamptz(6)
+  expiresAt              DateTime  @map("expires_at") @db.Timestamptz(6)
+  revokedAt              DateTime? @map("revoked_at") @db.Timestamptz(6)
+  lastValidatedAt        DateTime? @map("last_validated_at") @db.Timestamptz(6)
+  createdAt              DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  playEvents PlayEvent[]
+
+  @@unique([userId, trackId])
+  @@index([userId, expiresAt])
+  @@index([expiresAt])
+  @@map("offline_download_authorizations")
 }
 
 // Phase 16 — admin audit foundation. Append-only record of privileged admin

@@ -12,6 +12,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import type { ReactNode } from 'react';
 import { AuthProvider, useAuth } from '../auth';
 import { PlaybackProvider } from '../playback';
+import { OfflineProvider } from '../offline';
 import { LibraryProvider } from '../library';
 import { MiniPlayerHost } from '../player';
 import { CarPlayHost } from '../carplay/CarPlayHost';
@@ -36,9 +37,13 @@ function PlaybackShell({ children }: { children: ReactNode }) {
   }
   return (
     <PlaybackProvider api={api}>
-      <LibraryProvider api={api}>
-        {children}
-        <MiniPlayerHost />
+      {/* Phase 25 — offline downloads + offline playback live here: the
+          download manager, crash recovery, and connectivity sync are all
+          per-user and reset on sign-out, exactly like playback. */}
+      <OfflineProvider api={api}>
+        <LibraryProvider api={api}>
+          {children}
+          <MiniPlayerHost />
         {/* Phase 23 — headless CarPlay controller: drives the native
             CarPlay templates with the shared PlaybackEngine. No UI here,
             no second player. Unmounts with the provider on sign-out. */}
@@ -47,7 +52,8 @@ function PlaybackShell({ children }: { children: ReactNode }) {
             MediaLibraryService from the shared PlaybackEngine. No UI here,
             no second player. Unmounts with the provider on sign-out. */}
         <AndroidAutoHost />
-      </LibraryProvider>
+        </LibraryProvider>
+      </OfflineProvider>
     </PlaybackProvider>
   );
 }

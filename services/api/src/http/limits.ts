@@ -12,3 +12,10 @@ export function apiRateLimit(config: Config): { max: number; timeWindow: number 
 export function streamingRateLimit(config: Config): { max: number; timeWindow: number } {
   return { max: config.rateLimits.streaming, timeWindow: config.rateLimits.windowMs };
 }
+
+/** Phase 25 — tight bucket for download authorization issuance: each call
+ *  mints a delivery grant, so bulk farming must be expensive. Segment
+ *  fetching itself uses the generous streaming bucket. */
+export function offlineAuthorizeRateLimit(config: Config): { max: number; timeWindow: number } {
+  return { max: config.rateLimits.offlineAuthorize, timeWindow: config.rateLimits.windowMs };
+}

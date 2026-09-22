@@ -14,6 +14,9 @@ export interface RateLimitConfig {
   api: number;
   /** HLS manifest/segment delivery — generous: a player fetches many segments */
   streaming: number;
+  /** Phase 25 — download authorization issuance. Tight: authorizations are
+   *  cheap to request but must not be farmable in bulk. */
+  offlineAuthorize: number;
   /** window length in milliseconds */
   windowMs: number;
 }
@@ -40,6 +43,17 @@ export interface StreamingConfig {
   /** Lifetime of a playback session token, in seconds. */
   playbackSessionTtlSeconds: number;
   s3: S3Config;
+}
+
+/** Phase 25 — offline downloads & offline playback. */
+export interface OfflineConfig {
+  /** Lifetime of a download delivery token, in seconds. The token only
+   *  fetches HLS segments; it is discarded after the download completes. */
+  downloadTokenTtlSeconds: number;
+  /** Offline entitlement window, in seconds. Offline playback is allowed
+   *  only inside [issuedAt, expiresAt]; the window slides forward on
+   *  successful server-side revalidation while the user stays entitled. */
+  authorizationTtlSeconds: number;
 }
 
 /** Phase 14 — artist audio ingestion (upload + transcode pipeline). */
@@ -115,6 +129,8 @@ export interface Config {
   streaming: StreamingConfig;
   ingestion: IngestionConfig;
   subscriptions: SubscriptionsConfig;
+  /** Phase 25 — offline downloads & offline playback. */
+  offline: OfflineConfig;
 }
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
@@ -161,6 +177,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       logout: int(env, 'RATE_LIMIT_LOGOUT', 60),
       api: int(env, 'RATE_LIMIT_API', 300),
       streaming: int(env, 'RATE_LIMIT_STREAMING', 600),
+      offlineAuthorize: int(env, 'RATE_LIMIT_OFFLINE_AUTHORIZE', 60),
       windowMs: int(env, 'RATE_LIMIT_WINDOW_MS', 60_000),
     },
     streaming: {
@@ -180,6 +197,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       devEnabled: parseDevSubscriptions(env),
       apple: parseAppleStore(env),
       google: parseGooglePlay(env),
+    },
+    offline: {
+      downloadTokenTtlSeconds: int(env, 'OFFLINE_DOWNLOAD_TOKEN_TTL_SECONDS', 3600), // 1 hour
+      authorizationTtlSeconds: int(env, 'OFFLINE_AUTHORIZATION_TTL_SECONDS', 30 * 24 * 3600), // 30 days
     },
   };
 }

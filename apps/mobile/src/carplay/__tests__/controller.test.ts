@@ -26,6 +26,8 @@ import type {
 } from 'waveform-carplay';
 import { CarPlayController } from '../controller';
 import { setActiveEngine } from '../../playback/engineRegistry';
+import { PlaybackEngine } from '../../playback/PlaybackEngine';
+import { FakeAudioDriver } from '../../playback/__tests__/fakeDriver';
 
 // -- fake native module ------------------------------------------------------
 
@@ -96,6 +98,7 @@ function baseSnapshot(): EngineSnapshot {
     isBuffering: false,
     error: null,
     locked: false,
+    isOfflinePlayback: false,
     canNext: false,
     canPrevious: false,
     repeatMode: 'off',
@@ -292,6 +295,81 @@ describe('CarPlayController', () => {
     const snapshot = engine.getSnapshot();
     expect(snapshot.track).toMatchObject({ trackId: 't2' });
     expect(native.lastCall('resolvePlay')?.args).toEqual(['p1', { ok: true }]);
+    controller.detach();
+  });
+
+  test('play of an offline-downloaded track uses the shared engine offline path', async () => {
+    // Boundary: CarPlay drives the ONE PlaybackEngine; the engine's offline
+    // resolver (not the controller) decides local vs streaming. A downloaded
+    // track must play from its local file with no streaming session.
+    const native = createFakeNative();
+    const driver = new FakeAudioDriver();
+    const sessionPosts: string[] = [];
+    const engineApi = new ApiClient({
+      baseUrl: 'http://test.local',
+      fetchFn: (async (url: string, init?: { method?: string }) => {
+        if (url.includes('/v1/playback/sessions') && init?.method === 'POST') {
+          sessionPosts.push(url);
+          return {
+            status: 200,
+            ok: true,
+            json: async () => ({
+              id: 'sess-online',
+              token: 'tok',
+              expiresAt: new Date(Date.now() + 900_000).toISOString(),
+              hlsUrl: '/v1/playback/hls/master.m3u8?token=tok',
+            }),
+          };
+        }
+        throw new Error(`unexpected request: ${init?.method} ${url}`);
+      }) as typeof fetch,
+    });
+    const offlineEvents: unknown[] = [];
+    const engine = new PlaybackEngine({
+      api: engineApi,
+      baseUrl: 'http://test.local',
+      driver,
+      offline: {
+        resolveTrack: async (trackId: string) =>
+          trackId === 't2'
+            ? {
+                uri: 'file:///docs/offline/tracks/t2/audio.ts',
+                authorizationId: 'authz-t2',
+                audioVersion: 1,
+              }
+            : null,
+        enqueueEvent: (event) => {
+          offlineEvents.push(event);
+        },
+      },
+    });
+    await engine.initialize();
+    const controller = new CarPlayController(
+      { api: createApi(), getEngine: () => engine },
+      native as never,
+    );
+    controller.attach();
+
+    native.emit('onBrowseRequest', { requestId: 'b1', nodeId: 'home' });
+    await flush();
+    native.emit('onPlayRequest', { requestId: 'p1', itemId: 'track:t2', nodeId: 'home' });
+    await flush();
+    await flush();
+
+    expect(native.lastCall('resolvePlay')?.args).toEqual(['p1', { ok: true }]);
+    const snapshot = engine.getSnapshot();
+    expect(snapshot.track?.trackId).toBe('t2');
+    expect(snapshot.isOfflinePlayback).toBe(true);
+    // The local file was used: no streaming session minted, driver loaded
+    // the offline URI, and there is still exactly one player.
+    expect(sessionPosts).toHaveLength(0);
+    expect(driver.loadCalls).toEqual(['file:///docs/offline/tracks/t2/audio.ts']);
+    expect(driver.maxConcurrentPlayers).toBe(1);
+
+    // Transport commands from the car still drive the same engine.
+    native.emit('onCommand', { command: 'pause' });
+    expect(driver.pauseCalls).toBe(1);
+    engine.destroy();
     controller.detach();
   });
 

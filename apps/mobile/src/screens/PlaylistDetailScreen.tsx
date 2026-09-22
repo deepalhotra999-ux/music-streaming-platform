@@ -24,6 +24,8 @@ import {
 } from '../api';
 import { useAuth } from '../auth';
 import { useQueueActions } from '../player';
+import { useOffline } from '../offline/OfflineProvider';
+import { DownloadButton } from '../offline/components/DownloadButton';
 import { ArtworkImage, formatDuration, formatTrackCount } from '../catalog';
 import { Button, ErrorState, LoadingState, Screen } from '../components';
 import { LikeButton, PlaylistForm, type PlaylistFormValues } from '../library';
@@ -50,6 +52,8 @@ export function PlaylistDetailScreen({ playlistId }: { playlistId: string }) {
   const { api, user } = useAuth();
   const router = useRouter();
   const { playTracks, addToQueue } = useQueueActions();
+  // Phase 25 — playlist bulk download + per-track download buttons.
+  const offline = useOffline();
   const [playlist, setPlaylist] = useState<PlaylistDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
@@ -226,6 +230,12 @@ export function PlaylistDetailScreen({ playlistId }: { playlistId: string }) {
               onPress={() => void playFrom(0)}
               testID="playlist-play-all"
             />
+            <Button
+              title="Download"
+              variant="secondary"
+              onPress={() => void offline.downloadTracks(sorted.map((item) => item.track))}
+              testID="playlist-download-all"
+            />
           </View>
         ) : null}
 
@@ -301,6 +311,7 @@ export function PlaylistDetailScreen({ playlistId }: { playlistId: string }) {
                   <Text style={styles.metaText}>{formatDuration(item.track.durationMs)}</Text>
                 </Pressable>
                 <LikeButton trackId={item.track.id} />
+                <DownloadButton track={item.track} />
                 {isOwner ? (
                   <View style={styles.manageButtons}>
                     <Pressable
@@ -421,6 +432,8 @@ const styles = StyleSheet.create({
   playAllWrap: {
     paddingHorizontal: spacing.lg,
     marginTop: spacing.sm,
+    flexDirection: 'row',
+    gap: spacing.sm,
   },
   ownerActions: {
     flexDirection: 'row',

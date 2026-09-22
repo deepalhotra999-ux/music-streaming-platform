@@ -26,6 +26,32 @@ jest.mock('../../library', () => ({
   },
 }));
 
+// Phase 25 — LibraryScreen shows a Downloads summary; the offline module is
+// mocked here (its own provider/store tests cover the real behavior).
+const mockUseOffline = jest.fn();
+jest.mock('../../offline/OfflineProvider', () => ({
+  useOffline: () => mockUseOffline(),
+}));
+function mockOfflineValue(overrides: Record<string, unknown> = {}) {
+  return {
+    downloads: [],
+    usedBytes: 0,
+    downloadTrack: jest.fn(),
+    downloadTracks: jest.fn(),
+    pauseDownload: jest.fn(),
+    resumeDownload: jest.fn(),
+    cancelDownload: jest.fn(),
+    retryDownload: jest.fn(),
+    removeDownload: jest.fn(),
+    revalidateNow: jest.fn(),
+    refresh: jest.fn(),
+    ...overrides,
+  };
+}
+function mockOffline() {
+  mockUseOffline.mockReturnValue(mockOfflineValue());
+}
+
 const mockUseAuth = useAuth as jest.Mock;
 
 function pageOf<T>(items: T[]): {
@@ -99,6 +125,7 @@ function mockApi(overrides: Record<string, unknown> = {}) {
 describe('LibraryScreen', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockOffline();
   });
 
   it('renders all five sections with preview content', async () => {
@@ -120,10 +147,12 @@ describe('LibraryScreen', () => {
     render(<LibraryScreen />);
     await waitFor(() => expect(screen.getByTestId('library-section-liked-content')).toBeTruthy());
 
-    // SectionHeader renders a "See all" pressable per section; press the
-    // first one (Liked tracks).
+    // SectionHeader renders a "See all" pressable per section; the Phase 25
+    // Downloads summary is first, so Liked tracks is second.
     const seeAll = screen.getAllByText('See all');
     fireEvent.press(seeAll[0]);
+    expect(router.push).toHaveBeenCalledWith('/downloads');
+    fireEvent.press(seeAll[1]);
     expect(router.push).toHaveBeenCalledWith('/liked-tracks');
   });
 
@@ -175,5 +204,35 @@ describe('LibraryScreen', () => {
     // first one is the liked section's row.
     fireEvent.press(screen.getAllByTestId('track-row-t1')[0]);
     expect(mockPlayTracks).toHaveBeenCalledWith([track], 0);
+  });
+
+  it('shows the downloads summary from offline state', async () => {
+    mockApi();
+    // One completed download: the summary counts it.
+    mockUseOffline.mockReturnValue(
+      mockOfflineValue({
+        downloads: [
+          {
+            trackId: 't1',
+            title: 'First Light',
+            artistName: 'Neon Bloom',
+            albumTitle: 'Afterglow',
+            durationMs: 180_000,
+            status: 'complete',
+            bytesWritten: 2880000,
+            totalBytes: 2880000,
+            resumeSegment: null,
+            authorizationId: 'authz-1',
+            audioVersion: 1,
+            error: null,
+            unavailableReason: null,
+            updatedAt: new Date().toISOString(),
+          },
+        ],
+        usedBytes: 2880000,
+      }),
+    );
+    render(<LibraryScreen />);
+    await waitFor(() => expect(screen.getByText(/1 of 1 downloaded/)).toBeTruthy());
   });
 });

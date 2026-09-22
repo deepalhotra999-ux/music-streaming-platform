@@ -7,10 +7,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef } from 'react';
 import type { ReactNode } from 'react';
 import { useSyncExternalStore } from 'react';
-import { getApiBaseUrl, type ApiClient } from '../api';
+import { getApiBaseUrl, type ApiClient, type PlayEventType } from '../api';
 import { PlaybackEngine } from './PlaybackEngine';
 import { createExpoAudioDriver } from './expoAudioDriver';
 import { setActiveEngine } from './engineRegistry';
+import { enqueueOfflineEvent, resolveOfflineSource } from '../offline';
 import type { EngineSnapshot, QueueTrack, RepeatMode } from './types';
 
 export interface PlaybackContextValue extends EngineSnapshot {
@@ -59,6 +60,30 @@ export function PlaybackProvider({ children, api, baseUrl }: PlaybackProviderPro
       api,
       baseUrl: baseUrl ?? getApiBaseUrl(),
       driver: createExpoAudioDriver(),
+      // Phase 25 — offline-first playback: valid local downloads play
+      // with no network; their events queue for idempotent upload.
+      offline: {
+        resolveTrack: async (trackId: string) => {
+          const source = await resolveOfflineSource(trackId);
+          if (!source) return null;
+          return {
+            uri: source.uri,
+            authorizationId: source.authorization.authorizationId,
+            audioVersion: source.authorization.audioVersion,
+          };
+        },
+        enqueueEvent: (event: {
+          offlineAuthorizationId: string;
+          offlineSessionKey: string;
+          type: PlayEventType;
+          positionMs: number;
+        }) => {
+          void enqueueOfflineEvent(event).catch(() => {
+            // Event persistence must never break playback; the next
+            // heartbeat/complete will queue again and sync retries later.
+          });
+        },
+      },
     });
   }
   const engine = engineRef.current;

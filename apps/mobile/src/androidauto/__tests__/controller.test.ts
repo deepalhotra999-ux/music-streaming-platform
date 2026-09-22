@@ -29,6 +29,8 @@ import type {
   AutoSearchRequestEvent,
 } from 'waveform-android-auto';
 import { AndroidAutoController } from '../controller';
+import { PlaybackEngine } from '../../playback/PlaybackEngine';
+import { FakeAudioDriver } from '../../playback/__tests__/fakeDriver';
 
 // -- stub transport ----------------------------------------------------------
 
@@ -145,6 +147,7 @@ function baseSnapshot(): EngineSnapshot {
     isBuffering: false,
     error: null,
     locked: false,
+    isOfflinePlayback: false,
     canNext: false,
     canPrevious: false,
     repeatMode: 'off',
@@ -350,6 +353,79 @@ describe('AndroidAutoController', () => {
       'waveform:track:t2',
     ]);
     expect(queueCall[1]).toBe(1);
+    controller.detach();
+  });
+
+  test('play of an offline-downloaded track uses the shared engine offline path', async () => {
+    // Boundary: Android Auto drives the ONE PlaybackEngine; the engine's
+    // offline resolver (not the controller) decides local vs streaming. A
+    // downloaded track must play from its local file with no session.
+    const native = createFakeNative();
+    const driver = new FakeAudioDriver();
+    const sessionPosts: string[] = [];
+    const engineApi = new ApiClient({
+      baseUrl: 'http://test.local',
+      fetchFn: (async (url: string, init?: { method?: string }) => {
+        if (url.includes('/v1/playback/sessions') && init?.method === 'POST') {
+          sessionPosts.push(url);
+          return {
+            status: 200,
+            ok: true,
+            json: async () => ({
+              id: 'sess-online',
+              token: 'tok',
+              expiresAt: new Date(Date.now() + 900_000).toISOString(),
+              hlsUrl: '/v1/playback/hls/master.m3u8?token=tok',
+            }),
+          };
+        }
+        throw new Error(`unexpected request: ${init?.method} ${url}`);
+      }) as typeof fetch,
+    });
+    const engine = new PlaybackEngine({
+      api: engineApi,
+      baseUrl: 'http://test.local',
+      driver,
+      offline: {
+        resolveTrack: async (trackId: string) =>
+          trackId === 't2'
+            ? {
+                uri: 'file:///docs/offline/tracks/t2/audio.ts',
+                authorizationId: 'authz-t2',
+                audioVersion: 1,
+              }
+            : null,
+        enqueueEvent: () => undefined,
+      },
+    });
+    await engine.initialize();
+    const controller = new AndroidAutoController(
+      { api: createApi(HISTORY), getEngine: () => engine },
+      native as never,
+    );
+    controller.attach();
+    native.emit('onChildrenRequest', {
+      requestId: 'c1',
+      parentId: 'waveform:recent',
+      page: 0,
+      pageSize: 50,
+    });
+    await tick();
+    native.emit('onPlayRequest', { requestId: 'p1', mediaId: 'waveform:track:t2' });
+    await tick();
+    await tick();
+
+    const resolved = native.lastCall('resolvePlay')?.args as unknown[];
+    expect(resolved).toEqual(['p1', { ok: true }]);
+    const snapshot = engine.getSnapshot();
+    expect(snapshot.track?.trackId).toBe('t2');
+    expect(snapshot.isOfflinePlayback).toBe(true);
+    // The local file was used: no streaming session minted, driver loaded
+    // the offline URI, and there is still exactly one player.
+    expect(sessionPosts).toHaveLength(0);
+    expect(driver.loadCalls).toEqual(['file:///docs/offline/tracks/t2/audio.ts']);
+    expect(driver.maxConcurrentPlayers).toBe(1);
+    engine.destroy();
     controller.detach();
   });
 

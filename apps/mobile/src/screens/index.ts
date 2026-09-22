@@ -24,3 +24,4 @@ export { RegisterScreen } from './RegisterScreen';
 export { SearchScreen } from './SearchScreen';
 export { SplashScreen } from './SplashScreen';
 export { TrackListScreen } from './TrackListScreen';
+export { DownloadsScreen } from './DownloadsScreen';

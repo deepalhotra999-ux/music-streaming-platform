@@ -22,6 +22,7 @@ export default function CatalogLayout() {
       <Stack.Screen name="genres" options={{ title: 'Genres' }} />
       <Stack.Screen name="playlists" options={{ title: 'Playlists' }} />
       <Stack.Screen name="liked-tracks" options={{ title: 'Liked tracks' }} />
+      <Stack.Screen name="downloads" options={{ title: 'Downloads' }} />
       <Stack.Screen name="recently-played" options={{ title: 'Recently played' }} />
       <Stack.Screen name="my-playlists" options={{ title: 'My playlists' }} />
       <Stack.Screen name="followed-artists" options={{ title: 'Followed artists' }} />

@@ -27,6 +27,18 @@ jest.mock('../../library', () => ({
   },
 }));
 
+// Phase 25 — PlaylistDetailScreen renders DownloadButtons; the offline
+// module is mocked here (its own provider/store tests cover the real
+// behavior).
+const mockUseOffline = jest.fn();
+jest.mock('../../offline/OfflineProvider', () => ({
+  useOffline: () => mockUseOffline(),
+}));
+// DownloadButton is tested separately; render nothing for it here.
+jest.mock('../../offline/components/DownloadButton', () => ({
+  DownloadButton: () => null,
+}));
+
 const mockUseAuth = useAuth as jest.Mock;
 
 const trackA = {
@@ -89,6 +101,19 @@ let alertButtons: { text?: string; onPress?: () => void; style?: string }[] = []
 beforeEach(() => {
   jest.clearAllMocks();
   alertButtons = [];
+  mockUseOffline.mockReturnValue({
+    downloads: [],
+    usedBytes: 0,
+    downloadTrack: jest.fn(),
+    downloadTracks: jest.fn(),
+    pauseDownload: jest.fn(),
+    resumeDownload: jest.fn(),
+    cancelDownload: jest.fn(),
+    retryDownload: jest.fn(),
+    removeDownload: jest.fn(),
+    revalidateNow: jest.fn(),
+    refresh: jest.fn(),
+  });
   jest.spyOn(Alert, 'alert').mockImplementation(((_title, _message, buttons) => {
     alertButtons = (buttons ?? []) as typeof alertButtons;
   }) as typeof Alert.alert);

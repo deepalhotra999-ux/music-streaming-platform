@@ -8,6 +8,8 @@ import type { AlbumDetail, TrackStatus, TrackSummary } from '../api';
 import { apiErrorMessage, getAlbum } from '../api';
 import { useAuth } from '../auth';
 import { useQueueActions } from '../player';
+import { useOffline } from '../offline/OfflineProvider';
+import { DownloadButton } from '../offline/components/DownloadButton';
 import {
   AlbumTrackRow,
   ArtworkImage,
@@ -15,7 +17,7 @@ import {
   formatTotalDuration,
   formatTrackCount,
 } from '../catalog';
-import { ErrorState, LoadingState, Screen } from '../components';
+import { Button, ErrorState, LoadingState, Screen } from '../components';
 import { colors, fontSize, fontWeight, spacing } from '../theme';
 
 const ALBUM_TYPE_LABELS: Record<string, string> = {
@@ -31,6 +33,8 @@ export function AlbumDetailScreen({ albumId }: { albumId: string }) {
   // Phase 9 — tapping a track plays the album from that track; long-press
   // appends the track to the current queue.
   const { playTracks, addToQueue } = useQueueActions();
+  // Phase 25 — per-track and whole-album offline downloads.
+  const offline = useOffline();
   const [album, setAlbum] = useState<AlbumDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
@@ -105,18 +109,29 @@ export function AlbumDetailScreen({ albumId }: { albumId: string }) {
             {year ? ` • ${year}` : ''} • {formatTrackCount(album.trackCount)}
             {totalMs > 0 ? ` • ${formatTotalDuration(totalMs)}` : ''}
           </Text>
+          <Button
+            title="Download album"
+            variant="secondary"
+            size="md"
+            onPress={() => void offline.downloadTracks(summaries)}
+            testID="album-download-all"
+          />
         </View>
 
         <View style={styles.tracks}>
           {sorted.map((track, i) => (
-            <AlbumTrackRow
-              key={track.id}
-              track={track}
-              artistName={album.artistName}
-              index={track.trackNumber ?? i + 1}
-              onPress={() => void playTracks(summaries, i)}
-              onLongPress={() => void addToQueue(summaries[i])}
-            />
+            <View key={track.id} style={styles.trackRowWrap}>
+              <View style={styles.trackRowFlex}>
+                <AlbumTrackRow
+                  track={track}
+                  artistName={album.artistName}
+                  index={track.trackNumber ?? i + 1}
+                  onPress={() => void playTracks(summaries, i)}
+                  onLongPress={() => void addToQueue(summaries[i])}
+                />
+              </View>
+              <DownloadButton track={summaries[i]} />
+            </View>
           ))}
         </View>
       </ScrollView>
@@ -152,4 +167,9 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   tracks: { marginTop: spacing.md },
+  trackRowWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  trackRowFlex: { flex: 1 },
 });

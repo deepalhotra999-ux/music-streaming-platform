@@ -367,6 +367,14 @@ export async function processTrackAudio(trackId: string, deps: IngestionDeps): P
 
     // 8. READY. A draft/failed track becomes playable now; an already
     //    published track keeps its catalog status (re-processing).
+    //    Phase 25 — when previously-published audio is REPLACED, bump the
+    //    audio version so pinned offline download authorizations detect the
+    //    mismatch instead of silently playing outdated audio. audioReadyAt
+    //    is set only by a successful completion, so a non-null value here
+    //    means this track was published before (the local `track` row was
+    //    loaded after the PENDING->PROCESSING claim, so its audioStatus is
+    //    always PROCESSING at this point and cannot be used).
+    const replacedPublishedAudio = track.audioReadyAt !== null;
     await db.track.update({
       where: { id: trackId },
       data: {
@@ -374,6 +382,7 @@ export async function processTrackAudio(trackId: string, deps: IngestionDeps): P
         audioError: null,
         audioReadyAt: new Date(),
         durationMs,
+        ...(replacedPublishedAudio ? { audioVersion: { increment: 1 } } : {}),
         ...(track.status === 'PROCESSING' || track.status === 'FAILED'
           ? { status: 'READY' as const }
           : {}),
