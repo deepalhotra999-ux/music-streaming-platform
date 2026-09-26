@@ -5,6 +5,21 @@ Production-grade, Spotify-style music streaming platform. Monorepo, TypeScript.
 See `CLAUDE.md` (working rules), `docs/ARCHITECTURE.md` (stack & design),
 `docs/DATABASE.md` (data model).
 
+## App preview
+
+UI previews rendered from the project's real design system (`#7C5CFF` on `#0B0B0F`)
+and demo catalog data (Pixel Reverie, Neon Coastline, Paper Satellites).
+For a tappable click-through of Home, Search, Library, Artist, Album and the full
+Player, open [`docs/preview.html`](docs/preview.html) in a browser.
+
+| Home | Now Playing |
+| ---- | ----------- |
+| ![Waveform home screen](docs/screenshots/01-home.png) | ![Waveform now playing screen](docs/screenshots/02-player.png) |
+
+| Artist | Library |
+| ------ | ------- |
+| ![Waveform artist profile](docs/screenshots/03-artist.png) | ![Waveform library](docs/screenshots/04-library.png) |
+
 ## Prerequisites
 
 - Node.js 20+ (`nvm use` picks up `.nvmrc`)
