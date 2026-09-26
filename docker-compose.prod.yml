@@ -1,0 +1,47 @@
+# Production compose for CD deployments.
+# Used by .github/workflows/cd.yml on the deploy host. Local dev uses
+# docker-compose.yml instead (dev services + env defaults).
+#
+# Required on the deploy host before `docker compose up`:
+#   services/api/.env.production — written by the CD workflow from the
+#   DEPLOY_ENV_B64 secret. Must define DATABASE_URL (pointing at the `db`
+#   service or a managed database), JWT_ACCESS_SECRET, and the other
+#   production secrets validated by services/api/src/config.ts.
+#   Never commit .env.production.
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-musicdb}
+      POSTGRES_USER: ${POSTGRES_USER:-music}
+POSTGRES_PASSWORD: <redacted>
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U $${POSTGRES_USER:-music} -d $${POSTGRES_DB:-musicdb}']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    # No published port: the database is only reachable inside this network.
+
+  api:
+    build: ./services/api
+    env_file:
+      - services/api/.env.production
+    ports:
+      - '3000:3000'
+    depends_on:
+      db:
+        condition: service_healthy
+    # The image CMD already runs `prisma migrate deploy` before booting.
+    restart: unless-stopped
+    healthcheck:
+      test: ['CMD-SHELL', 'wget -qO- http://localhost:3000/v1/health || exit 1']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+volumes:
+  pgdata:

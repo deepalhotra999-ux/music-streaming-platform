@@ -1,0 +1,166 @@
+# Continuous deployment.
+#
+# Triggered by the admin console ("Releases" page → Deploy), which asks the API
+# to fire a `deploy-requested` repository_dispatch event with the target ref,
+# or manually via workflow_dispatch.
+#
+# Flow: verify (checkout, install, typecheck, lint, tests, build, migrations
+# dry-run) → deploy to the configured host. The deploy job is INERT until the
+# DEPLOY_* secrets below exist: with no target configured the job reports a
+# clear skip instead of failing or deploying nowhere.
+#
+# Secrets required for a real deployment (Settings → Secrets and variables →
+# Actions → Repository secrets):
+#   DEPLOY_HOST        — SSH hostname of the production server
+#   DEPLOY_USER        — SSH user
+#   DEPLOY_SSH_KEY     — private SSH key with access to DEPLOY_HOST
+#   DEPLOY_DIR         — repo checkout path on the server (e.g. /opt/music-platform)
+#   DEPLOY_ENV_B64     — base64-encoded production .env for the API container
+#   (optional) DEPLOY_PORT — SSH port, default 22
+
+name: CD
+
+on:
+  repository_dispatch:
+    types: [deploy-requested]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch or tag to deploy'
+        required: false
+        default: 'main'
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  verify:
+    name: Verify ${{ github.event.client_payload.ref || inputs.ref || 'main' }}
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: music
+          POSTGRES_PASSWORD: <redacted>
+          POSTGRES_DB: musicdb_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - name: Resolve ref
+        id: ref
+        run: |
+          REF="${{ github.event.client_payload.ref || inputs.ref || 'main' }}"
+          # Same restriction as the API: no injection through the ref.
+          if ! echo "$REF" | grep -Eq '^[A-Za-z0-9._/-]+$'; then
+            echo "Invalid ref: $REF"
+            exit 1
+          fi
+          echo "ref=$REF" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ steps.ref.outputs.ref }}
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: services/api/package-lock.json
+
+      - name: Install (API)
+        working-directory: services/api
+        run: npm ci
+
+      - name: Typecheck (API)
+        working-directory: services/api
+        run: npx tsc --noEmit
+
+      - name: Lint (API)
+        working-directory: services/api
+        run: npx eslint src --max-warnings 0
+
+      - name: Tests (API)
+        working-directory: services/api
+        env:
+          DATABASE_URL: <redacted>
+          NODE_ENV: test
+        run: npx vitest run
+
+      - name: Build (API)
+        working-directory: services/api
+        run: npm run build
+
+      - name: Migrations dry-run
+        working-directory: services/api
+        env:
+          DATABASE_URL: <redacted>
+        run: |
+          npx prisma migrate deploy
+          npx prisma validate
+
+      - name: Install + build (admin)
+        working-directory: apps/admin
+        run: |
+          npm ci
+          npx tsc --noEmit
+          npm test -- --run
+          npm run build
+
+  deploy:
+    name: Deploy to ${{ secrets.DEPLOY_HOST }}
+    needs: verify
+    runs-on: ubuntu-latest
+    # Deploy only when a target host is configured. Without DEPLOY_HOST the job
+    # is skipped with a clear note — never a half-deployment.
+    if: ${{ secrets.DEPLOY_HOST != '' }}
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          port: ${{ secrets.DEPLOY_PORT || 22 }}
+          script: |
+            set -euo pipefail
+            REF="${{ github.event.client_payload.ref || inputs.ref || 'main' }}"
+            if ! echo "$REF" | grep -Eq '^[A-Za-z0-9._/-]+$'; then
+              echo "Invalid ref: $REF"
+              exit 1
+            fi
+            cd "${{ secrets.DEPLOY_DIR }}"
+            git fetch --all
+            git checkout "$REF"
+            git pull --ff-only origin "$REF"
+            # Write the production environment (supplied as base64 secret).
+            echo "${{ secrets.DEPLOY_ENV_B64 }}" | base64 -d > services/api/.env.production
+            docker compose -f docker-compose.prod.yml pull
+            docker compose -f docker-compose.prod.yml up -d --build
+            # The api image runs `prisma migrate deploy` before booting.
+            # Wait for the health check, then smoke test.
+            sleep 20
+            curl -fsS http://localhost:3000/v1/health || (docker compose -f docker-compose.prod.yml logs api && exit 1)
+            echo "Deployed $REF"
+
+  report:
+    name: Report
+    needs: [verify, deploy]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deployment summary
+        run: |
+          echo "## Deployment result" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Ref: ${{ github.event.client_payload.ref || inputs.ref || 'main' }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Verify: ${{ needs.verify.result }}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Deploy: ${{ needs.deploy.result }}" >> "$GITHUB_STEP_SUMMARY"
+          if [ "${{ needs.deploy.result }}" = "skipped" ]; then
+            echo "- Note: no DEPLOY_HOST secret configured — deploy was skipped. See docs/RELEASES.md." >> "$GITHUB_STEP_SUMMARY"
+          fi

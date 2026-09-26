@@ -34,3 +34,8 @@ export function roomsJoinRateLimit(config: Config): { max: number; timeWindow: n
 export function roomsInviteRateLimit(config: Config): { max: number; timeWindow: number } {
   return { max: config.rateLimits.roomsInvite, timeWindow: config.rateLimits.windowMs };
 }
+
+/** Release tooling — deploy dispatch. Tight: every call triggers CI work. */
+export function deployRateLimit(config: Config): { max: number; timeWindow: number } {
+  return { max: config.rateLimits.deploy, timeWindow: config.rateLimits.windowMs };
+}

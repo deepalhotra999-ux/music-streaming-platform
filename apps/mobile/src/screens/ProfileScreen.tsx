@@ -17,6 +17,7 @@ import {
   useSubscription,
 } from '../subscriptions';
 import { useRoom } from '../rooms';
+import { UpdateSettingsCard } from '../updates';
 import { colors, fontSize, fontWeight, radii, spacing } from '../theme';
 
 /** Phase 28 — rooms entry on the profile screen. */
@@ -159,6 +160,10 @@ export function ProfileScreen() {
         </Screen>
       </Modal>
       <View style={styles.signOut}>
+        {/* Release tooling — over-the-air updates (JS-only; native changes
+            still need a store build). */}
+        <Text style={styles.sectionHeading}>App updates</Text>
+        <UpdateSettingsCard />
         <Button
           title="Sign out"
           testID="signout-button"
