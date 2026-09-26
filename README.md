@@ -25,15 +25,29 @@ Player, open [`docs/preview.html`](docs/preview.html) in a browser.
 | ------ | ----- |
 | ![Waveform search](docs/screenshots/05-search.png) | ![Waveform album detail](docs/screenshots/06-album.png) |
 
-### Admin console
+### Admin console (Admin Panel V2)
 
-| Dashboard | Users |
-| --------- | ----- |
-| ![Admin dashboard](docs/screenshots/07-admin-dashboard.png) | ![Admin users](docs/screenshots/08-admin-users.png) |
+Real runtime captures of the admin console running against the demo API —
+signed in as SUPER_ADMIN, all figures server-computed from demo data.
 
-| Moderation | Audit log |
-| ---------- | --------- |
-| ![Admin moderation queue](docs/screenshots/09-admin-moderation.png) | ![Admin audit log](docs/screenshots/10-admin-audit-log.png) |
+| Sign in | Command Center |
+| ------- | -------------- |
+| ![Admin sign in](docs/screenshots/admin-00-login.png) | ![Admin Command Center](docs/screenshots/admin-01-command-center.png) |
+
+| Users & governance | Artists & bulk track ops |
+| ------------------ | ------------------------ |
+| ![Admin users](docs/screenshots/admin-03-users.png) | ![Admin artists](docs/screenshots/admin-05-artists.png) |
+
+| Finance | Security |
+| ------- | -------- |
+| ![Admin finance](docs/screenshots/admin-08-finance.png) | ![Admin security](docs/screenshots/admin-09-security.png) |
+
+| Platform config & emergency controls | Audit log |
+| ----------------------------------- | --------- |
+| ![Admin platform config](docs/screenshots/admin-11-config.png) | ![Admin audit log](docs/screenshots/admin-12-audit.png) |
+
+More captures (global search, roles, catalog, moderation, operations) live in
+[`docs/screenshots/`](docs/screenshots/).
 
 ## Prerequisites
 
