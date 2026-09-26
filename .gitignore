@@ -38,3 +38,14 @@ spaces/
 # Build / runtime
 *.tsbuildinfo
 agents/
+
+# Runtime-owned workspace dirs (not part of the music project)
+.hatch-browser/
+feed/
+goals/
+memory/
+user/
+your_files/
+repos/
+profile-images/
+*-import.sql
