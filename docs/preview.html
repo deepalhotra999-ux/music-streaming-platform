@@ -218,16 +218,54 @@
   .theme-switch button{border:none;background:transparent;color:#A8A8B8;font-size:13px;font-weight:700;padding:8px 18px;border-radius:999px;cursor:pointer}
   .theme-switch button.on{background:#7C5CFF;color:#fff}
   .theme-switch button#btnSpotify.on{background:#1DB954;color:#04120a}
-  /* Compare theme: Spotify-style tokens (personal comparison only, not shipped) */
+  /* Compare theme: Spotify-style (personal comparison only, not shipped) */
+  .sprog{display:none}
   .phone[data-theme="spotify"]{
     --primary:#1DB954; --filled:#1AA34A;
-    --bg:#121212; --surface:#181818; --elevated:#282828; --border:#2a2a2a; --tabbar:#0a0a0a;
+    --bg:#121212; --surface:#181818; --elevated:#282828; --border:#2a2a2a; --tabbar:#000;
     --muted:#b3b3b3;
     box-shadow:0 0 0 2px #2a2a2a,0 30px 80px rgba(29,185,84,.12);
   }
-  .phone[data-theme="spotify"] .player .glow{background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(29,185,84,.28),transparent 70%)}
-  .phone[data-theme="spotify"] .bigplay{box-shadow:0 8px 30px rgba(29,185,84,.35)}
-  .phone[data-theme="spotify"] .player .bigart{box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .phone[data-theme="spotify"] #tabbar{background:#000;border-top-color:#000}
+  .phone[data-theme="spotify"] .tab{color:#b3b3b3}
+  .phone[data-theme="spotify"] .tab.active{color:#fff}
+  .phone[data-theme="spotify"] .playbtn{background:#1DB954;box-shadow:none}
+  .phone[data-theme="spotify"] .playbtn svg{fill:#000}
+  .phone[data-theme="spotify"] .bigplay{background:#1DB954;box-shadow:none}
+  .phone[data-theme="spotify"] .bigplay svg{fill:#000}
+  .phone[data-theme="spotify"] .shufbtn{background:#1DB954}
+  .phone[data-theme="spotify"] .shufbtn svg{fill:#000}
+  .phone[data-theme="spotify"] .followbtn{background:transparent;border:1px solid #fff;color:#fff}
+  .phone[data-theme="spotify"] .followbtn.following{background:transparent;border:1px solid #727272;color:#fff}
+  .phone[data-theme="spotify"] .player .glow{background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(29,185,84,.20),transparent 70%)}
+  .phone[data-theme="spotify"] .player h2,.phone[data-theme="spotify"] .player .pa{text-align:left}
+  .phone[data-theme="spotify"] .player .bigart{border-radius:8px;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .phone[data-theme="spotify"] .cbtn{color:#fff}
+  .phone[data-theme="spotify"] .cbtn.on{color:#1DB954}
+  .phone[data-theme="spotify"] .wave{display:none}
+  .phone[data-theme="spotify"] .sprog{display:block;position:relative;height:4px;background:#4d4d4d;border-radius:2px;margin:2px 0 8px;cursor:pointer}
+  .phone[data-theme="spotify"] #sprogfill{position:absolute;left:0;top:0;bottom:0;width:0;background:#fff;border-radius:2px}
+  .phone[data-theme="spotify"] #sprogknob{position:absolute;top:50%;left:0;width:12px;height:12px;border-radius:50%;background:#fff;transform:translate(-50%,-50%)}
+  .phone[data-theme="spotify"] .iconbtn.liked{color:#1DB954}
+  .phone[data-theme="spotify"] .iconbtn.liked svg{fill:#1DB954;stroke:#1DB954}
+  .phone[data-theme="spotify"] .likebtn.liked svg{fill:#1DB954;stroke:#1DB954}
+  .phone[data-theme="spotify"] .lyricspill{background:transparent;border-color:#727272}
+  .phone[data-theme="spotify"] .eq i{background:#fff}
+  .phone[data-theme="spotify"] .chip{background:#2a2a2a;border-color:#2a2a2a;color:#fff}
+  .phone[data-theme="spotify"] .chip.on{background:#1DB954;border-color:#1DB954;color:#000}
+  .phone[data-theme="spotify"] .sinput{background:#fff;border-color:#fff;color:#000}
+  .phone[data-theme="spotify"] .sinput::placeholder{color:#535353}
+  .phone[data-theme="spotify"] .genre::after{content:"";position:absolute;right:-12px;bottom:-14px;width:60px;height:60px;background:rgba(255,255,255,.9);border-radius:6px;transform:rotate(25deg)}
+  .phone[data-theme="spotify"] .card .art{border-radius:4px}
+  .phone[data-theme="spotify"] .row .art{border-radius:4px}
+  .phone[data-theme="spotify"] .tile{border-radius:4px}
+  .phone[data-theme="spotify"] .jumpcard{border-radius:8px}
+  .phone[data-theme="spotify"] .librow .art{border-radius:4px}
+  .phone[data-theme="spotify"] .albart{border-radius:8px}
+  .phone[data-theme="spotify"] #miniplayer{border-radius:8px}
+  .phone[data-theme="spotify"] .sec-head span{color:#b3b3b3}
+  .phone[data-theme="spotify"] .librow .pinrow .art{background:linear-gradient(135deg,#450af5,#c4efd9)!important}
+  .phone[data-theme="spotify"] .avatar{background:#535353}
   .phone[data-theme="spotify"] .dlbadge{color:#1DB954}
   .phone[data-theme="spotify"] .dlbadge svg{stroke:#1DB954}
   @media(max-width:430px){.phone{width:340px;height:740px}}
@@ -640,6 +678,7 @@ function vPlayer(){
     +'<div class="bigart" style="background:'+GRAD[t.grad]+'"></div>'
     +'<h2>'+esc(t.title)+'</h2><div class="pa">'+esc(t.artist)+'</div>'
     +waveHTML(t)
+    +'<div class="sprog" id="sprog"><i id="sprogfill"></i><b id="sprogknob"></b></div>'
     +'<div class="times"><span id="tcur">'+fmt(state.pos)+'</span><span>'+t.dur+'</span></div>'
     +'<div class="controls">'
     +'<button class="cbtn" data-act="shuf">'+shufSVG+'</button>'
@@ -659,6 +698,8 @@ function paintProgress(){
   const bars=w.children, n=bars.length;
   for(let i=0;i<n;i++) bars[i].classList.toggle("on", i/n < state.pos/t.secs);
   const c=$("#tcur"); if(c) c.textContent=fmt(state.pos);
+  const f=$("#sprogfill"), k=$("#sprogknob");
+  if(f){ const p=Math.max(0,Math.min(100,state.pos/t.secs*100)); f.style.width=p+"%"; if(k) k.style.left=p+"%"; }
   paintMiniEq();
 }
 function paintMiniEq(){ const e=document.querySelector("#miniplayer .eq"); if(e) e.classList.toggle("paused",!state.playing); }
@@ -666,6 +707,12 @@ function bindPlayer(){
   const w=$("#wave"), t=state.current;
   if(w) w.addEventListener("click",e=>{
     const r=w.getBoundingClientRect();
+    state.pos=Math.max(0,Math.min(t.secs,Math.round((e.clientX-r.left)/r.width*t.secs)));
+    paintProgress();
+  });
+  const sp=$("#sprog");
+  if(sp) sp.addEventListener("click",e=>{
+    const r=sp.getBoundingClientRect();
     state.pos=Math.max(0,Math.min(t.secs,Math.round((e.clientX-r.left)/r.width*t.secs)));
     paintProgress();
   });
