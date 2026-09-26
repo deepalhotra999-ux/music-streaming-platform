@@ -128,6 +128,8 @@ export async function listAlbums(
   const p = parsePagination(query);
   const where: Prisma.AlbumWhereInput = {
     deletedAt: null,
+    // Admin V2 — albums of suspended artists are hidden from public listings.
+    artist: { suspendedAt: null, deletedAt: null },
     ...(query.artistId ? { artistId: query.artistId } : {}),
     ...(query.albumType ? { albumType: query.albumType } : {}),
     ...(query.q ? { title: { contains: query.q, mode: 'insensitive' } } : {}),

@@ -50,7 +50,18 @@ async function clean(): Promise<void> {
   await db.album.deleteMany();
   await db.artistProfile.deleteMany();
   await db.artist.deleteMany();
-  await db.subscription.deleteMany();
+  // subscription_events is append-only (trigger rejects the cascade from
+  // subscription deletes); disable it for test cleanup, then re-enable.
+  await db.$executeRawUnsafe(
+    'ALTER TABLE subscription_events DISABLE TRIGGER subscription_events_no_delete',
+  );
+  try {
+    await db.subscription.deleteMany();
+  } finally {
+    await db.$executeRawUnsafe(
+      'ALTER TABLE subscription_events ENABLE TRIGGER subscription_events_no_delete',
+    );
+  }
   // admin_audit_logs is append-only (trigger rejects the FK's ON DELETE SET NULL
   // maintenance update); disable it for test cleanup like phase4 does.
   await db.$executeRawUnsafe(

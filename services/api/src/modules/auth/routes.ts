@@ -4,7 +4,7 @@
 import type { FastifyInstance } from 'fastify';
 import type { Config } from '../../config.js';
 import { prisma } from '../../db.js';
-import { conflict, problemSchema, unauthorized } from '../../http/errors.js';
+import { badRequest, conflict, forbidden, problemSchema, unauthorized } from '../../http/errors.js';
 import {
   authResultSchema,
   loginBody,
@@ -14,6 +14,7 @@ import {
   registerBody,
 } from './schemas.js';
 import {
+  BannedError,
   DuplicateEmailError,
   InvalidCredentialsError,
   InvalidRefreshTokenError,
@@ -53,6 +54,11 @@ export async function authRoutes(app: FastifyInstance, config: Config): Promise<
     },
     async (req, reply) => {
       try {
+        // Admin V2 — break-glass kill switch for new registrations.
+        const { emergencyActive } = await import('../ops/settings.js');
+        if (!(await emergencyActive('emergency.new_signups_enabled'))) {
+          throw badRequest('New registrations are temporarily disabled.');
+        }
         const result = await register(req.body, config);
         return reply.code(201).send(result);
       } catch (err) {
@@ -76,10 +82,14 @@ export async function authRoutes(app: FastifyInstance, config: Config): Promise<
     },
     async (req, reply) => {
       try {
-        const result = await login(req.body, config);
+        const result = await login(req.body, config, prisma, {
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'] ?? null,
+        });
         return reply.code(200).send(result);
       } catch (err) {
         if (err instanceof InvalidCredentialsError) throw unauthorized(err.message);
+        if (err instanceof BannedError) throw forbidden(err.message);
         throw err;
       }
     },
@@ -99,10 +109,14 @@ export async function authRoutes(app: FastifyInstance, config: Config): Promise<
     },
     async (req, reply) => {
       try {
-        const result = await refresh(req.body.refreshToken, config);
+        const result = await refresh(req.body.refreshToken, config, prisma, {
+          ipAddress: req.ip,
+          userAgent: req.headers['user-agent'] ?? null,
+        });
         return reply.code(200).send(result);
       } catch (err) {
         if (err instanceof InvalidRefreshTokenError) throw unauthorized(err.message);
+        if (err instanceof BannedError) throw forbidden(err.message);
         throw err;
       }
     },

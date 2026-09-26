@@ -21,6 +21,11 @@ export interface ConfirmRequest {
   confirmLabel?: string;
   /** Label of the cancel button. Defaults to "Cancel". */
   cancelLabel?: string;
+  /**
+   * Semantic flag for destructive confirmations. The confirm button is
+   * already danger-styled; this flag documents intent at the call site.
+   */
+  danger?: boolean;
 }
 
 interface DialogState extends ConfirmRequest {

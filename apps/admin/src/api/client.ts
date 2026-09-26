@@ -89,7 +89,12 @@ export class ApiClient {
 
   constructor(options: ApiClientOptions) {
     this.baseUrl = options.baseUrl.replace(/\/$/, '');
-    this.fetchFn = options.fetchFn ?? fetch;
+    // NOTE: the default fetch must be wrapped so it is always invoked as a
+    // bare call. Storing the raw global and calling it as `this.fetchFn()`
+    // rebinds `this` to the ApiClient instance, and strict implementations
+    // (Firefox) reject the call with "Illegal invocation" before any
+    // network traffic happens.
+    this.fetchFn = options.fetchFn ?? ((...args: Parameters<typeof fetch>) => fetch(...args));
     this.getAccessToken = options.getAccessToken ?? (() => null);
     this.onTokenRefresh = options.onTokenRefresh;
   }
@@ -104,6 +109,10 @@ export class ApiClient {
 
   patch<T>(path: string, body?: unknown, options?: RequestOptions): Promise<T> {
     return this.request<T>('PATCH', path, { ...options, body });
+  }
+
+  put<T>(path: string, body?: unknown, options?: RequestOptions): Promise<T> {
+    return this.request<T>('PUT', path, { ...options, body });
   }
 
   delete<T>(path: string, options?: RequestOptions): Promise<T> {

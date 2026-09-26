@@ -6,18 +6,35 @@
 import { useCallback, useState } from 'react';
 import type { FormEvent } from 'react';
 import { useAuth } from '../auth/AuthContext';
+import { usePermissions } from '../auth/PermissionsContext';
+import { apiErrorMessage } from '../api/client';
 import { listAuditLogs } from '../api/audit';
 import type { AuditLogQuery } from '../api/audit';
+import type { AuditLog } from '../api/types';
+import { reverseAuditLog } from '../api/governance';
 import { useApiList } from '../hooks/useApiList';
 import { EmptyState, ErrorState, LoadingState } from '../components/DataStates';
 import { Pagination } from '../components/Pagination';
+import { useConfirm } from '../components/ConfirmDialog';
+import { RequirePermission } from '../components/PermissionGate';
 import { formatDate, shortId } from '../utils/format';
 
 const PAGE_SIZE = 25;
 
 export function AuditLogPage(): React.ReactNode {
+  return (
+    <RequirePermission perm="audit.view">
+      <AuditLogContent />
+    </RequirePermission>
+  );
+}
+
+function AuditLogContent(): React.ReactNode {
   const { client } = useAuth();
+  const { isSuperAdmin } = usePermissions();
   const [actionInput, setActionInput] = useState('');
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [actionOk, setActionOk] = useState<string | null>(null);
   const [actorInput, setActorInput] = useState('');
   const [targetTypeInput, setTargetTypeInput] = useState('');
   const [targetIdInput, setTargetIdInput] = useState('');
@@ -57,9 +74,20 @@ export function AuditLogPage(): React.ReactNode {
         <h1>Audit Log</h1>
       </div>
       <p className="muted" style={{ fontSize: 13 }}>
-        Immutable record of privileged admin actions. Rows cannot be edited or deleted from this
-        console.
+        Immutable record of privileged admin actions. Rows cannot be edited or deleted.
+        {isSuperAdmin &&
+          ' SUPER_ADMIN may reverse reversible rows — a reversal is itself a new audit row; history is never rewritten.'}
       </p>
+      {actionError && (
+        <div className="form-error" role="alert">
+          {actionError}
+        </div>
+      )}
+      {actionOk && (
+        <div className="success-banner" role="status">
+          {actionOk}
+        </div>
+      )}
 
       <form className="toolbar" onSubmit={handleSearch}>
         <div className="field">
@@ -126,6 +154,7 @@ export function AuditLogPage(): React.ReactNode {
                   <th scope="col">Action</th>
                   <th scope="col">Actor</th>
                   <th scope="col">Target</th>
+                  <th scope="col">Reversal</th>
                   <th scope="col">Metadata</th>
                 </tr>
               </thead>
@@ -140,6 +169,20 @@ export function AuditLogPage(): React.ReactNode {
                     <td className="mono" title={row.targetId ?? ''}>
                       {row.targetType}
                       {row.targetId ? ` · ${shortId(row.targetId)}` : ''}
+                    </td>
+                    <td>
+                      <ReversalCell
+                        row={row}
+                        onReversed={() => {
+                          setActionError(null);
+                          setActionOk(`Reversed ${row.action}.`);
+                          list.reload();
+                        }}
+                        onError={(err) => {
+                          setActionOk(null);
+                          setActionError(apiErrorMessage(err));
+                        }}
+                      />
                     </td>
                     <td>
                       {row.metadata ? (
@@ -157,6 +200,70 @@ export function AuditLogPage(): React.ReactNode {
         </>
       )}
     </div>
+  );
+}
+
+// Admin V2 — SUPER_ADMIN-only audit reversal. A reversal appends a new
+// audit row; the original stays immutable. The reversal linkage is shown
+// for rows that were reversed or are themselves reversals.
+function ReversalCell({
+  row,
+  onReversed,
+  onError,
+}: {
+  row: AuditLog;
+  onReversed: () => void;
+  onError: (err: unknown) => void;
+}): React.ReactNode {
+  const { client } = useAuth();
+  const { isSuperAdmin } = usePermissions();
+  const { confirm, dialog } = useConfirm();
+  const [reversing, setReversing] = useState(false);
+
+  async function handleReverse(): Promise<void> {
+    const confirmed = await confirm({
+      title: `Reverse ${row.action}?`,
+      message:
+        'The server will restore the pre-action state from the audit record. The original row stays in history; this reversal is appended as a new row.',
+      confirmLabel: 'Reverse action',
+      danger: true,
+    });
+    if (!confirmed) return;
+    setReversing(true);
+    try {
+      await reverseAuditLog(client, row.id);
+      onReversed();
+    } catch (err) {
+      onError(err);
+    } finally {
+      setReversing(false);
+    }
+  }
+
+  return (
+    <>
+      {dialog}
+      {row.reversalOf ? (
+        <span className="badge badge-gray" title={`Reversal of ${row.reversalOf}`}>
+          Reversal
+        </span>
+      ) : row.reversedBy ? (
+        <span className="badge badge-yellow" title={`Reversed by ${row.reversedBy}`}>
+          Reversed
+        </span>
+      ) : row.reversible && isSuperAdmin ? (
+        <button
+          type="button"
+          className="link-button"
+          disabled={reversing}
+          onClick={() => void handleReverse()}
+        >
+          {reversing ? 'Reversing…' : 'Reverse…'}
+        </button>
+      ) : (
+        <span className="muted">—</span>
+      )}
+    </>
   );
 }
 

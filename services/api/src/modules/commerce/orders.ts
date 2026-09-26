@@ -40,7 +40,7 @@ import {
 } from '../../http/pagination.js';
 import type { CommercePaymentProvider } from './payments/index.js';
 import { applyVerifiedPayment, moveInventory } from './paymentState.js';
-import { canManageStore } from './service.js';
+import { canManageStore, canOperateStore } from './service.js';
 
 type Db = Prisma.TransactionClient;
 
@@ -482,7 +482,7 @@ export async function checkout(
 
     await recordAuditEvent(
       {
-        actorId: user.id,
+        actor: user,
         action: 'commerce.order.created',
         targetType: 'commerce_order',
         targetId: order.id,
@@ -634,7 +634,7 @@ export async function cancelOrder(user: AuthUser, orderId: string): Promise<Orde
     await moveInventory(tx, orderId, 'release');
     await recordAuditEvent(
       {
-        actorId: user.id,
+        actor: user,
         action: 'commerce.order.canceled',
         targetType: 'commerce_order',
         targetId: orderId,
@@ -679,7 +679,7 @@ export async function updateFulfillment(
     include: { store: { include: { artist: { select: { ownerUserId: true } } } } },
   });
   if (!order) throw notFound('Order not found.');
-  if (!canManageStore(user, order.store)) {
+  if (!(await canOperateStore(user, order.store))) {
     throw forbidden('You do not manage this store.');
   }
   if (!FULFILLMENT_TRANSITIONS[order.status].includes(status)) {
@@ -689,7 +689,7 @@ export async function updateFulfillment(
     const row = await tx.commerceOrder.update({ where: { id: orderId }, data: { status } });
     await recordAuditEvent(
       {
-        actorId: user.id,
+        actor: user,
         action: 'commerce.order.fulfillment_changed',
         targetType: 'commerce_order',
         targetId: orderId,
@@ -745,8 +745,8 @@ export async function refundOrder(
     },
   });
   if (!order) throw notFound('Order not found.');
-  if (!canManageStore(user, order.store)) {
-    throw forbidden('Only the store owner or an administrator can issue refunds.');
+  if (!(await canOperateStore(user, order.store))) {
+    throw forbidden('Only the store owner or a commerce administrator can issue refunds.');
   }
 
   // Idempotency first: the same key returns the original refund even when the
@@ -826,7 +826,7 @@ export async function refundOrder(
     }
     await recordAuditEvent(
       {
-        actorId: user.id,
+        actor: user,
         action: 'commerce.order.refunded',
         targetType: 'commerce_order',
         targetId: order.id,

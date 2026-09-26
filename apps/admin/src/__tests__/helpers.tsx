@@ -7,7 +7,8 @@ import { MemoryRouter } from 'react-router-dom';
 import type { ReactNode } from 'react';
 import { vi } from 'vitest';
 import { AuthProvider } from '../auth/AuthContext';
-import type { AdminUser } from '../api/types';
+import { PermissionsProvider } from '../auth/PermissionsContext';
+import type { AdminUser, PermissionKey } from '../api/types';
 
 export const ACCESS_KEY = 'waveform.admin.accessToken';
 export const REFRESH_KEY = 'waveform.admin.refreshToken';
@@ -47,27 +48,61 @@ export function adminUser(overrides: Partial<AdminUser> = {}): AdminUser {
   };
 }
 
-/** Seeds stored tokens and renders inside MemoryRouter + AuthProvider. */
+/** Seeds stored tokens and renders inside MemoryRouter + AuthProvider + PermissionsProvider. */
 export function renderWithAuth(
   ui: ReactNode,
-  options: { user?: AdminUser; initialPath?: string; fetchHandler?: FetchHandler } = {},
+  options: {
+    user?: AdminUser;
+    initialPath?: string;
+    fetchHandler?: FetchHandler;
+    /** Effective permissions for the mocked /v1/admin/me/permissions. Defaults to a full set. */
+    permissions?: PermissionKey[];
+  } = {},
 ): RenderResult & { fetchMock: ReturnType<typeof vi.fn> } {
   const user = options.user ?? adminUser();
   localStorage.setItem(ACCESS_KEY, 'stored-access');
   localStorage.setItem(REFRESH_KEY, 'stored-refresh');
 
-  const handler: FetchHandler =
-    options.fetchHandler ??
-    ((url) => {
-      if (url.endsWith('/v1/me')) return jsonResponse(user);
-      if (url.endsWith('/v1/auth/logout')) return jsonResponse({}, 200);
-      throw new Error(`unexpected fetch: ${url}`);
-    });
+  const defaultPermissions: PermissionKey[] = options.permissions ?? [
+    'users.view',
+    'users.edit',
+    'users.credentials',
+    'users.ban',
+    'users.impersonate',
+    'roles.manage',
+    'subscriptions.manage',
+    'finance.view',
+    'royalties.manage',
+    'commerce.manage',
+    'content.moderate',
+    'reports.moderate',
+    'audit.view',
+    'audit.reverse',
+    'security.view',
+    'jobs.view',
+    'webhooks.view',
+    'system.view',
+    'flags.manage',
+    'settings.manage',
+  ];
+
+  const inner = options.fetchHandler;
+  const handler: FetchHandler = (url, init) => {
+    if (url.endsWith('/v1/admin/me/permissions')) {
+      return jsonResponse({ role: user.role, permissions: defaultPermissions });
+    }
+    if (inner) return inner(url, init);
+    if (url.endsWith('/v1/me')) return jsonResponse(user);
+    if (url.endsWith('/v1/auth/logout')) return jsonResponse({}, 200);
+    throw new Error(`unexpected fetch: ${url}`);
+  };
   const fetchMock = stubFetch(handler);
 
   const result = render(
     <MemoryRouter initialEntries={[options.initialPath ?? '/']}>
-      <AuthProvider>{ui}</AuthProvider>
+      <AuthProvider>
+        <PermissionsProvider>{ui}</PermissionsProvider>
+      </AuthProvider>
     </MemoryRouter>,
   );
   return { ...result, fetchMock };

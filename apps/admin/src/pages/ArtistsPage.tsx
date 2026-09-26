@@ -5,28 +5,51 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { usePermissions } from '../auth/PermissionsContext';
 import { apiErrorMessage } from '../api/client';
 import { getArtist, listArtists, setArtistVerified } from '../api/artists';
 import { getArtistOverview } from '../api/analytics';
 import { listAuditLogs } from '../api/audit';
-import type { ArtistDetail, AuditLog, PlatformOverview } from '../api/types';
+import { bulkTrackStatus, getArtistAdminDetail, restoreArtist, suspendArtist } from '../api/ops';
+import type {
+  ArtistAdminDetail,
+  ArtistDetail,
+  AuditLog,
+  BulkTrackResult,
+  PlatformOverview,
+} from '../api/types';
 import type { ArtistListQuery } from '../api/artists';
 import { useApiList } from '../hooks/useApiList';
 import { EmptyState, ErrorState, LoadingState } from '../components/DataStates';
 import { Pagination } from '../components/Pagination';
 import { VerifiedBadge } from '../components/Badges';
 import { useConfirm } from '../components/ConfirmDialog';
+import { useReason } from '../components/ReasonDialog';
+import { RequirePermission } from '../components/PermissionGate';
 import { formatDate, formatNumber } from '../utils/format';
 
 type VerifiedFilter = '' | 'true' | 'false';
 const PAGE_SIZE = 20;
 
 export function ArtistsPage(): React.ReactNode {
+  return (
+    <RequirePermission anyOf={['users.view', 'content.moderate']}>
+      <ArtistsContent />
+    </RequirePermission>
+  );
+}
+
+function ArtistsContent(): React.ReactNode {
   const { client } = useAuth();
+  const location = useLocation();
   const [searchInput, setSearchInput] = useState('');
   const [verifiedInput, setVerifiedInput] = useState<VerifiedFilter>('');
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Admin V2 — deep link from global search: /artists with { artistId } state.
+  const [selectedId, setSelectedId] = useState<string | null>(
+    (location.state as { artistId?: string } | null)?.artistId ?? null,
+  );
 
   const fetcher = useCallback(
     (query: ArtistListQuery) => listArtists(client, { ...query, limit: PAGE_SIZE }),
@@ -141,6 +164,137 @@ export function ArtistsPage(): React.ReactNode {
           )}
         </>
       )}
+      {!selectedId && (
+        <RequirePermission perm="content.moderate">
+          <BulkTrackStatusTool />
+        </RequirePermission>
+      )}
+    </div>
+  );
+}
+
+// Admin V2 — bulk track status: READY <-> TAKEDOWN for up to 100 track IDs,
+// reason required, per-track results. Server-validated and audited.
+function BulkTrackStatusTool(): React.ReactNode {
+  const { client } = useAuth();
+  const [idsInput, setIdsInput] = useState('');
+  const [status, setStatus] = useState<'READY' | 'TAKEDOWN'>('TAKEDOWN');
+  const [reason, setReason] = useState('');
+  const [running, setRunning] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [result, setResult] = useState<BulkTrackResult | null>(null);
+
+  async function handleRun(): Promise<void> {
+    const ids = idsInput
+      .split(/\s+/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    if (ids.length === 0) {
+      setError('Enter at least one track ID.');
+      return;
+    }
+    if (ids.length > 100) {
+      setError(`Maximum 100 track IDs per run (got ${ids.length}).`);
+      return;
+    }
+    if (!reason.trim()) {
+      setError('A reason is required.');
+      return;
+    }
+    setError(null);
+    setResult(null);
+    setRunning(true);
+    try {
+      setResult(await bulkTrackStatus(client, ids, status, reason.trim()));
+    } catch (err) {
+      setError(apiErrorMessage(err));
+    } finally {
+      setRunning(false);
+    }
+  }
+
+  return (
+    <div className="card">
+      <h2>Bulk track status</h2>
+      <p className="muted" style={{ fontSize: 13 }}>
+        Set READY or TAKEDOWN on up to 100 tracks at once. TAKEDOWN hides tracks from public
+        surfaces immediately. A reason is required and every change is audited.
+      </p>
+      {error && (
+        <div className="form-error" role="alert">
+          {error}
+        </div>
+      )}
+      <div className="field">
+        <label htmlFor="bulk-track-ids">Track IDs (whitespace-separated)</label>
+        <textarea
+          id="bulk-track-ids"
+          rows={3}
+          className="mono"
+          value={idsInput}
+          onChange={(event) => setIdsInput(event.target.value)}
+          placeholder="One or more track UUIDs…"
+        />
+      </div>
+      <div className="toolbar">
+        <div className="field">
+          <label htmlFor="bulk-track-status">New status</label>
+          <select
+            id="bulk-track-status"
+            value={status}
+            onChange={(event) => setStatus(event.target.value as 'READY' | 'TAKEDOWN')}
+          >
+            <option value="TAKEDOWN">TAKEDOWN</option>
+            <option value="READY">READY</option>
+          </select>
+        </div>
+        <div className="field">
+          <label htmlFor="bulk-track-reason">Reason (required)</label>
+          <input
+            id="bulk-track-reason"
+            type="text"
+            value={reason}
+            onChange={(event) => setReason(event.target.value)}
+            placeholder="e.g. DMCA takedown request #1234"
+          />
+        </div>
+        <button
+          type="button"
+          className="btn btn-outline-danger"
+          disabled={running}
+          onClick={() => void handleRun()}
+        >
+          {running ? 'Running…' : `Apply ${status}`}
+        </button>
+      </div>
+      {result && (
+        <div>
+          <p className="muted" style={{ fontSize: 13 }}>
+            Updated {result.updated.length} track{result.updated.length === 1 ? '' : 's'}.
+            {result.skipped.length > 0 && ` Skipped ${result.skipped.length}.`}
+          </p>
+          {result.skipped.length > 0 && (
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th scope="col">Track ID</th>
+                    <th scope="col">Skip reason</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.skipped.map((skip) => (
+                    <tr key={skip.id}>
+                      <td className="mono">{skip.id}</td>
+                      <td>{skip.reason}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
@@ -155,14 +309,18 @@ function ArtistDetailView({
   onChanged: () => void;
 }): React.ReactNode {
   const { client } = useAuth();
+  const { can } = usePermissions();
   const { confirm, dialog } = useConfirm();
+  const { askReason, dialog: reasonDialog } = useReason();
   const [artist, setArtist] = useState<ArtistDetail | null>(null);
+  const [adminDetail, setAdminDetail] = useState<ArtistAdminDetail | null>(null);
   const [verificationHistory, setVerificationHistory] = useState<AuditLog[]>([]);
   const [analytics, setAnalytics] = useState<PlatformOverview | null>(null);
   const [analyticsError, setAnalyticsError] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [actionOk, setActionOk] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -170,14 +328,18 @@ function ArtistDetailView({
     setError(null);
     setAnalyticsError(false);
     try {
-      const [fetched, history, overview] = await Promise.all([
+      const [fetched, history, overview, admin] = await Promise.all([
         getArtist(client, id),
         listAuditLogs(client, { targetType: 'artist', targetId: id, limit: 50 }).catch(
           () => ({ data: [] as AuditLog[], pagination: null }) as never,
         ),
         getArtistOverview(client, id, '28d').catch(() => null),
+        // Admin V2 — suspension state, owner, takedown/report counts.
+        // Requires users.view; falls back to null for roles without it.
+        getArtistAdminDetail(client, id).catch(() => null),
       ]);
       setArtist(fetched);
+      setAdminDetail(admin);
       setVerificationHistory(
         (history.data as AuditLog[]).filter((e) =>
           ['artist.verified', 'artist.unverified'].includes(e.action),
@@ -223,9 +385,59 @@ function ArtistDetailView({
     }
   }
 
+  async function handleSuspend(): Promise<void> {
+    if (!artist) return;
+    const reason = await askReason({
+      title: `Suspend ${artist.name}?`,
+      message:
+        'The artist profile is hidden from public surfaces and new uploads are blocked. Existing catalog stays reachable. This is recorded in the audit log and is reversible.',
+      reasonPlaceholder: 'Why is this artist being suspended?…',
+      confirmLabel: 'Suspend artist',
+    });
+    if (!reason) return;
+    setSaving(true);
+    try {
+      await suspendArtist(client, artist.id, reason);
+      setAdminDetail(await getArtistAdminDetail(client, artist.id).catch(() => null));
+      setActionError(null);
+      setActionOk('Artist suspended.');
+      onChanged();
+    } catch (err) {
+      setActionError(apiErrorMessage(err));
+      setActionOk(null);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRestore(): Promise<void> {
+    if (!artist) return;
+    const confirmed = await confirm({
+      title: `Restore ${artist.name}?`,
+      message: 'The artist profile becomes public again. This is recorded in the audit log.',
+      confirmLabel: 'Restore artist',
+    });
+    if (!confirmed) return;
+    setSaving(true);
+    try {
+      await restoreArtist(client, artist.id);
+      setAdminDetail(await getArtistAdminDetail(client, artist.id).catch(() => null));
+      setActionError(null);
+      setActionOk('Artist restored.');
+      onChanged();
+    } catch (err) {
+      setActionError(apiErrorMessage(err));
+      setActionOk(null);
+    } finally {
+      setSaving(false);
+    }
+  }
+
   if (loading) return <LoadingState label="Loading artist…" />;
   if (error) return <ErrorState error={error} onRetry={() => void load()} />;
   if (!artist) return <EmptyState message="Artist not found." />;
+
+  const suspended = adminDetail?.suspendedAt != null;
 
   return (
     <div>
@@ -350,7 +562,75 @@ function ArtistDetailView({
           Server-computed from the play events stream. A stream is a session with a completed play.
         </p>
       </div>
+      {adminDetail && (
+        <div className="card">
+          <h2>
+            Suspension{' '}
+            {suspended ? (
+              <span className="badge badge-red">Suspended</span>
+            ) : (
+              <span className="badge badge-green">Active</span>
+            )}
+          </h2>
+          {actionOk && (
+            <div className="success-banner" role="status">
+              {actionOk}
+            </div>
+          )}
+          <dl className="kv-list">
+            <dt>Owner</dt>
+            <dd>
+              {adminDetail.owner ? (
+                <>
+                  {adminDetail.owner.displayName}{' '}
+                  <span className="mono muted">{adminDetail.owner.email}</span>
+                </>
+              ) : (
+                '—'
+              )}
+            </dd>
+            <dt>Takedown tracks</dt>
+            <dd>{adminDetail.takedownTracks}</dd>
+            <dt>Open reports</dt>
+            <dd>{adminDetail.openReports}</dd>
+            <dt>Orders</dt>
+            <dd>{adminDetail.orders}</dd>
+            {suspended && (
+              <>
+                <dt>Suspended at</dt>
+                <dd>{formatDate(adminDetail.suspendedAt)}</dd>
+                <dt>Suspension reason</dt>
+                <dd>{adminDetail.suspendedReason ?? '—'}</dd>
+              </>
+            )}
+          </dl>
+          {can('content.moderate') && (
+            <div className="toolbar" style={{ marginTop: 12 }}>
+              {suspended ? (
+                <button
+                  type="button"
+                  className="btn"
+                  disabled={saving}
+                  onClick={() => void handleRestore()}
+                >
+                  Restore artist
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="btn btn-outline-danger"
+                  disabled={saving}
+                  onClick={() => void handleSuspend()}
+                >
+                  Suspend artist…
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
       {dialog}
+      {reasonDialog}
     </div>
   );
 }

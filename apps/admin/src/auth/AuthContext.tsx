@@ -20,6 +20,7 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { ApiClient, apiErrorMessage } from '../api/client';
 import { getMe, login as apiLogin, logout as apiLogout, refreshTokens } from '../api/auth';
 import type { AdminUser } from '../api/types';
+import { isAdminRole } from '../api/types';
 
 const ACCESS_TOKEN_KEY = 'waveform.admin.accessToken';
 const REFRESH_TOKEN_KEY = 'waveform.admin.refreshToken';
@@ -170,7 +171,9 @@ export function AuthProvider({ children }: { children: ReactNode }): ReactNode {
   const value = useMemo<AuthState>(
     () => ({
       user,
-      isAdmin: user?.role === 'ADMIN',
+      // Admin V2 — every role in the admin tier passes the UX gate; the
+      // server remains the authority on every endpoint.
+      isAdmin: user !== null && isAdminRole(user.role),
       isLoading,
       error,
       login,

@@ -54,7 +54,7 @@ export const publicUserSchema = {
     email: { type: 'string' },
     displayName: { type: 'string' },
     avatarUrl: { type: ['string', 'null'] },
-    role: { type: 'string', enum: ['LISTENER', 'ARTIST', 'ADMIN'] },
+    role: { type: 'string', enum: ['LISTENER', 'ARTIST', 'ADMIN', 'SUPER_ADMIN', 'PLATFORM_ADMIN', 'MODERATOR', 'SUPPORT_ADMIN', 'FINANCE_ADMIN', 'CONTENT_ADMIN', 'ARTIST_ADMIN', 'ANALYTICS_ADMIN'] },
     emailVerified: { type: 'boolean' },
     countryCode: { type: ['string', 'null'] },
     createdAt: { type: 'string', format: 'date-time' },

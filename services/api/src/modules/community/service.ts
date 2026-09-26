@@ -673,7 +673,7 @@ async function setPostStatus(
     })) as unknown as PostRow;
     await recordAuditEvent(
       {
-        actorId: admin.id,
+        actor: admin,
         action,
         targetType: 'artist_post',
         targetId: postId,
@@ -745,7 +745,7 @@ async function setCommentStatus(
     });
     await recordAuditEvent(
       {
-        actorId: admin.id,
+        actor: admin,
         action,
         targetType: 'post_comment',
         targetId: commentId,

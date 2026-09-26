@@ -17,7 +17,7 @@ export const userProfileSchema = {
     email: { type: 'string' },
     displayName: { type: 'string' },
     avatarUrl: { type: ['string', 'null'] },
-    role: { type: 'string', enum: ['LISTENER', 'ARTIST', 'ADMIN'] },
+    role: { type: 'string', enum: ['LISTENER', 'ARTIST', 'ADMIN', 'SUPER_ADMIN', 'PLATFORM_ADMIN', 'MODERATOR', 'SUPPORT_ADMIN', 'FINANCE_ADMIN', 'CONTENT_ADMIN', 'ARTIST_ADMIN', 'ANALYTICS_ADMIN'] },
     countryCode: { type: ['string', 'null'] },
     createdAt: { type: 'string', format: 'date-time' },
   },
@@ -39,7 +39,7 @@ export const updateRoleBody = {
   required: ['role'],
   additionalProperties: false,
   properties: {
-    role: { type: 'string', enum: ['LISTENER', 'ARTIST', 'ADMIN'] },
+    role: { type: 'string', enum: ['LISTENER', 'ARTIST', 'ADMIN', 'SUPER_ADMIN', 'PLATFORM_ADMIN', 'MODERATOR', 'SUPPORT_ADMIN', 'FINANCE_ADMIN', 'CONTENT_ADMIN', 'ARTIST_ADMIN', 'ANALYTICS_ADMIN'] },
   },
 } as const;
 
@@ -50,7 +50,7 @@ export const userListQuery = {
     page: { type: 'string', pattern: '^[1-9][0-9]*$' },
     limit: { type: 'string', pattern: '^[1-9][0-9]*$' },
     q: { type: 'string', minLength: 1, maxLength: 100 },
-    role: { type: 'string', enum: ['LISTENER', 'ARTIST', 'ADMIN'] },
+    role: { type: 'string', enum: ['LISTENER', 'ARTIST', 'ADMIN', 'SUPER_ADMIN', 'PLATFORM_ADMIN', 'MODERATOR', 'SUPPORT_ADMIN', 'FINANCE_ADMIN', 'CONTENT_ADMIN', 'ARTIST_ADMIN', 'ANALYTICS_ADMIN'] },
     // Phase 17 — admin-only (the list route is ADMIN-only). Lets operators
     // see soft-deleted accounts. Accepts 'true'/'false' strings.
     includeDeleted: { type: 'string', enum: ['true', 'false'] },
@@ -81,7 +81,7 @@ export const adminUserDetailSchema = {
     email: { type: 'string' },
     displayName: { type: 'string' },
     avatarUrl: { type: ['string', 'null'] },
-    role: { type: 'string', enum: ['LISTENER', 'ARTIST', 'ADMIN'] },
+    role: { type: 'string', enum: ['LISTENER', 'ARTIST', 'ADMIN', 'SUPER_ADMIN', 'PLATFORM_ADMIN', 'MODERATOR', 'SUPPORT_ADMIN', 'FINANCE_ADMIN', 'CONTENT_ADMIN', 'ARTIST_ADMIN', 'ANALYTICS_ADMIN'] },
     emailVerified: { type: 'boolean' },
     countryCode: { type: ['string', 'null'] },
     createdAt: { type: 'string', format: 'date-time' },

@@ -11,6 +11,11 @@ export const auditEventSchema = {
     targetType: { type: 'string' },
     targetId: { type: ['string', 'null'], format: 'uuid' },
     metadata: { type: 'object', additionalProperties: true },
+    reversible: { type: 'boolean' },
+    beforeState: { type: ['object', 'null'], additionalProperties: true },
+    afterState: { type: ['object', 'null'], additionalProperties: true },
+    reversalOf: { type: ['string', 'null'], format: 'uuid' },
+    reversed: { type: 'boolean' },
     createdAt: { type: 'string', format: 'date-time' },
   },
 } as const;

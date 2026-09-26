@@ -1,6 +1,9 @@
 // Phase 16 — audit log read endpoint. The audit trail is IMMUTABLE:
 // this module exposes reads only. There are deliberately no edit or delete
 // wrappers, and the UI renders no edit/delete controls.
+//
+// Admin V2 — reversal is NOT an edit: POST .../:id/reverse creates a NEW
+// audit row that inverts the original action (append-only correction).
 
 import type { ApiClient } from './client';
 import type { AuditLog, Page } from './types';

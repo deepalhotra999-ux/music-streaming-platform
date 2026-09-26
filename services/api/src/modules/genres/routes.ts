@@ -4,7 +4,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Config } from '../../config.js';
 import { problemSchema } from '../../http/errors.js';
 import { pageOf, type PaginationQuery } from '../../http/pagination.js';
-import { requireRole } from '../../http/authorization.js';
+import { requirePermission } from '../../http/authorization.js';
 import { apiRateLimit } from '../../http/limits.js';
 import { createGenreBody, genreListQuery, genreSchema, updateGenreBody } from './schemas.js';
 import {
@@ -70,7 +70,7 @@ export async function genresRoutes(app: FastifyInstance, config: Config): Promis
   app.post<{ Body: CreateGenreInput }>(
     '/v1/genres',
     {
-      preHandler: [app.authenticate, requireRole('ADMIN')],
+      preHandler: [app.authenticate, requirePermission('content.moderate')],
       schema: {
         tags: ['Genres'],
         summary: 'Create genre',
@@ -95,7 +95,7 @@ export async function genresRoutes(app: FastifyInstance, config: Config): Promis
   app.patch<{ Params: IdParams; Body: UpdateGenreInput }>(
     '/v1/genres/:id',
     {
-      preHandler: [app.authenticate, requireRole('ADMIN')],
+      preHandler: [app.authenticate, requirePermission('content.moderate')],
       schema: {
         tags: ['Genres'],
         summary: 'Update genre',
@@ -122,7 +122,7 @@ export async function genresRoutes(app: FastifyInstance, config: Config): Promis
   app.delete<{ Params: IdParams }>(
     '/v1/genres/:id',
     {
-      preHandler: [app.authenticate, requireRole('ADMIN')],
+      preHandler: [app.authenticate, requirePermission('content.moderate')],
       schema: {
         tags: ['Genres'],
         summary: 'Delete genre',

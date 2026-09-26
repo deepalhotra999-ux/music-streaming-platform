@@ -15,6 +15,17 @@ enum UserRole {
   LISTENER
   ARTIST
   ADMIN
+  // Admin V2 privilege model. SUPER_ADMIN is the highest privilege; the named
+  // operational roles carry server-defined permission bundles (see
+  // src/http/authorization.ts) plus optional per-admin extra grants.
+  SUPER_ADMIN
+  PLATFORM_ADMIN
+  MODERATOR
+  SUPPORT_ADMIN
+  FINANCE_ADMIN
+  CONTENT_ADMIN
+  ARTIST_ADMIN
+  ANALYTICS_ADMIN
 }
 
 enum AlbumType {
@@ -125,6 +136,8 @@ enum ModerationTargetType {
   // Phase 30 — commerce report targets.
   PRODUCT
   ARTIST_STORE
+  // Admin governance — users themselves are reportable (harassment, spam).
+  USER
 }
 
 enum ModerationStatus {
@@ -135,80 +148,99 @@ enum ModerationStatus {
 }
 
 model User {
-  id            String    @id @default(uuid()) @db.Uuid
-  authSubject   String?   @unique @map("auth_subject")
-  email         String    @unique @db.Citext
-  emailVerified Boolean   @default(false) @map("email_verified")
+  id               String    @id @default(uuid()) @db.Uuid
+  authSubject      String?   @unique @map("auth_subject")
+  email            String    @unique @db.Citext
+  emailVerified    Boolean   @default(false) @map("email_verified")
   // Null for users created via social login (no local password). Phase 3.
-  passwordHash  String?   @map("password_hash")
-  displayName   String    @map("display_name")
-  avatarUrl     String?   @map("avatar_url")
-  role          UserRole  @default(LISTENER)
-  countryCode   String?   @map("country_code") @db.Char(2)
-  createdAt     DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt     DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt     DateTime? @map("deleted_at") @db.Timestamptz(6)
-  createdBy     String?   @map("created_by") @db.Uuid
-  updatedBy     String?   @map("updated_by") @db.Uuid
+  passwordHash     String?   @map("password_hash")
+  displayName      String    @map("display_name")
+  avatarUrl        String?   @map("avatar_url")
+  role             UserRole  @default(LISTENER)
+  countryCode      String?   @map("country_code") @db.Char(2)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt        DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdBy        String?   @map("created_by") @db.Uuid
+  updatedBy        String?   @map("updated_by") @db.Uuid
+  // Admin governance — custom bans. bannedAt set = banned; bannedUntil null =
+  // indefinite. Login and token refresh are blocked while banned.
+  bannedAt         DateTime? @map("banned_at") @db.Timestamptz(6)
+  banReason        String?   @map("ban_reason")
+  bannedUntil      DateTime? @map("banned_until") @db.Timestamptz(6)
+  // Admin governance — granular permission keys granted by a main admin.
+  // Only meaningful when role is SUB_ADMIN; ADMIN bypasses checks.
+  adminPermissions String[]  @default([]) @map("admin_permissions")
 
-  artists            Artist[]
-  playlists          Playlist[]
-  playlistItemsAdded PlaylistTrack[]    @relation("AddedBy")
+  artists                       Artist[]
+  playlists                     Playlist[]
+  playlistItemsAdded            PlaylistTrack[]                @relation("AddedBy")
   // Phase 27 — collaborative playlists.
-  playlistMemberships PlaylistMember[]
-  invitationsCreated  PlaylistInvitation[]
-  playlistChanges     PlaylistChange[]
-  likes              Like[]
-  follows            Follow[]
-  listeningHistory   ListeningHistory[]
-  subscriptions      Subscription[]
-  refreshTokens      RefreshToken[]
-  playbackSessions   PlaybackSession[]
-  auditEvents        AdminAuditLog[]
-  playEvents         PlayEvent[]
+  playlistMemberships           PlaylistMember[]
+  invitationsCreated            PlaylistInvitation[]
+  playlistChanges               PlaylistChange[]
+  likes                         Like[]
+  follows                       Follow[]
+  listeningHistory              ListeningHistory[]
+  subscriptions                 Subscription[]
+  refreshTokens                 RefreshToken[]
+  playbackSessions              PlaybackSession[]
+  auditEvents                   AdminAuditLog[]
+  playEvents                    PlayEvent[]
   offlineDownloadAuthorizations OfflineDownloadAuthorization[]
-  reportsCreated     ModerationReport[] @relation("ModerationReportCreatedBy")
-  reportsReviewed    ModerationReport[] @relation("ModerationReportReviewedBy")
+  reportsCreated                ModerationReport[]             @relation("ModerationReportCreatedBy")
+  reportsReviewed               ModerationReport[]             @relation("ModerationReportReviewedBy")
   // Phase 28 — synchronized listening rooms.
-  hostedRooms        ListeningRoom[] @relation("RoomHost")
-  roomMemberships    ListeningRoomMember[]
-  roomQueueItemsAdded ListeningRoomQueueItem[] @relation("RoomQueueItemAddedBy")
-  roomInvitationsCreated ListeningRoomInvitation[] @relation("RoomInvitationCreatedBy")
+  hostedRooms                   ListeningRoom[]                @relation("RoomHost")
+  roomMemberships               ListeningRoomMember[]
+  roomQueueItemsAdded           ListeningRoomQueueItem[]       @relation("RoomQueueItemAddedBy")
+  roomInvitationsCreated        ListeningRoomInvitation[]      @relation("RoomInvitationCreatedBy")
   // Phase 29 — artist/fan community.
-  authoredPosts      ArtistPost[] @relation("ArtistPostAuthor")
-  postComments       PostComment[] @relation("PostCommentAuthor")
-  postReactions      PostReaction[] @relation("PostReactionUser")
+  authoredPosts                 ArtistPost[]                   @relation("ArtistPostAuthor")
+  postComments                  PostComment[]                  @relation("PostCommentAuthor")
+  postReactions                 PostReaction[]                 @relation("PostReactionUser")
   // Phase 30 — artist commerce.
-  cart               Cart?
-  commerceOrders     CommerceOrder[]
+  cart                          Cart?
+  commerceOrders                CommerceOrder[]
+  // Admin governance — chargebacks recorded + login history.
+  chargebacksRecorded           Chargeback[]
+  loginEvents                   LoginEvent[]
+  featureFlagsUpdated           FeatureFlag[]
+  platformSettingsUpdated       PlatformSetting[]
 
   @@index([role])
   @@map("users")
 }
 
 model Artist {
-  id          String    @id @default(uuid()) @db.Uuid
-  name        String
-  ownerUserId String?   @map("owner_user_id") @db.Uuid
-  owner       User?     @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
-  verified    Boolean   @default(false)
-  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt   DateTime? @map("deleted_at") @db.Timestamptz(6)
-  createdBy   String?   @map("created_by") @db.Uuid
-  updatedBy   String?   @map("updated_by") @db.Uuid
+  id              String    @id @default(uuid()) @db.Uuid
+  name            String
+  ownerUserId     String?   @map("owner_user_id") @db.Uuid
+  owner           User?     @relation(fields: [ownerUserId], references: [id], onDelete: Restrict)
+  verified        Boolean   @default(false)
+  // Admin V2 — account-level suspension. Suspended artists are hidden from
+  // public catalog listings (they 404 on public detail) but their rows and
+  // history are preserved; restore clears these fields. Distinct from
+  // soft-delete (deletedAt) and from track-level TAKEDOWN.
+  suspendedAt     DateTime? @map("suspended_at") @db.Timestamptz(6)
+  suspendedReason String?   @map("suspended_reason")
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt       DateTime? @map("deleted_at") @db.Timestamptz(6)
+  createdBy       String?   @map("created_by") @db.Uuid
+  updatedBy       String?   @map("updated_by") @db.Uuid
 
-  profile   ArtistProfile?
-  albums    Album[]
-  tracks    Track[]
-  followers Follow[]
+  profile                ArtistProfile?
+  albums                 Album[]
+  tracks                 Track[]
+  followers              Follow[]
   // Phase 29 — artist/fan community.
-  posts     ArtistPost[]
+  posts                  ArtistPost[]
   // Phase 30 — artist commerce.
-  stores    ArtistStore[]
-  products  Product[]
-  royaltyEarnings   RoyaltyEarning[] @relation("ArtistRoyaltyEarnings")
-  royaltyAdjustments RoyaltyAdjustment[] @relation("ArtistRoyaltyAdjustments")
+  stores                 ArtistStore[]
+  products               Product[]
+  royaltyEarnings        RoyaltyEarning[]        @relation("ArtistRoyaltyEarnings")
+  royaltyAdjustments     RoyaltyAdjustment[]     @relation("ArtistRoyaltyAdjustments")
   royaltyEligibleStreams RoyaltyEligibleStream[] @relation("ArtistRoyaltyEligibleStreams")
 
   @@index([ownerUserId])
@@ -250,7 +282,7 @@ model Album {
   tracks Track[]
 
   // Phase 29 — posts referencing this album (IDs only; catalog is the source of truth).
-  referencedInPosts ArtistPost[]
+  referencedInPosts    ArtistPost[]
   // Phase 30 — commerce products referencing this album (IDs only).
   referencedInProducts Product[]
 
@@ -259,18 +291,18 @@ model Album {
 }
 
 model Track {
-  id          String      @id @default(uuid()) @db.Uuid
-  title       String
-  artistId    String      @map("artist_id") @db.Uuid
-  artist      Artist      @relation(fields: [artistId], references: [id], onDelete: Restrict)
-  albumId     String?     @map("album_id") @db.Uuid
-  album       Album?      @relation(fields: [albumId], references: [id], onDelete: Restrict)
-  durationMs  Int         @map("duration_ms")
-  trackNumber Int?        @map("track_number")
-  discNumber  Int         @default(1) @map("disc_number")
-  isrc        String?     @unique
-  status      TrackStatus @default(PROCESSING)
-  playCount   BigInt      @default(0) @map("play_count")
+  id             String            @id @default(uuid()) @db.Uuid
+  title          String
+  artistId       String            @map("artist_id") @db.Uuid
+  artist         Artist            @relation(fields: [artistId], references: [id], onDelete: Restrict)
+  albumId        String?           @map("album_id") @db.Uuid
+  album          Album?            @relation(fields: [albumId], references: [id], onDelete: Restrict)
+  durationMs     Int               @map("duration_ms")
+  trackNumber    Int?              @map("track_number")
+  discNumber     Int               @default(1) @map("disc_number")
+  isrc           String?           @unique
+  status         TrackStatus       @default(PROCESSING)
+  playCount      BigInt            @default(0) @map("play_count")
   // Phase 14 — audio ingestion pipeline state (see AudioIngestStatus).
   // audioSourceKey is the private storage key of the uploaded source file;
   // it is never exposed to clients.
@@ -283,28 +315,28 @@ model Track {
   // Offline download authorizations pin this version; a mismatch marks
   // the local download stale so it can never silently play outdated audio.
   audioVersion   Int               @default(1) @map("audio_version")
-  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt   DateTime?   @map("deleted_at") @db.Timestamptz(6)
-  createdBy   String?     @map("created_by") @db.Uuid
-  updatedBy   String?     @map("updated_by") @db.Uuid
+  createdAt      DateTime          @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt      DateTime          @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt      DateTime?         @map("deleted_at") @db.Timestamptz(6)
+  createdBy      String?           @map("created_by") @db.Uuid
+  updatedBy      String?           @map("updated_by") @db.Uuid
 
-  genres           TrackGenre[]
-  playlistItems    PlaylistTrack[]
-  likes            Like[]
-  listeningHistory ListeningHistory[]
-  playbackSessions PlaybackSession[]
-  royaltyEarnings  RoyaltyEarning[] @relation("TrackRoyaltyEarnings")
-  royaltyEligibleStreams RoyaltyEligibleStream[]
+  genres                        TrackGenre[]
+  playlistItems                 PlaylistTrack[]
+  likes                         Like[]
+  listeningHistory              ListeningHistory[]
+  playbackSessions              PlaybackSession[]
+  royaltyEarnings               RoyaltyEarning[]               @relation("TrackRoyaltyEarnings")
+  royaltyEligibleStreams        RoyaltyEligibleStream[]
   offlineDownloadAuthorizations OfflineDownloadAuthorization[]
   // Phase 28 — synchronized listening rooms (queue items reference tracks;
   // rooms reference their current track; no audio URLs are ever stored).
-  roomQueueItems      ListeningRoomQueueItem[]
-  roomsAsCurrentTrack ListeningRoom[]
+  roomQueueItems                ListeningRoomQueueItem[]
+  roomsAsCurrentTrack           ListeningRoom[]
   // Phase 29 — posts referencing this track (IDs only; catalog is the source of truth).
-  referencedInPosts   ArtistPost[]
+  referencedInPosts             ArtistPost[]
   // Phase 30 — commerce products referencing this track (IDs only).
-  referencedInProducts Product[]
+  referencedInProducts          Product[]
 
   @@index([artistId])
   @@index([albumId, trackNumber])
@@ -336,23 +368,23 @@ model TrackGenre {
 }
 
 model Playlist {
-  id          String             @id @default(uuid()) @db.Uuid
-  title       String
-  description String?
-  coverArtUrl String?            @map("cover_art_url")
-  visibility  PlaylistVisibility @default(PRIVATE)
-  ownerUserId String             @map("owner_user_id") @db.Uuid
-  owner       User               @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
-  createdAt   DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
-  deletedAt   DateTime?          @map("deleted_at") @db.Timestamptz(6)
-  createdBy   String?            @map("created_by") @db.Uuid
-  updatedBy   String?            @map("updated_by") @db.Uuid
+  id              String             @id @default(uuid()) @db.Uuid
+  title           String
+  description     String?
+  coverArtUrl     String?            @map("cover_art_url")
+  visibility      PlaylistVisibility @default(PRIVATE)
+  ownerUserId     String             @map("owner_user_id") @db.Uuid
+  owner           User               @relation(fields: [ownerUserId], references: [id], onDelete: Cascade)
+  createdAt       DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
+  deletedAt       DateTime?          @map("deleted_at") @db.Timestamptz(6)
+  createdBy       String?            @map("created_by") @db.Uuid
+  updatedBy       String?            @map("updated_by") @db.Uuid
   // Phase 27 — collaborative playlists: opt-in membership plus optimistic
   // concurrency for track mutations. Existing playlists keep revision 0 and
   // behave exactly as before until collaboration is enabled.
-  isCollaborative Boolean @default(false) @map("is_collaborative")
-  revision        Int     @default(0)
+  isCollaborative Boolean            @default(false) @map("is_collaborative")
+  revision        Int                @default(0)
 
   items PlaylistTrack[]
 
@@ -405,12 +437,12 @@ enum PlaylistChangeAction {
 }
 
 model PlaylistMember {
-  playlistId String          @map("playlist_id") @db.Uuid
-  playlist   Playlist        @relation(fields: [playlistId], references: [id], onDelete: Cascade)
-  userId     String          @map("user_id") @db.Uuid
-  user       User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  playlistId String           @map("playlist_id") @db.Uuid
+  playlist   Playlist         @relation(fields: [playlistId], references: [id], onDelete: Cascade)
+  userId     String           @map("user_id") @db.Uuid
+  user       User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   role       CollaboratorRole
-  createdAt  DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdAt  DateTime         @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@id([playlistId, userId])
   @@index([userId])
@@ -488,13 +520,13 @@ model ListeningRoom {
 
   // Authoritative playback state. `positionMs` is valid at `stateAt`
   // (server clock); clients extrapolate from elapsed server time.
-  revision      Int               @default(0)
-  playbackState RoomPlaybackState @default(PAUSED) @map("playback_state")
-  currentTrackId String?          @map("current_track_id") @db.Uuid
-  currentTrack   Track?           @relation(fields: [currentTrackId], references: [id], onDelete: SetNull)
-  queueIndex     Int              @default(0) @map("queue_index")
-  positionMs     Int              @default(0) @map("position_ms")
-  stateAt        DateTime         @default(now()) @map("state_at") @db.Timestamptz(6)
+  revision       Int               @default(0)
+  playbackState  RoomPlaybackState @default(PAUSED) @map("playback_state")
+  currentTrackId String?           @map("current_track_id") @db.Uuid
+  currentTrack   Track?            @relation(fields: [currentTrackId], references: [id], onDelete: SetNull)
+  queueIndex     Int               @default(0) @map("queue_index")
+  positionMs     Int               @default(0) @map("position_ms")
+  stateAt        DateTime          @default(now()) @map("state_at") @db.Timestamptz(6)
 
   createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
@@ -571,24 +603,24 @@ enum CommunityContentStatus {
 }
 
 model ArtistPost {
-  id           String                @id @default(uuid()) @db.Uuid
-  artistId     String                @map("artist_id") @db.Uuid
-  artist       Artist                @relation(fields: [artistId], references: [id], onDelete: Restrict)
-  authorUserId String                @map("author_user_id") @db.Uuid
-  author       User                  @relation("ArtistPostAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
-  body         String                @db.Text
+  id           String                 @id @default(uuid()) @db.Uuid
+  artistId     String                 @map("artist_id") @db.Uuid
+  artist       Artist                 @relation(fields: [artistId], references: [id], onDelete: Restrict)
+  authorUserId String                 @map("author_user_id") @db.Uuid
+  author       User                   @relation("ArtistPostAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
+  body         String                 @db.Text
   // Optional catalog references — IDs only, resolved at read time so the
   // catalog stays the single source of truth. Null = no attachment.
-  trackId      String?               @map("track_id") @db.Uuid
-  track        Track?                @relation(fields: [trackId], references: [id], onDelete: SetNull)
-  albumId      String?               @map("album_id") @db.Uuid
-  album        Album?                @relation(fields: [albumId], references: [id], onDelete: SetNull)
+  trackId      String?                @map("track_id") @db.Uuid
+  track        Track?                 @relation(fields: [trackId], references: [id], onDelete: SetNull)
+  albumId      String?                @map("album_id") @db.Uuid
+  album        Album?                 @relation(fields: [albumId], references: [id], onDelete: SetNull)
   status       CommunityContentStatus @default(ACTIVE)
   // publishedAt is the stable feed ordering key (set once at creation;
   // edits bump updatedAt only, so edited posts do not jump the feed).
-  publishedAt  DateTime              @default(now()) @map("published_at") @db.Timestamptz(6)
-  createdAt    DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  publishedAt  DateTime               @default(now()) @map("published_at") @db.Timestamptz(6)
+  createdAt    DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   comments  PostComment[]
   reactions PostReaction[]
@@ -599,15 +631,15 @@ model ArtistPost {
 }
 
 model PostComment {
-  id           String                @id @default(uuid()) @db.Uuid
-  postId       String                @map("post_id") @db.Uuid
-  post         ArtistPost            @relation(fields: [postId], references: [id], onDelete: Cascade)
-  authorUserId String                @map("author_user_id") @db.Uuid
-  author       User                  @relation("PostCommentAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
-  body         String                @db.Text
+  id           String                 @id @default(uuid()) @db.Uuid
+  postId       String                 @map("post_id") @db.Uuid
+  post         ArtistPost             @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorUserId String                 @map("author_user_id") @db.Uuid
+  author       User                   @relation("PostCommentAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
+  body         String                 @db.Text
   status       CommunityContentStatus @default(ACTIVE)
-  createdAt    DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt    DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdAt    DateTime               @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime               @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([postId, createdAt])
   @@map("post_comments")
@@ -682,32 +714,33 @@ model Plan {
 }
 
 model Subscription {
-  id          String   @id @default(uuid()) @db.Uuid
-  userId      String   @map("user_id") @db.Uuid
-  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  planId      String   @map("plan_id")
-  plan        Plan     @relation(fields: [planId], references: [id], onDelete: Restrict)
+  id                     String               @id @default(uuid()) @db.Uuid
+  userId                 String               @map("user_id") @db.Uuid
+  user                   User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  planId                 String               @map("plan_id")
+  plan                   Plan                 @relation(fields: [planId], references: [id], onDelete: Restrict)
   // Phase 18 — provider is a typed enum (was free-form `store`). Legacy
   // dev rows with a NULL store backfill to DEV; see the Phase 18 migration.
-  provider    SubscriptionProvider @default(DEV)
-  status      SubscriptionStatus @default(ACTIVE)
+  provider               SubscriptionProvider @default(DEV)
+  status                 SubscriptionStatus   @default(ACTIVE)
   // Phase 18 — external subscription identifier from the store
   // (was `storeSubscriptionId`). Unique per provider so provider events are
   // idempotent and duplicate deliveries cannot fork subscription history.
-  externalSubscriptionId String? @map("external_subscription_id")
-  currentPeriodStart  DateTime?          @map("current_period_start") @db.Timestamptz(6)
-  currentPeriodEnd    DateTime?          @map("current_period_end") @db.Timestamptz(6)
-  canceledAt          DateTime?          @map("canceled_at") @db.Timestamptz(6)
+  externalSubscriptionId String?              @map("external_subscription_id")
+  currentPeriodStart     DateTime?            @map("current_period_start") @db.Timestamptz(6)
+  currentPeriodEnd       DateTime?            @map("current_period_end") @db.Timestamptz(6)
+  canceledAt             DateTime?            @map("canceled_at") @db.Timestamptz(6)
   // Phase 19 — VERIFIED once a store adapter has verified this subscription
   // (signature/API checks). lastVerifiedAt records the most recent check.
-  verificationStatus VerificationStatus @default(UNVERIFIED) @map("verification_status")
-  lastVerifiedAt       DateTime?          @map("last_verified_at") @db.Timestamptz(6)
-  createdAt           DateTime           @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt           DateTime           @updatedAt @map("updated_at") @db.Timestamptz(6)
-  createdBy           String?            @map("created_by") @db.Uuid
-  updatedBy           String?            @map("updated_by") @db.Uuid
+  verificationStatus     VerificationStatus   @default(UNVERIFIED) @map("verification_status")
+  lastVerifiedAt         DateTime?            @map("last_verified_at") @db.Timestamptz(6)
+  createdAt              DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt              DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  createdBy              String?              @map("created_by") @db.Uuid
+  updatedBy              String?              @map("updated_by") @db.Uuid
 
-  events SubscriptionEvent[]
+  events      SubscriptionEvent[]
+  chargebacks Chargeback[]
 
   @@unique([provider, externalSubscriptionId])
   @@index([userId, status])
@@ -720,18 +753,18 @@ model Subscription {
 // happened" is always possible from this table plus the current row; status
 // on Subscription is a cached projection, never the sole record.
 model SubscriptionEvent {
-  id             String                @id @default(uuid()) @db.Uuid
-  subscriptionId String                @map("subscription_id") @db.Uuid
-  subscription   Subscription          @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
-  provider       SubscriptionProvider
-  providerEventId String               @map("provider_event_id")
-  eventType      SubscriptionEventType @map("event_type")
-  statusFrom     SubscriptionStatus?   @map("status_from")
-  statusTo       SubscriptionStatus?   @map("status_to")
+  id              String                @id @default(uuid()) @db.Uuid
+  subscriptionId  String                @map("subscription_id") @db.Uuid
+  subscription    Subscription          @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  provider        SubscriptionProvider
+  providerEventId String                @map("provider_event_id")
+  eventType       SubscriptionEventType @map("event_type")
+  statusFrom      SubscriptionStatus?   @map("status_from")
+  statusTo        SubscriptionStatus?   @map("status_to")
   // Sanitized provider payload (plan code, period dates, cancel reason).
   // Never card data, never secrets.
-  payload        Json                  @default("{}")
-  createdAt      DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  payload         Json                  @default("{}")
+  createdAt       DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@unique([provider, providerEventId])
   @@index([subscriptionId, createdAt])
@@ -752,6 +785,9 @@ model RefreshToken {
   // the replacement row is found via the same token family (userId). Kept as
   // a plain marker column for reuse detection.
   replacedAt DateTime? @map("replaced_at") @db.Timestamptz(6)
+  // Admin governance — device facts for the "active devices" view.
+  ipAddress  String?   @map("ip_address")
+  userAgent  String?   @map("user_agent")
 
   @@index([userId])
   @@map("refresh_tokens")
@@ -762,25 +798,25 @@ model RefreshToken {
 // API never exposes permanent public audio URLs. Tokens are opaque; only the
 // SHA-256 hash is stored (same pattern as Phase 3 refresh tokens).
 model PlaybackSession {
-  id        String   @id @default(uuid()) @db.Uuid
-  userId    String   @map("user_id") @db.Uuid
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  trackId   String   @map("track_id") @db.Uuid
-  track     Track    @relation(fields: [trackId], references: [id], onDelete: Restrict)
+  id                String   @id @default(uuid()) @db.Uuid
+  userId            String   @map("user_id") @db.Uuid
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trackId           String   @map("track_id") @db.Uuid
+  track             Track    @relation(fields: [trackId], references: [id], onDelete: Restrict)
   // Phase 25 — null for synthetic offline sessions (no delivery token).
-  tokenHash String?  @unique @map("token_hash")
+  tokenHash         String?  @unique @map("token_hash")
   // Phase 25 — identifies the synthetic session for one offline playback
   // session; null for online sessions. Unique per user.
-  offlineSessionKey String? @map("offline_session_key")
-  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
-  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  offlineSessionKey String?  @map("offline_session_key")
+  expiresAt         DateTime @map("expires_at") @db.Timestamptz(6)
+  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
 
   playEvents PlayEvent[]
 
+  @@unique([userId, offlineSessionKey])
   @@index([userId])
   @@index([expiresAt])
   @@index([trackId, createdAt])
-  @@unique([userId, offlineSessionKey])
   @@map("playback_sessions")
 }
 
@@ -796,19 +832,19 @@ enum PlayEventType {
 }
 
 model PlayEvent {
-  id         String        @id @default(uuid()) @db.Uuid
+  id                     String                        @id @default(uuid()) @db.Uuid
   // Phase 25 — sessionId is always set. Events uploaded from offline
   // playback attach to a synthetic server-side PlaybackSession created for
   // their offlineSessionKey, so Phase 15 session/stream analytics keep
   // working unchanged. The authorization linkage is kept alongside.
-  sessionId  String        @map("session_id") @db.Uuid
-  session    PlaybackSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
-  userId     String        @map("user_id") @db.Uuid
-  user       User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  trackId    String        @map("track_id") @db.Uuid
-  eventType  PlayEventType @map("event_type")
-  positionMs Int?          @map("position_ms")
-  createdAt  DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  sessionId              String                        @map("session_id") @db.Uuid
+  session                PlaybackSession               @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  userId                 String                        @map("user_id") @db.Uuid
+  user                   User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trackId                String                        @map("track_id") @db.Uuid
+  eventType              PlayEventType                 @map("event_type")
+  positionMs             Int?                          @map("position_ms")
+  createdAt              DateTime                      @default(now()) @map("created_at") @db.Timestamptz(6)
   // Phase 25 — offline event sync. offlineEventKey is a client-generated
   // UUID; its unique constraint is the idempotency mechanism for uploads
   // retried after network loss. offlineSessionKey groups the events of one
@@ -816,11 +852,11 @@ model PlayEvent {
   // occurredAt is when playback actually happened offline; for offline
   // events createdAt is set from occurredAt so analytics bucket on actual
   // playback time, not upload time.
-  offlineEventKey       String?  @unique @map("offline_event_key")
-  offlineAuthorizationId String? @map("offline_authorization_id") @db.Uuid
-  offlineAuthorization  OfflineDownloadAuthorization? @relation(fields: [offlineAuthorizationId], references: [id], onDelete: SetNull)
-  offlineSessionKey     String?  @map("offline_session_key")
-  occurredAt            DateTime? @map("occurred_at") @db.Timestamptz(6)
+  offlineEventKey        String?                       @unique @map("offline_event_key")
+  offlineAuthorizationId String?                       @map("offline_authorization_id") @db.Uuid
+  offlineAuthorization   OfflineDownloadAuthorization? @relation(fields: [offlineAuthorizationId], references: [id], onDelete: SetNull)
+  offlineSessionKey      String?                       @map("offline_session_key")
+  occurredAt             DateTime?                     @map("occurred_at") @db.Timestamptz(6)
 
   @@index([sessionId, createdAt])
   @@index([trackId, createdAt])
@@ -867,19 +903,93 @@ model OfflineDownloadAuthorization {
 // in depth, and the HTTP surface exposes only reads. actor is null when the
 // user who performed the action has been hard-deleted (ON DELETE SET NULL).
 model AdminAuditLog {
-  id         String   @id @default(uuid()) @db.Uuid
-  actorId    String?  @map("actor_id") @db.Uuid
-  actor      User?    @relation(fields: [actorId], references: [id], onDelete: SetNull)
-  action     String
-  targetType String   @map("target_type")
-  targetId   String?  @map("target_id") @db.Uuid
-  metadata   Json     @default("{}")
-  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  id          String          @id @default(uuid()) @db.Uuid
+  actorId     String?         @map("actor_id") @db.Uuid
+  actor       User?           @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action      String
+  targetType  String          @map("target_type")
+  targetId    String?         @map("target_id") @db.Uuid
+  metadata    Json            @default("{}")
+  createdAt   DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+  // Admin governance — reversibility. A reversal is a NEW row pointing at the
+  // original via reversalOf; beforeState/afterState carry the facts needed to
+  // invert the action (never secrets).
+  reversible  Boolean         @default(false)
+  beforeState Json?           @map("before_state")
+  afterState  Json?           @map("after_state")
+  reversalOf  String?         @map("reversal_of") @db.Uuid
+  original    AdminAuditLog?  @relation("AuditReversal", fields: [reversalOf], references: [id], onDelete: SetNull)
+  reversedBy  AdminAuditLog[] @relation("AuditReversal")
 
   @@index([createdAt(sort: Desc)])
   @@index([action])
   @@index([actorId])
   @@map("admin_audit_logs")
+}
+
+// Admin governance — a recorded chargeback auto-cancels its subscription.
+// Recording is the integration point: the (mock) provider has no webhooks,
+// so chargebacks enter through the admin console and are fully audited.
+model Chargeback {
+  id             String       @id @default(uuid()) @db.Uuid
+  subscriptionId String       @map("subscription_id") @db.Uuid
+  subscription   Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  providerRef    String?      @map("provider_ref")
+  amountCents    Int?         @map("amount_cents")
+  currency       String?      @db.Char(3)
+  reason         String?
+  recordedBy     String?      @map("recorded_by") @db.Uuid
+  recorder       User?        @relation(fields: [recordedBy], references: [id], onDelete: SetNull)
+  createdAt      DateTime     @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([subscriptionId])
+  @@map("chargebacks")
+}
+
+// Admin governance — every login attempt, success or failure, with network
+// facts for the security timeline. Failed attempts store no password material.
+model LoginEvent {
+  id            String   @id @default(uuid()) @db.Uuid
+  userId        String?  @map("user_id") @db.Uuid
+  user          User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  email         String
+  ipAddress     String?  @map("ip_address")
+  userAgent     String?  @map("user_agent")
+  success       Boolean
+  failureReason String?  @map("failure_reason")
+  createdAt     DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([userId, createdAt(sort: Desc)])
+  @@map("login_events")
+}
+
+// Admin V2 — feature flags. Controlled via SUPER_ADMIN-gated endpoints;
+// every change writes an audit row. rolloutPercent allows percentage
+// rollouts where the consuming architecture supports it.
+model FeatureFlag {
+  key            String   @id
+  enabled        Boolean  @default(false)
+  rolloutPercent Int      @default(100) @map("rollout_percent")
+  description    String?
+  updatedBy      String?  @map("updated_by") @db.Uuid
+  updater        User?    @relation(fields: [updatedBy], references: [id], onDelete: SetNull)
+  updatedAt      DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("feature_flags")
+}
+
+// Admin V2 — platform settings. Strongly typed: every key has a server-side
+// validator (see governance service SETTING_DEFINITIONS); unknown keys and
+// out-of-range values are rejected. Emergency controls live under
+// "emergency.*" and are SUPER_ADMIN-only.
+model PlatformSetting {
+  key       String   @id
+  value     Json     @db.JsonB
+  updatedBy String?  @map("updated_by") @db.Uuid
+  updater   User?    @relation(fields: [updatedBy], references: [id], onDelete: SetNull)
+  updatedAt DateTime @default(now()) @map("updated_at") @db.Timestamptz(6)
+
+  @@map("platform_settings")
 }
 
 // Phase 17 — moderation foundation. A report flags one catalog entity
@@ -952,45 +1062,45 @@ model RoyaltyPeriod {
 }
 
 model RoyaltyRevenueInput {
-  id          String   @id @default(uuid()) @db.Uuid
-  periodId    String   @map("period_id") @db.Uuid
+  id          String        @id @default(uuid()) @db.Uuid
+  periodId    String        @map("period_id") @db.Uuid
   period      RoyaltyPeriod @relation(fields: [periodId], references: [id], onDelete: Restrict)
   source      String
   currency    String
-  grossAmount Decimal  @map("gross_amount") @db.Decimal(19, 4)
-  deductions  Decimal  @default(0) @map("deductions") @db.Decimal(19, 4)
-  netAmount   Decimal  @map("net_amount") @db.Decimal(19, 4)
-  referenceId String   @unique @map("reference_id")
-  fxReference String?  @map("fx_reference")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  createdBy   String?  @map("created_by") @db.Uuid
+  grossAmount Decimal       @map("gross_amount") @db.Decimal(19, 4)
+  deductions  Decimal       @default(0) @map("deductions") @db.Decimal(19, 4)
+  netAmount   Decimal       @map("net_amount") @db.Decimal(19, 4)
+  referenceId String        @unique @map("reference_id")
+  fxReference String?       @map("fx_reference")
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy   String?       @map("created_by") @db.Uuid
 
   @@index([periodId])
   @@map("royalty_revenue_inputs")
 }
 
 model RoyaltyCalculationRun {
-  id                  String   @id @default(uuid()) @db.Uuid
-  periodId            String   @map("period_id") @db.Uuid
-  period              RoyaltyPeriod @relation(fields: [periodId], references: [id], onDelete: Restrict)
-  policyId            String   @map("policy_id") @db.Uuid
-  policy              RoyaltyPolicy @relation(fields: [policyId], references: [id], onDelete: Restrict)
-  status              String   @default("PENDING")
-  runKey              String   @unique @map("run_key")
-  revenueSnapshot     Json     @default("{}") @map("revenue_snapshot")
-  totalEligibleStreams BigInt  @default(0) @map("total_eligible_streams")
-  royaltyPool         Decimal  @default(0) @map("royalty_pool") @db.Decimal(19, 4)
-  totalAllocated      Decimal  @default(0) @map("total_allocated") @db.Decimal(19, 4)
-  residualAmount      Decimal  @default(0) @map("residual_amount") @db.Decimal(19, 4)
-  currency            String
-  startedAt           DateTime? @map("started_at") @db.Timestamptz(6)
-  completedAt         DateTime? @map("completed_at") @db.Timestamptz(6)
-  error               String?
-  createdAt           DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  createdBy           String?  @map("created_by") @db.Uuid
+  id                   String        @id @default(uuid()) @db.Uuid
+  periodId             String        @map("period_id") @db.Uuid
+  period               RoyaltyPeriod @relation(fields: [periodId], references: [id], onDelete: Restrict)
+  policyId             String        @map("policy_id") @db.Uuid
+  policy               RoyaltyPolicy @relation(fields: [policyId], references: [id], onDelete: Restrict)
+  status               String        @default("PENDING")
+  runKey               String        @unique @map("run_key")
+  revenueSnapshot      Json          @default("{}") @map("revenue_snapshot")
+  totalEligibleStreams BigInt        @default(0) @map("total_eligible_streams")
+  royaltyPool          Decimal       @default(0) @map("royalty_pool") @db.Decimal(19, 4)
+  totalAllocated       Decimal       @default(0) @map("total_allocated") @db.Decimal(19, 4)
+  residualAmount       Decimal       @default(0) @map("residual_amount") @db.Decimal(19, 4)
+  currency             String
+  startedAt            DateTime?     @map("started_at") @db.Timestamptz(6)
+  completedAt          DateTime?     @map("completed_at") @db.Timestamptz(6)
+  error                String?
+  createdAt            DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy            String?       @map("created_by") @db.Uuid
 
-  earnings RoyaltyEarning[]
-  adjustments RoyaltyAdjustment[]
+  earnings        RoyaltyEarning[]
+  adjustments     RoyaltyAdjustment[]
   eligibleStreams RoyaltyEligibleStream[]
 
   @@index([periodId])
@@ -998,20 +1108,20 @@ model RoyaltyCalculationRun {
 }
 
 model RoyaltyEarning {
-  id                   String   @id @default(uuid()) @db.Uuid
-  runId                String   @map("run_id") @db.Uuid
+  id                   String                @id @default(uuid()) @db.Uuid
+  runId                String                @map("run_id") @db.Uuid
   run                  RoyaltyCalculationRun @relation(fields: [runId], references: [id], onDelete: Restrict)
-  artistId             String   @map("artist_id") @db.Uuid
-  artist               Artist   @relation("ArtistRoyaltyEarnings", fields: [artistId], references: [id], onDelete: Restrict)
-  trackId              String   @map("track_id") @db.Uuid
-  track                Track    @relation("TrackRoyaltyEarnings", fields: [trackId], references: [id], onDelete: Restrict)
-  eligibleStreams      BigInt   @map("eligible_streams")
-  allocationPercentage Decimal  @map("allocation_percentage") @db.Decimal(9, 6)
-  grossAmount          Decimal  @map("gross_amount") @db.Decimal(19, 4)
-  adjustmentsTotal     Decimal  @default(0) @map("adjustments_total") @db.Decimal(19, 4)
-  finalAmount          Decimal  @map("final_amount") @db.Decimal(19, 4)
+  artistId             String                @map("artist_id") @db.Uuid
+  artist               Artist                @relation("ArtistRoyaltyEarnings", fields: [artistId], references: [id], onDelete: Restrict)
+  trackId              String                @map("track_id") @db.Uuid
+  track                Track                 @relation("TrackRoyaltyEarnings", fields: [trackId], references: [id], onDelete: Restrict)
+  eligibleStreams      BigInt                @map("eligible_streams")
+  allocationPercentage Decimal               @map("allocation_percentage") @db.Decimal(9, 6)
+  grossAmount          Decimal               @map("gross_amount") @db.Decimal(19, 4)
+  adjustmentsTotal     Decimal               @default(0) @map("adjustments_total") @db.Decimal(19, 4)
+  finalAmount          Decimal               @map("final_amount") @db.Decimal(19, 4)
   currency             String
-  createdAt            DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdAt            DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
 
   adjustments RoyaltyAdjustment[]
 
@@ -1023,19 +1133,19 @@ model RoyaltyEarning {
 }
 
 model RoyaltyAdjustment {
-  id          String   @id @default(uuid()) @db.Uuid
-  runId       String   @map("run_id") @db.Uuid
+  id          String                @id @default(uuid()) @db.Uuid
+  runId       String                @map("run_id") @db.Uuid
   run         RoyaltyCalculationRun @relation(fields: [runId], references: [id], onDelete: Restrict)
-  earningId   String?  @map("earning_id") @db.Uuid
-  earning     RoyaltyEarning? @relation(fields: [earningId], references: [id], onDelete: Restrict)
-  artistId    String   @map("artist_id") @db.Uuid
-  artist      Artist   @relation("ArtistRoyaltyAdjustments", fields: [artistId], references: [id], onDelete: Restrict)
-  amount      Decimal  @db.Decimal(19, 4)
+  earningId   String?               @map("earning_id") @db.Uuid
+  earning     RoyaltyEarning?       @relation(fields: [earningId], references: [id], onDelete: Restrict)
+  artistId    String                @map("artist_id") @db.Uuid
+  artist      Artist                @relation("ArtistRoyaltyAdjustments", fields: [artistId], references: [id], onDelete: Restrict)
+  amount      Decimal               @db.Decimal(19, 4)
   currency    String
   reason      String
-  referenceId String   @unique @map("reference_id")
-  createdAt   DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  createdBy   String?  @map("created_by") @db.Uuid
+  referenceId String                @unique @map("reference_id")
+  createdAt   DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  createdBy   String?               @map("created_by") @db.Uuid
 
   @@index([runId])
   @@index([earningId])
@@ -1043,16 +1153,16 @@ model RoyaltyAdjustment {
 }
 
 model RoyaltyEligibleStream {
-  id                String   @id @default(uuid()) @db.Uuid
-  runId             String   @map("run_id") @db.Uuid
+  id                String                @id @default(uuid()) @db.Uuid
+  runId             String                @map("run_id") @db.Uuid
   run               RoyaltyCalculationRun @relation(fields: [runId], references: [id], onDelete: Restrict)
-  playbackSessionId String   @map("playback_session_id") @db.Uuid
-  trackId           String   @map("track_id") @db.Uuid
-  track             Track    @relation(fields: [trackId], references: [id], onDelete: Restrict)
-  artistId          String   @map("artist_id") @db.Uuid
-  artist            Artist   @relation("ArtistRoyaltyEligibleStreams", fields: [artistId], references: [id], onDelete: Restrict)
-  sessionCreatedAt  DateTime @map("session_created_at") @db.Timestamptz(6)
-  createdAt         DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  playbackSessionId String                @map("playback_session_id") @db.Uuid
+  trackId           String                @map("track_id") @db.Uuid
+  track             Track                 @relation(fields: [trackId], references: [id], onDelete: Restrict)
+  artistId          String                @map("artist_id") @db.Uuid
+  artist            Artist                @relation("ArtistRoyaltyEligibleStreams", fields: [artistId], references: [id], onDelete: Restrict)
+  sessionCreatedAt  DateTime              @map("session_created_at") @db.Timestamptz(6)
+  createdAt         DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
 
   @@unique([runId, playbackSessionId], map: "royalty_eligible_streams_run_session_key")
   @@index([runId])
@@ -1128,25 +1238,25 @@ enum CommerceRefundStatus {
 }
 
 model ArtistStore {
-  id          String      @id @default(uuid()) @db.Uuid
-  artistId    String      @unique @map("artist_id") @db.Uuid
-  artist      Artist      @relation(fields: [artistId], references: [id], onDelete: Restrict)
-  name        String
-  description String?
-  status      StoreStatus @default(ACTIVE)
-  imageUrl    String?     @map("image_url")
-  bannerUrl   String?     @map("banner_url")
-  contactEmail String?    @map("contact_email")
-  contactUrl  String?     @map("contact_url")
+  id                String      @id @default(uuid()) @db.Uuid
+  artistId          String      @unique @map("artist_id") @db.Uuid
+  artist            Artist      @relation(fields: [artistId], references: [id], onDelete: Restrict)
+  name              String
+  description       String?
+  status            StoreStatus @default(ACTIVE)
+  imageUrl          String?     @map("image_url")
+  bannerUrl         String?     @map("banner_url")
+  contactEmail      String?     @map("contact_email")
+  contactUrl        String?     @map("contact_url")
   /// ISO 4217. Fixed at creation; Phase 30 does not convert currencies.
-  currency    String      @default("USD") @db.Char(3)
+  currency          String      @default("USD") @db.Char(3)
   /// Flat shipping fee in minor units; 0 = free/unset. Tax is not calculated
   /// in Phase 30 (documented placeholder: taxCents = 0 on orders).
-  shippingFlatCents Int   @default(0) @map("shipping_flat_cents")
+  shippingFlatCents Int         @default(0) @map("shipping_flat_cents")
   /// Per-store order number sequence, incremented atomically at checkout.
-  orderSequence Int       @default(0) @map("order_sequence")
-  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  orderSequence     Int         @default(0) @map("order_sequence")
+  createdAt         DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   products Product[]
   orders   CommerceOrder[]
@@ -1177,10 +1287,10 @@ model Product {
   createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  variants  ProductVariant[]
-  images    ProductImage[]
-  inventory InventoryItem[]
-  cartItems CartItem[]
+  variants   ProductVariant[]
+  images     ProductImage[]
+  inventory  InventoryItem[]
+  cartItems  CartItem[]
   orderItems CommerceOrderItem[]
 
   @@index([storeId, status])
@@ -1202,8 +1312,8 @@ model ProductVariant {
   createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  inventory InventoryItem[]
-  cartItems CartItem[]
+  inventory  InventoryItem[]
+  cartItems  CartItem[]
   orderItems CommerceOrderItem[]
 
   @@index([productId, sortOrder])
@@ -1241,11 +1351,11 @@ model InventoryItem {
 }
 
 model Cart {
-  id        String     @id @default(uuid()) @db.Uuid
-  userId    String     @unique @map("user_id") @db.Uuid
-  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @map("user_id") @db.Uuid
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   items CartItem[]
 
@@ -1273,33 +1383,33 @@ model CartItem {
 /// Line items are immutable snapshots — product edits/archives never rewrite
 /// history. Shipping address is PII: restricted to buyer, store owner, ADMIN.
 model CommerceOrder {
-  id               String      @id @default(uuid()) @db.Uuid
-  orderNumber      String      @unique @map("order_number")
-  userId           String      @map("user_id") @db.Uuid
-  user             User        @relation(fields: [userId], references: [id], onDelete: Restrict)
-  storeId          String      @map("store_id") @db.Uuid
-  store            ArtistStore @relation(fields: [storeId], references: [id], onDelete: Restrict)
-  status           OrderStatus @default(PENDING_PAYMENT)
-  currency         String      @db.Char(3)
-  subtotalCents    Int         @map("subtotal_cents")
-  shippingCents    Int         @map("shipping_cents")
+  id              String      @id @default(uuid()) @db.Uuid
+  orderNumber     String      @unique @map("order_number")
+  userId          String      @map("user_id") @db.Uuid
+  user            User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  storeId         String      @map("store_id") @db.Uuid
+  store           ArtistStore @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  status          OrderStatus @default(PENDING_PAYMENT)
+  currency        String      @db.Char(3)
+  subtotalCents   Int         @map("subtotal_cents")
+  shippingCents   Int         @map("shipping_cents")
   /// Phase 30: always 0. Production tax rules are jurisdiction-specific and
   /// out of scope; the field exists so the snapshot shape is stable.
-  taxCents         Int         @default(0) @map("tax_cents")
-  totalCents       Int         @map("total_cents")
+  taxCents        Int         @default(0) @map("tax_cents")
+  totalCents      Int         @map("total_cents")
   /// Client-supplied idempotency key, unique per user. Retried checkouts
   /// with the same key return the original order instead of double-charging.
-  idempotencyKey   String      @map("idempotency_key")
-  shippingName     String?     @map("shipping_name")
-  shippingLine1    String?     @map("shipping_line1")
-  shippingLine2    String?     @map("shipping_line2")
-  shippingCity     String?     @map("shipping_city")
-  shippingRegion   String?     @map("shipping_region")
-  shippingPostal   String?     @map("shipping_postal")
-  shippingCountry  String?     @map("shipping_country")
-  shippingPhone    String?     @map("shipping_phone")
-  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt        DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+  idempotencyKey  String      @map("idempotency_key")
+  shippingName    String?     @map("shipping_name")
+  shippingLine1   String?     @map("shipping_line1")
+  shippingLine2   String?     @map("shipping_line2")
+  shippingCity    String?     @map("shipping_city")
+  shippingRegion  String?     @map("shipping_region")
+  shippingPostal  String?     @map("shipping_postal")
+  shippingCountry String?     @map("shipping_country")
+  shippingPhone   String?     @map("shipping_phone")
+  createdAt       DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   items    CommerceOrderItem[]
   payments CommercePayment[]
@@ -1313,20 +1423,20 @@ model CommerceOrder {
 }
 
 model CommerceOrderItem {
-  id           String          @id @default(uuid()) @db.Uuid
-  orderId      String          @map("order_id") @db.Uuid
-  order        CommerceOrder   @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  productId    String          @map("product_id") @db.Uuid
-  product      Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
-  variantId    String?         @map("variant_id") @db.Uuid
-  variant      ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  id             String          @id @default(uuid()) @db.Uuid
+  orderId        String          @map("order_id") @db.Uuid
+  order          CommerceOrder   @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  productId      String          @map("product_id") @db.Uuid
+  product        Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variantId      String?         @map("variant_id") @db.Uuid
+  variant        ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
   /// Purchase-time snapshots. Never updated after creation.
-  productTitle String          @map("product_title")
-  variantName  String?         @map("variant_name")
-  sku          String?
-  quantity     Int
-  unitPriceCents Int           @map("unit_price_cents")
-  currency     String          @db.Char(3)
+  productTitle   String          @map("product_title")
+  variantName    String?         @map("variant_name")
+  sku            String?
+  quantity       Int
+  unitPriceCents Int             @map("unit_price_cents")
+  currency       String          @db.Char(3)
 
   @@index([orderId])
   @@map("commerce_order_items")
@@ -1349,7 +1459,7 @@ model CommercePayment {
   createdAt         DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt         DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  events CommercePaymentEvent[]
+  events  CommercePaymentEvent[]
   refunds CommerceRefund[]
 
   @@index([provider, providerPaymentId])
@@ -1374,20 +1484,20 @@ model CommercePaymentEvent {
 
 /// Phase 30 supports full refunds only, through the provider abstraction.
 model CommerceRefund {
-  id              String               @id @default(uuid()) @db.Uuid
-  paymentId       String               @map("payment_id") @db.Uuid
-  payment         CommercePayment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
-  orderId         String               @map("order_id") @db.Uuid
-  order           CommerceOrder        @relation(fields: [orderId], references: [id], onDelete: Restrict)
-  amountCents     Int                  @map("amount_cents")
-  currency        String               @db.Char(3)
-  reason          String?
-  status          CommerceRefundStatus @default(PENDING)
-  providerRefundId String?             @map("provider_refund_id")
-  idempotencyKey  String               @unique @map("idempotency_key")
-  createdBy       String               @map("created_by") @db.Uuid
-  createdAt       DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt       DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+  id               String               @id @default(uuid()) @db.Uuid
+  paymentId        String               @map("payment_id") @db.Uuid
+  payment          CommercePayment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  orderId          String               @map("order_id") @db.Uuid
+  order            CommerceOrder        @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  amountCents      Int                  @map("amount_cents")
+  currency         String               @db.Char(3)
+  reason           String?
+  status           CommerceRefundStatus @default(PENDING)
+  providerRefundId String?              @map("provider_refund_id")
+  idempotencyKey   String               @unique @map("idempotency_key")
+  createdBy        String               @map("created_by") @db.Uuid
+  createdAt        DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   @@index([orderId])
   @@map("commerce_refunds")

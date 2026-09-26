@@ -16,7 +16,7 @@ import type { Config } from '../../config.js';
 import { badRequest, notFound, problemSchema, unauthorized } from '../../http/errors.js';
 import { metrics } from '../../http/metrics.js';
 import { pageOf, type PaginationQuery } from '../../http/pagination.js';
-import { requireRole } from '../../http/authorization.js';
+import { requirePermission, requireRole, requireRoleOrPermission } from '../../http/authorization.js';
 import { apiRateLimit } from '../../http/limits.js';
 import { checkUserRateLimit, resetCommerceRateLimits } from './rateLimit.js';
 import {
@@ -995,7 +995,7 @@ export async function commerceRoutes(app: FastifyInstance, config: Config): Prom
   app.patch<{ Params: { orderId: string }; Body: { status: 'PROCESSING' | 'SHIPPED' | 'DELIVERED' } }>(
     '/v1/commerce/orders/:orderId/fulfillment',
     {
-      preHandler: [app.authenticate, requireRole('ARTIST', 'ADMIN')],
+      preHandler: [app.authenticate, requireRoleOrPermission(['ARTIST'], 'commerce.manage')],
       schema: {
         tags: ['Commerce'],
         summary: 'Update order fulfillment',
@@ -1019,7 +1019,7 @@ export async function commerceRoutes(app: FastifyInstance, config: Config): Prom
   app.post<{ Params: { orderId: string }; Body: { idempotencyKey: string; reason?: string } }>(
     '/v1/commerce/orders/:orderId/refund',
     {
-      preHandler: [app.authenticate, requireRole('ARTIST', 'ADMIN')],
+      preHandler: [app.authenticate, requireRoleOrPermission(['ARTIST'], 'commerce.manage')],
       schema: {
         tags: ['Commerce'],
         summary: 'Refund an order',
@@ -1093,7 +1093,7 @@ export async function commerceRoutes(app: FastifyInstance, config: Config): Prom
   app.get<{ Querystring: PaginationQuery & { status?: string; q?: string } }>(
     '/v1/admin/commerce/stores',
     {
-      preHandler: [app.authenticate, requireRole('ADMIN')],
+      preHandler: [app.authenticate, requirePermission('commerce.manage')],
       schema: {
         tags: ['Admin'],
         summary: 'List all storefronts',
@@ -1113,7 +1113,7 @@ export async function commerceRoutes(app: FastifyInstance, config: Config): Prom
   app.post<{ Params: { storeId: string }; Body: { action: 'suspend' | 'reinstate' } }>(
     '/v1/admin/commerce/stores/:storeId/moderate',
     {
-      preHandler: [app.authenticate, requireRole('ADMIN')],
+      preHandler: [app.authenticate, requirePermission('commerce.manage')],
       schema: {
         tags: ['Admin'],
         summary: 'Suspend or reinstate a store',
@@ -1136,7 +1136,7 @@ export async function commerceRoutes(app: FastifyInstance, config: Config): Prom
   app.get<{ Querystring: PaginationQuery & { status?: string; q?: string } }>(
     '/v1/admin/commerce/products',
     {
-      preHandler: [app.authenticate, requireRole('ADMIN')],
+      preHandler: [app.authenticate, requirePermission('commerce.manage')],
       schema: {
         tags: ['Admin'],
         summary: 'List all products',
@@ -1156,7 +1156,7 @@ export async function commerceRoutes(app: FastifyInstance, config: Config): Prom
   app.get(
     '/v1/admin/commerce/stats',
     {
-      preHandler: [app.authenticate, requireRole('ADMIN')],
+      preHandler: [app.authenticate, requirePermission('commerce.manage')],
       schema: {
         tags: ['Admin'],
         summary: 'Commerce overview stats',
@@ -1174,7 +1174,7 @@ export async function commerceRoutes(app: FastifyInstance, config: Config): Prom
   app.post<{ Params: { productId: string }; Body: { action: 'remove' | 'restore' } }>(
     '/v1/admin/commerce/products/:productId/moderate',
     {
-      preHandler: [app.authenticate, requireRole('ADMIN')],
+      preHandler: [app.authenticate, requirePermission('commerce.manage')],
       schema: {
         tags: ['Admin'],
         summary: 'Remove or restore a product',
@@ -1197,7 +1197,7 @@ export async function commerceRoutes(app: FastifyInstance, config: Config): Prom
   app.get<{ Querystring: ListOrdersQuery }>(
     '/v1/admin/commerce/orders',
     {
-      preHandler: [app.authenticate, requireRole('ADMIN')],
+      preHandler: [app.authenticate, requirePermission('commerce.manage')],
       schema: {
         tags: ['Admin'],
         summary: 'List all commerce orders',

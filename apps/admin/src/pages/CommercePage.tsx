@@ -22,6 +22,7 @@ import {
 import { EmptyState, ErrorState, LoadingState } from '../components/DataStates';
 import { Pagination } from '../components/Pagination';
 import { useConfirm } from '../components/ConfirmDialog';
+import { RequirePermission } from '../components/PermissionGate';
 import { formatDate, formatMoney } from '../utils/format';
 import { useApiList, type UseApiListResult } from '../hooks/useApiList';
 
@@ -37,6 +38,14 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 export function CommercePage(): React.ReactNode {
+  return (
+    <RequirePermission perm="commerce.manage">
+      <CommerceContent />
+    </RequirePermission>
+  );
+}
+
+function CommerceContent(): React.ReactNode {
   const { client } = useAuth();
   const { confirm, dialog } = useConfirm();
   const [stats, setStats] = useState<CommerceStats | null>(null);
@@ -77,7 +86,9 @@ export function CommercePage(): React.ReactNode {
     else void orders.reload();
     getCommerceStats(client)
       .then(setStats)
-      .catch(() => {});
+      .catch(() => {
+        setStatsError('Commerce stats unavailable.');
+      });
   }, [tab, stores, products, orders, client]);
 
   const onModerateStore = async (store: AdminStore) => {

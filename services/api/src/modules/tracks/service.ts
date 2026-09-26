@@ -115,6 +115,8 @@ export async function listTracks(
   const p = parsePagination(query);
   const where: Prisma.TrackWhereInput = {
     deletedAt: null,
+    // Admin V2 — tracks of suspended artists are hidden from public listings.
+    artist: { suspendedAt: null, deletedAt: null },
     ...(query.artistId ? { artistId: query.artistId } : {}),
     ...(query.albumId ? { albumId: query.albumId } : {}),
     ...(query.status ? { status: query.status } : {}),

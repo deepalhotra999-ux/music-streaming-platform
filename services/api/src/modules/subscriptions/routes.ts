@@ -22,7 +22,7 @@ import type { SubscriptionEventType, SubscriptionProvider } from '@prisma/client
 import type { Config } from '../../config.js';
 import { prisma } from '../../db.js';
 import { notFound, problemSchema, unprocessableEntity } from '../../http/errors.js';
-import { requireRole } from '../../http/authorization.js';
+import { requirePermission } from '../../http/authorization.js';
 import { apiRateLimit } from '../../http/limits.js';
 import { getEntitlement, type EntitlementResult } from './entitlements.js';
 import {
@@ -457,7 +457,7 @@ export async function subscriptionRoutes(app: FastifyInstance, config: Config): 
   app.get<{ Params: { id: string } }>(
     '/v1/admin/users/:id/subscription',
     {
-      preHandler: [app.authenticate, requireRole('ADMIN')],
+      preHandler: [app.authenticate, requirePermission('users.view')],
       config: { rateLimit: limit },
       schema: {
         tags: ['Admin'],

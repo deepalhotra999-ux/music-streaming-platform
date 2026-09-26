@@ -14,7 +14,7 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../db.js';
 import { apiRateLimit } from '../../http/limits.js';
-import { requireRole } from '../../http/authorization.js';
+import { requirePermission, requireRole } from '../../http/authorization.js';
 import { pageOf } from '../../http/pagination.js';
 import type { Config } from '../../config.js';
 import {
@@ -170,7 +170,7 @@ export async function analyticsRoutes(app: FastifyInstance, config: Config): Pro
   app.get(
     '/v1/analytics/platform/overview',
     {
-      preHandler: [app.authenticate, requireRole('ADMIN')],
+      preHandler: [app.authenticate, requirePermission('system.view')],
       config: { rateLimit: limit },
       schema: {
         tags: ['Analytics'],

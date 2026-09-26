@@ -5,7 +5,7 @@ import type { UserRole } from '@prisma/client';
 import type { Config } from '../../config.js';
 import { problemSchema } from '../../http/errors.js';
 import { pageOf, type PaginationQuery } from '../../http/pagination.js';
-import { requireRole } from '../../http/authorization.js';
+import { requirePermission, requireRole } from '../../http/authorization.js';
 import { apiRateLimit } from '../../http/limits.js';
 import {
   adminUserDetailSchema,
@@ -15,12 +15,13 @@ import {
   userListQuery,
   userProfileSchema,
 } from './schemas.js';
+import { changeUserRole } from '../governance/service.js';
+import { adminAccountSchema } from '../governance/schemas.js';
 import {
   getAdminUserDetail,
   getUserProfile,
   listUsers,
   updateMe,
-  updateUserRole,
   type AdminUserDetailDto,
   type ListUsersQuery,
   type UpdateMeInput,
@@ -43,7 +44,7 @@ export async function usersRoutes(app: FastifyInstance, config: Config): Promise
   app.get<{ Querystring: PaginationQuery & { q?: string; role?: UserRole; includeDeleted?: string } }>(
     '/v1/users',
     {
-      preHandler: [app.authenticate, requireRole('ADMIN')],
+      preHandler: [app.authenticate, requirePermission('users.view')],
       schema: {
         tags: ['Users'],
         summary: 'List users',
@@ -77,7 +78,7 @@ export async function usersRoutes(app: FastifyInstance, config: Config): Promise
   app.get<{ Params: IdParams }>(
     '/v1/admin/users/:id',
     {
-      preHandler: [app.authenticate, requireRole('ADMIN')],
+      preHandler: [app.authenticate, requirePermission('users.view')],
       schema: {
         tags: ['Admin'],
         summary: 'Get admin user detail',
@@ -152,18 +153,20 @@ export async function usersRoutes(app: FastifyInstance, config: Config): Promise
   app.patch<{ Params: IdParams; Body: { role: UserRole } }>(
     '/v1/users/:id/role',
     {
-      preHandler: [app.authenticate, requireRole('ADMIN')],
+      preHandler: [app.authenticate, requireRole('ADMIN', 'SUPER_ADMIN')],
       schema: {
         tags: ['Users'],
         summary: "Change a user's role",
         description:
-          'Admin-only. Promotes or demotes a user (e.g. LISTENER to ARTIST). ' +
+          'Tiered role change. SUPER_ADMIN may assign any role; legacy ADMIN ' +
+          'accounts may only move users between non-admin roles (LISTENER <-> ARTIST) ' +
+          'and cannot touch admin accounts. Every change is audited and reversible. ' +
           'Admins cannot change their own role.',
         security: [{ bearerAuth: [] }],
         params: idParams,
         body: updateRoleBody,
         response: {
-          200: publicUserSchema,
+          200: adminAccountSchema,
           400: problemSchema,
           401: problemSchema,
           403: problemSchema,
@@ -175,7 +178,7 @@ export async function usersRoutes(app: FastifyInstance, config: Config): Promise
     async (req, reply) => {
       return reply
         .code(200)
-        .send(await updateUserRole(req.params.id, req.body.role, req.authUser!));
+        .send(await changeUserRole(req.params.id, req.body.role, req.authUser!));
     },
   );
 }

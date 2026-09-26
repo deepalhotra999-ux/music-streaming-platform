@@ -5,21 +5,9 @@
 import type { ApiClient } from './client';
 
 export type StoreStatus = 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'SUSPENDED';
-export type ProductStatus =
-  | 'DRAFT'
-  | 'ACTIVE'
-  | 'PAUSED'
-  | 'SOLD_OUT'
-  | 'ARCHIVED'
-  | 'REMOVED';
+export type ProductStatus = 'DRAFT' | 'ACTIVE' | 'PAUSED' | 'SOLD_OUT' | 'ARCHIVED' | 'REMOVED';
 export type OrderStatus =
-  | 'PENDING_PAYMENT'
-  | 'PAID'
-  | 'PROCESSING'
-  | 'SHIPPED'
-  | 'DELIVERED'
-  | 'CANCELED'
-  | 'REFUNDED';
+  'PENDING_PAYMENT' | 'PAID' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELED' | 'REFUNDED';
 
 export interface AdminStore {
   id: string;

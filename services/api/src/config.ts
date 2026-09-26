@@ -42,6 +42,8 @@ export interface RateLimitConfig {
   commerceCheckout: number;
   commerceRefundRequest: number;
   commerceProductReport: number;
+  /** Release tooling — admin deploy dispatch. Tight: each call triggers CI. */
+  deploy: number;
   /** window length in milliseconds */
   windowMs: number;
 }
@@ -245,8 +247,23 @@ export interface Config {
   community: CommunityConfig;
   /** Phase 30 — artist commerce. */
   commerce: CommerceConfig;
+  /** Release tooling — admin-triggered deploys via GitHub Actions.
+   *  Disabled unless GITHUB_DEPLOY_TOKEN is set; the token never leaves the
+   *  server (it is only sent to api.github.com, never logged or returned). */
+  releases: ReleasesConfig;
 }
 
+/**
+ * Release tooling — GitHub deploy-dispatch integration config. All values
+ * come from the environment (see .env.example); nothing is hard-coded. The
+ * integration is disabled unless GITHUB_DEPLOY_TOKEN is set.
+ */
+export interface ReleasesConfig {
+  /** Fine-grained PAT with Actions: write on the repo. Null = not configured. */
+  deployToken: string | null;
+  /** "owner/name" of the repo whose workflow receives the dispatch. */
+  deployRepo: string;
+}
 function required(env: NodeJS.ProcessEnv, name: string): string {
   const value = env[name];
   if (!value) {
@@ -315,6 +332,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       commerceCheckout: int(env, 'RATE_LIMIT_COMMERCE_CHECKOUT', 20),
       commerceRefundRequest: int(env, 'RATE_LIMIT_COMMERCE_REFUND_REQUEST', 20),
       commerceProductReport: int(env, 'RATE_LIMIT_COMMERCE_PRODUCT_REPORT', 20),
+      deploy: int(env, 'RATE_LIMIT_DEPLOY', 10),
       windowMs: int(env, 'RATE_LIMIT_WINDOW_MS', 60_000),
     },
     streaming: {
@@ -362,6 +380,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       productDescriptionMaxLength: int(env, 'COMMERCE_PRODUCT_DESCRIPTION_MAX_LENGTH', 5000),
       maxVariantsPerProduct: int(env, 'COMMERCE_MAX_VARIANTS_PER_PRODUCT', 50),
       maxCartLineQuantity: int(env, 'COMMERCE_MAX_CART_LINE_QUANTITY', 99),
+    },
+    releases: {
+      deployToken: env.GITHUB_DEPLOY_TOKEN ?? null,
+      deployRepo:
+        env.GITHUB_DEPLOY_REPO ?? 'deepalhotra999-ux/music-streaming-platform',
     },
   };
 }

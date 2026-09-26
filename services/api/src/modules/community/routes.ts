@@ -7,7 +7,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Config } from '../../config.js';
 import { problemSchema } from '../../http/errors.js';
 import { pageOf, type PaginationQuery } from '../../http/pagination.js';
-import { requireRole } from '../../http/authorization.js';
+import { requirePermission, requireRole } from '../../http/authorization.js';
 import { apiRateLimit } from '../../http/limits.js';
 import { communityLimits } from './service.js';
 import { checkUserRateLimit } from './rateLimit.js';
@@ -391,7 +391,7 @@ export async function communityRoutes(app: FastifyInstance, config: Config): Pro
   app.post<{ Params: { id: string } }>(
     '/v1/admin/community/posts/:id/moderate',
     {
-      preHandler: [app.authenticate, requireRole('ADMIN')],
+      preHandler: [app.authenticate, requirePermission('content.moderate')],
       schema: {
         tags: ['Admin'],
         summary: 'Remove an artist post (moderation)',
@@ -413,7 +413,7 @@ export async function communityRoutes(app: FastifyInstance, config: Config): Pro
   app.post<{ Params: { id: string } }>(
     '/v1/admin/community/posts/:id/restore',
     {
-      preHandler: [app.authenticate, requireRole('ADMIN')],
+      preHandler: [app.authenticate, requirePermission('content.moderate')],
       schema: {
         tags: ['Admin'],
         summary: 'Restore a moderated post',
@@ -435,7 +435,7 @@ export async function communityRoutes(app: FastifyInstance, config: Config): Pro
   app.post<{ Params: { id: string } }>(
     '/v1/admin/community/comments/:id/moderate',
     {
-      preHandler: [app.authenticate, requireRole('ADMIN')],
+      preHandler: [app.authenticate, requirePermission('content.moderate')],
       schema: {
         tags: ['Admin'],
         summary: 'Remove a comment (moderation)',
@@ -456,7 +456,7 @@ export async function communityRoutes(app: FastifyInstance, config: Config): Pro
   app.post<{ Params: { id: string } }>(
     '/v1/admin/community/comments/:id/restore',
     {
-      preHandler: [app.authenticate, requireRole('ADMIN')],
+      preHandler: [app.authenticate, requirePermission('content.moderate')],
       schema: {
         tags: ['Admin'],
         summary: 'Restore a moderated comment',
@@ -477,7 +477,7 @@ export async function communityRoutes(app: FastifyInstance, config: Config): Pro
   app.get<{ Params: { id: string } }>(
     '/v1/admin/community/posts/:id',
     {
-      preHandler: [app.authenticate, requireRole('ADMIN')],
+      preHandler: [app.authenticate, requirePermission('content.moderate')],
       schema: {
         tags: ['Admin'],
         summary: 'Review an artist post (any status)',
@@ -503,7 +503,7 @@ export async function communityRoutes(app: FastifyInstance, config: Config): Pro
   app.get<{ Params: { id: string } }>(
     '/v1/admin/community/comments/:id',
     {
-      preHandler: [app.authenticate, requireRole('ADMIN')],
+      preHandler: [app.authenticate, requirePermission('content.moderate')],
       schema: {
         tags: ['Admin'],
         summary: 'Review a comment (any status)',

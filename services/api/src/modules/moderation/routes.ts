@@ -6,7 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Config } from '../../config.js';
 import { problemSchema } from '../../http/errors.js';
 import { pageOf } from '../../http/pagination.js';
-import { requireRole } from '../../http/authorization.js';
+import { requirePermission } from '../../http/authorization.js';
 import { apiRateLimit } from '../../http/limits.js';
 import {
   createModerationReportBody,
@@ -46,7 +46,7 @@ export async function moderationRoutes(app: FastifyInstance, config: Config): Pr
   app.post<{ Body: CreateModerationReportInput }>(
     '/v1/admin/moderation-reports',
     {
-      preHandler: [app.authenticate, requireRole('ADMIN')],
+      preHandler: [app.authenticate, requirePermission('reports.moderate')],
       schema: {
         tags: ['Admin'],
         summary: 'File a moderation report',
@@ -69,7 +69,7 @@ export async function moderationRoutes(app: FastifyInstance, config: Config): Pr
   app.get(
     '/v1/admin/moderation-reports',
     {
-      preHandler: [app.authenticate, requireRole('ADMIN')],
+      preHandler: [app.authenticate, requirePermission('reports.moderate')],
       schema: {
         tags: ['Admin'],
         summary: 'List moderation reports',
@@ -91,7 +91,7 @@ export async function moderationRoutes(app: FastifyInstance, config: Config): Pr
   app.get<{ Params: { id: string } }>(
     '/v1/admin/moderation-reports/:id',
     {
-      preHandler: [app.authenticate, requireRole('ADMIN')],
+      preHandler: [app.authenticate, requirePermission('reports.moderate')],
       schema: {
         tags: ['Admin'],
         summary: 'Get a moderation report',
@@ -110,7 +110,7 @@ export async function moderationRoutes(app: FastifyInstance, config: Config): Pr
   app.patch<{ Params: { id: string }; Body: UpdateModerationReportInput }>(
     '/v1/admin/moderation-reports/:id',
     {
-      preHandler: [app.authenticate, requireRole('ADMIN')],
+      preHandler: [app.authenticate, requirePermission('reports.moderate')],
       schema: {
         tags: ['Admin'],
         summary: 'Update a moderation report',

@@ -9,3 +9,8 @@ export * as catalogApi from './catalog';
 export * as analyticsApi from './analytics';
 export * as auditApi from './audit';
 export * as moderationApi from './moderation';
+export * as commerceApi from './commerce';
+export * as releasesApi from './releases';
+// Admin V2 — operations center + governance endpoints.
+export * as opsApi from './ops';
+export * as governanceApi from './governance';

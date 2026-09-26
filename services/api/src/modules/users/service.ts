@@ -4,8 +4,7 @@
 
 import type { PrismaClient, UserRole } from '@prisma/client';
 import { prisma } from '../../db.js';
-import { recordAuditEvent } from '../audit/service.js';
-import { badRequest, forbidden, notFound } from '../../http/errors.js';
+import { badRequest, notFound } from '../../http/errors.js';
 import type { AuthUser } from '../../http/auth.js';
 import {
   pageEnvelope,
@@ -206,34 +205,5 @@ export async function updateMe(
     throw badRequest('Nothing to update.');
   }
   const row = await db.user.update({ where: { id: userId }, data });
-  return toPublicUser(row);
-}
-
-export async function updateUserRole(
-  id: string,
-  role: UserRole,
-  actor: AuthUser,
-  db: Db = prisma,
-): Promise<PublicUserDto> {
-  // An admin must not be able to lock themselves out by accident.
-  if (actor.id === id) {
-    throw forbidden('You cannot change your own role. Ask another admin.');
-  }
-  const existing = await db.user.findFirst({ where: { id, deletedAt: null } });
-  if (!existing) {
-    throw notFound('User not found.');
-  }
-  const row = await db.user.update({ where: { id }, data: { role } });
-  // Audit the privilege change after success. Metadata holds role facts only.
-  await recordAuditEvent(
-    {
-      actorId: actor.id,
-      action: 'user.role.changed',
-      targetType: 'user',
-      targetId: id,
-      metadata: { oldRole: existing.role, newRole: role },
-    },
-    db,
-  );
   return toPublicUser(row);
 }

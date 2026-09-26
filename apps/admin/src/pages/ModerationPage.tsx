@@ -37,6 +37,9 @@ import { EmptyState, ErrorState, LoadingState } from '../components/DataStates';
 import { Pagination } from '../components/Pagination';
 import { ModerationStatusBadge } from '../components/Badges';
 import { useConfirm } from '../components/ConfirmDialog';
+import { getModerationOverview } from '../api/ops';
+import type { ModerationOverview } from '../api/types';
+import { RequirePermission } from '../components/PermissionGate';
 import { formatDate } from '../utils/format';
 
 type StatusFilter = '' | ModerationStatus;
@@ -50,7 +53,71 @@ const NEXT_STATUSES: Record<ModerationStatus, ModerationStatus[]> = {
   DISMISSED: [],
 };
 
+// Admin V2 — real moderation overview (GET /v1/admin/moderation/overview).
+function ModerationOverviewCard(): React.ReactNode {
+  const { client } = useAuth();
+  const [overview, setOverview] = useState<ModerationOverview | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    getModerationOverview(client)
+      .then((data) => {
+        if (!cancelled) setOverview(data);
+      })
+      .catch(() => {
+        // The queue below stays fully functional if the overview is denied.
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [client]);
+
+  if (loading) return <LoadingState label="Loading moderation overview…" />;
+  if (!overview) return null;
+
+  return (
+    <div className="card">
+      <h2>Queue overview</h2>
+      <div className="detail-grid">
+        <div className="detail-item">
+          <p className="detail-label">By status</p>
+          <p className="detail-value" style={{ fontSize: 13 }}>
+            {overview.byStatus.map((row) => `${row.status}: ${row.count}`).join(' · ') || '—'}
+          </p>
+        </div>
+        <div className="detail-item">
+          <p className="detail-label">By target type</p>
+          <p className="detail-value" style={{ fontSize: 13 }}>
+            {overview.byTargetType.map((row) => `${row.targetType}: ${row.count}`).join(' · ') ||
+              '—'}
+          </p>
+        </div>
+        <div className="detail-item">
+          <p className="detail-label">Oldest open</p>
+          <p className="detail-value" style={{ fontSize: 13 }}>
+            {overview.oldestOpen
+              ? `${overview.oldestOpen.targetType} — ${formatDate(overview.oldestOpen.createdAt)}`
+              : 'None'}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function ModerationPage(): React.ReactNode {
+  return (
+    <RequirePermission anyOf={['reports.moderate', 'content.moderate']}>
+      <ModerationContent />
+    </RequirePermission>
+  );
+}
+
+function ModerationContent(): React.ReactNode {
   const { client } = useAuth();
   const [statusInput, setStatusInput] = useState<StatusFilter>('');
   const [targetInput, setTargetInput] = useState<TargetFilter>('');
@@ -106,6 +173,7 @@ export function ModerationPage(): React.ReactNode {
         />
       ) : (
         <>
+          <ModerationOverviewCard />
           <form className="toolbar" onSubmit={handleSearch}>
             <div className="field">
               <label htmlFor="mod-status">Status</label>

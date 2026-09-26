@@ -133,6 +133,8 @@ export async function listArtists(
   const p = parsePagination(query);
   const where: Prisma.ArtistWhereInput = {
     deletedAt: null,
+    // Admin V2 — suspended artists are hidden from public listings.
+    suspendedAt: null,
     ...(query.verified !== undefined ? { verified: query.verified === 'true' } : {}),
     ...(query.q ? { name: { contains: query.q, mode: 'insensitive' } } : {}),
   };
@@ -151,7 +153,8 @@ export async function listArtists(
 
 export async function getArtist(id: string, db: Db = prisma): Promise<ArtistDetailDto> {
   const row = await db.artist.findFirst({
-    where: { id, deletedAt: null },
+    // Admin V2 — suspended artists 404 on the public detail route.
+    where: { id, deletedAt: null, suspendedAt: null },
     include: detailInclude,
   });
   if (!row) {

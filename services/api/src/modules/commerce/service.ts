@@ -23,7 +23,7 @@ import { Prisma, type PrismaClient } from '@prisma/client';
 import { prisma } from '../../db.js';
 import { badRequest, conflict, forbidden, notFound, unprocessableEntity } from '../../http/errors.js';
 import type { AuthUser } from '../../http/auth.js';
-import { canManageArtist, isAdmin } from '../../http/authorization.js';
+import { canManageArtist, hasPermissions, isAdmin } from '../../http/authorization.js';
 import { recordAuditEvent } from '../audit/service.js';
 import {
   pageEnvelope,
@@ -191,6 +191,20 @@ export function canManageStore(
   store: { artist: { ownerUserId: string | null } },
 ): boolean {
   return canManageArtist(user, store.artist);
+}
+
+/**
+ * Admin V2 — true when the caller may operate on any store's orders: the
+ * store owner, a legacy admin, or any admin holding 'commerce.manage' (e.g.
+ * SUPPORT_ADMIN handling refunds/fulfillment). Ownership and legacy behavior
+ * are unchanged; the permission path is additive.
+ */
+export async function canOperateStore(
+  user: AuthUser,
+  store: { artist: { ownerUserId: string | null } },
+): Promise<boolean> {
+  if (canManageStore(user, store)) return true;
+  return hasPermissions(user.id, user.role, 'commerce.manage');
 }
 
 async function requireManagedStore(
@@ -378,7 +392,7 @@ export async function createStore(
     throw e;
   }
   await recordAuditEvent({
-    actorId: user.id,
+    actor: user,
     action: 'commerce.store.created',
     targetType: 'artist_store',
     targetId: store.id,
@@ -456,7 +470,7 @@ export async function updateStore(
     });
     await recordAuditEvent(
       {
-        actorId: user.id,
+        actor: user,
         action:
           input.status !== undefined && input.status !== store.status
             ? 'commerce.store.status_changed'
@@ -729,7 +743,7 @@ export async function createProduct(
     });
     await recordAuditEvent(
       {
-        actorId: user.id,
+        actor: user,
         action: 'commerce.product.created',
         targetType: 'product',
         targetId: row.id,
@@ -841,7 +855,7 @@ export async function updateProduct(
     const row = await tx.product.update({ where: { id: productId }, data });
     await recordAuditEvent(
       {
-        actorId: user.id,
+        actor: user,
         action:
           input.status !== undefined && input.status !== product.status
             ? 'commerce.product.status_changed'
@@ -999,7 +1013,7 @@ export async function createVariant(
     });
     await recordAuditEvent(
       {
-        actorId: user.id,
+        actor: user,
         action: 'commerce.product.variant_created',
         targetType: 'product',
         targetId: productId,
@@ -1056,7 +1070,7 @@ export async function updateVariant(
   }
   const updated = await prisma.productVariant.update({ where: { id: variantId }, data });
   await recordAuditEvent({
-    actorId: user.id,
+    actor: user,
     action: 'commerce.product.variant_updated',
     targetType: 'product',
     targetId: productId,
@@ -1097,7 +1111,7 @@ export async function deleteVariant(
     await tx.productVariant.delete({ where: { id: variantId } });
     await recordAuditEvent(
       {
-        actorId: user.id,
+        actor: user,
         action: 'commerce.product.variant_deleted',
         targetType: 'product',
         targetId: productId,
@@ -1194,7 +1208,7 @@ export async function setInventory(
       await tx.product.update({ where: { id: productId }, data: { status: 'SOLD_OUT' } });
       await recordAuditEvent(
         {
-          actorId: user.id,
+          actor: user,
           action: 'commerce.product.status_changed',
           targetType: 'product',
           targetId: productId,
@@ -1206,7 +1220,7 @@ export async function setInventory(
       await tx.product.update({ where: { id: productId }, data: { status: 'ACTIVE' } });
       await recordAuditEvent(
         {
-          actorId: user.id,
+          actor: user,
           action: 'commerce.product.status_changed',
           targetType: 'product',
           targetId: productId,
@@ -1218,7 +1232,7 @@ export async function setInventory(
 
     await recordAuditEvent(
       {
-        actorId: user.id,
+        actor: user,
         action: 'commerce.inventory.updated',
         targetType: 'product',
         targetId: productId,
@@ -1326,7 +1340,7 @@ export async function moderateProduct(
     const row = await tx.product.update({ where: { id: productId }, data: { status: target } });
     await recordAuditEvent(
       {
-        actorId: admin.id,
+        actor: admin,
         action: action === 'remove' ? 'commerce.product.removed' : 'commerce.product.restored',
         targetType: 'product',
         targetId: productId,
@@ -1366,7 +1380,7 @@ export async function moderateStore(
     const row = await tx.artistStore.update({ where: { id: storeId }, data: { status: target } });
     await recordAuditEvent(
       {
-        actorId: admin.id,
+        actor: admin,
         action: action === 'suspend' ? 'commerce.store.suspended' : 'commerce.store.reinstated',
         targetType: 'artist_store',
         targetId: storeId,

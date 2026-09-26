@@ -30,6 +30,9 @@ import { discoveryRoutes } from '../modules/discovery/routes.js';
 import { ingestionRoutes } from '../modules/ingestion/routes.js';
 import { analyticsRoutes } from '../modules/analytics/routes.js';
 import { auditRoutes } from '../modules/audit/routes.js';
+import { governanceRoutes } from '../modules/governance/routes.js';
+import { opsRoutes } from '../modules/ops/routes.js';
+import { releaseRoutes } from '../modules/releases/routes.js';
 import { moderationRoutes } from '../modules/moderation/routes.js';
 import { communityRoutes } from '../modules/community/routes.js';
 import { commerceRoutes } from '../modules/commerce/routes.js';
@@ -148,6 +151,36 @@ export async function buildApp(config: Config): Promise<FastifyInstance> {
   registerErrorHandler(app);
   await authPlugin(app, config);
 
+  // Admin routes, health, docs, and the login/refresh endpoints admins need
+  // to sign in stay reachable; everything else is 503 while maintenance mode
+  // is active.
+  app.addHook('onRequest', async (req, reply) => {
+    const allowed =
+      req.url === '/v1/health' ||
+      req.url === '/v1/ready' ||
+      req.url === '/v1/metrics' ||
+      req.url === '/openapi.json' ||
+      req.url.startsWith('/docs') ||
+      req.url.startsWith('/v1/admin') ||
+      req.url.startsWith('/v1/auth/login') ||
+      req.url.startsWith('/v1/auth/refresh');
+    if (allowed) return;
+    try {
+      const { emergencyActive, getMaintenanceMessage } = await import('../modules/ops/settings.js');
+      if (await emergencyActive('emergency.maintenance_mode')) {
+        reply.code(503).send({
+          status: 503,
+          title: 'Service Unavailable',
+          detail: await getMaintenanceMessage(),
+        });
+      }
+    } catch {
+      // Fail open here: an unreachable settings cache must not take the
+      // platform down by itself. Authenticated enforcement (fail-closed)
+      // still applies inside the auth guards.
+    }
+  });
+
   app.get('/v1/health', async () => ({ status: 'ok' }));
 
   // Phase 32 — readiness: liveness is "the process answers"; readiness is
@@ -194,6 +227,9 @@ export async function buildApp(config: Config): Promise<FastifyInstance> {
     await ingestionRoutes(instance, config);
     await analyticsRoutes(instance, config);
     await auditRoutes(instance, config);
+    await governanceRoutes(instance, config);
+    await opsRoutes(instance, config);
+    await releaseRoutes(instance, config);
     await moderationRoutes(instance, config);
     await communityRoutes(instance, config);
     await commerceRoutes(instance, config);

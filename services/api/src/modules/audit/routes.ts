@@ -6,7 +6,7 @@ import type { FastifyInstance } from 'fastify';
 import type { Config } from '../../config.js';
 import { problemSchema } from '../../http/errors.js';
 import { pageOf } from '../../http/pagination.js';
-import { requireRole } from '../../http/authorization.js';
+import { requirePermission } from '../../http/authorization.js';
 import { apiRateLimit } from '../../http/limits.js';
 import { auditEventSchema, auditListQuery } from './schemas.js';
 import { listAuditEvents, type ListAuditEventsQuery } from './service.js';
@@ -17,7 +17,7 @@ export async function auditRoutes(app: FastifyInstance, config: Config): Promise
   app.get(
     '/v1/admin/audit-logs',
     {
-      preHandler: [app.authenticate, requireRole('ADMIN')],
+      preHandler: [app.authenticate, requirePermission('audit.view')],
       schema: {
         tags: ['Admin'],
         summary: 'List admin audit log',

@@ -7,7 +7,7 @@
 import type { FastifyInstance } from 'fastify';
 import { prisma } from '../../db.js';
 import { apiRateLimit } from '../../http/limits.js';
-import { requireRole } from '../../http/authorization.js';
+import { requirePermission } from '../../http/authorization.js';
 import { pageOf } from '../../http/pagination.js';
 import type { Config } from '../../config.js';
 import { runRoyaltyCalculation } from './service.js';
@@ -176,7 +176,7 @@ const triggerRunResponseSchema = {
 export async function royaltyAdminRoutes(app: FastifyInstance, config: Config): Promise<void> {
   const limit = apiRateLimit(config);
   const deps = { db: prisma };
-  const guard = [app.authenticate, requireRole('ADMIN')] as const;
+  const guard = [app.authenticate, requirePermission('royalties.manage')] as const;
   const q = (req: { query?: unknown }) => (req.query ?? {}) as { page?: string; limit?: string };
 
   // --- Policies ---

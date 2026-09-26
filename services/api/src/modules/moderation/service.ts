@@ -37,7 +37,9 @@ export type ModerationTargetType =
   // Phase 30 — commerce reports. Products and stores are reportable
   // through the same queue; no second moderation system.
   | 'PRODUCT'
-  | 'ARTIST_STORE';
+  | 'ARTIST_STORE'
+  // Admin governance — user accounts are reportable (harassment, spam).
+  | 'USER';
 export type ModerationStatus = 'OPEN' | 'UNDER_REVIEW' | 'RESOLVED' | 'DISMISSED';
 
 export interface ModerationReportDto {
@@ -116,7 +118,11 @@ async function assertTargetExists(
               ? await db.postComment.findUnique({ where: { id: targetId }, select: { id: true } })
               : targetType === 'PRODUCT'
                 ? await db.product.findUnique({ where: { id: targetId }, select: { id: true } })
-                : await db.artistStore.findUnique({ where: { id: targetId }, select: { id: true } });
+                : targetType === 'ARTIST_STORE'
+                  ? await db.artistStore.findUnique({ where: { id: targetId }, select: { id: true } })
+                  : targetType === 'USER'
+                    ? await db.user.findUnique({ where: { id: targetId }, select: { id: true } })
+                    : null;
   if (!found) {
     const label =
       targetType === 'ARTIST_POST'
