@@ -154,7 +154,7 @@ export const createCommunityReportBody = {
   additionalProperties: false,
   required: ['targetType', 'targetId', 'reason'],
   properties: {
-    targetType: { type: 'string', enum: ['ARTIST_POST', 'POST_COMMENT'] },
+    targetType: { type: 'string', enum: ['ARTIST_POST', 'POST_COMMENT', 'PRODUCT', 'ARTIST_STORE'] },
     targetId: uuid,
     reason: { type: 'string', minLength: 3, maxLength: 2000 },
     details: { type: 'string', maxLength: 5000 },

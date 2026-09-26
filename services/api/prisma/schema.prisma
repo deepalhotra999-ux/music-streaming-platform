@@ -122,6 +122,9 @@ enum ModerationTargetType {
   // Phase 29 — community content report targets.
   ARTIST_POST
   POST_COMMENT
+  // Phase 30 — commerce report targets.
+  PRODUCT
+  ARTIST_STORE
 }
 
 enum ModerationStatus {
@@ -175,6 +178,9 @@ model User {
   authoredPosts      ArtistPost[] @relation("ArtistPostAuthor")
   postComments       PostComment[] @relation("PostCommentAuthor")
   postReactions      PostReaction[] @relation("PostReactionUser")
+  // Phase 30 — artist commerce.
+  cart               Cart?
+  commerceOrders     CommerceOrder[]
 
   @@index([role])
   @@map("users")
@@ -198,6 +204,9 @@ model Artist {
   followers Follow[]
   // Phase 29 — artist/fan community.
   posts     ArtistPost[]
+  // Phase 30 — artist commerce.
+  stores    ArtistStore[]
+  products  Product[]
   royaltyEarnings   RoyaltyEarning[] @relation("ArtistRoyaltyEarnings")
   royaltyAdjustments RoyaltyAdjustment[] @relation("ArtistRoyaltyAdjustments")
   royaltyEligibleStreams RoyaltyEligibleStream[] @relation("ArtistRoyaltyEligibleStreams")
@@ -242,6 +251,8 @@ model Album {
 
   // Phase 29 — posts referencing this album (IDs only; catalog is the source of truth).
   referencedInPosts ArtistPost[]
+  // Phase 30 — commerce products referencing this album (IDs only).
+  referencedInProducts Product[]
 
   @@index([artistId, releaseDate])
   @@map("albums")
@@ -292,6 +303,8 @@ model Track {
   roomsAsCurrentTrack ListeningRoom[]
   // Phase 29 — posts referencing this track (IDs only; catalog is the source of truth).
   referencedInPosts   ArtistPost[]
+  // Phase 30 — commerce products referencing this track (IDs only).
+  referencedInProducts Product[]
 
   @@index([artistId])
   @@index([albumId, trackNumber])
@@ -1046,4 +1059,336 @@ model RoyaltyEligibleStream {
   @@index([trackId])
   @@index([artistId])
   @@map("royalty_eligible_streams")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 30 — artist commerce. Physical merchandise storefronts, products,
+// inventory, carts, orders, and provider-neutral payments.
+//
+// Financial boundaries (do not relax without a new ADR):
+// - Commerce money NEVER touches royalty tables, subscription tables, or
+//   playback events. Separate tables, separate code paths, separate audit
+//   actions. Commerce revenue is not part of the royalty pool.
+// - All money is integer minor units (cents). Currency is explicit on every
+//   monetary record. No floating point, no silent conversion.
+// - commerce_payment_events is append-only (DB trigger, like Phase 18).
+// - Payment state and order fulfillment state are separate state machines.
+// - Only verified provider state (verifyPayment / verified webhook) moves
+//   money. Client callbacks are never authoritative.
+// - Shipping addresses are PII: exposed only to buyer, store owner, ADMIN.
+
+enum StoreStatus {
+  ACTIVE
+  PAUSED
+  SUSPENDED
+}
+
+/// Controlled product taxonomy. MUSIC means physical music media
+/// (vinyl, CD, cassette) in Phase 30 — digital downloads are out of scope.
+enum ProductType {
+  APPAREL
+  ACCESSORY
+  MUSIC
+  ART
+  OTHER
+}
+
+enum ProductStatus {
+  DRAFT
+  ACTIVE
+  PAUSED
+  SOLD_OUT
+  ARCHIVED
+  REMOVED
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  CANCELED
+  REFUNDED
+}
+
+enum CommercePaymentStatus {
+  INITIATED
+  PENDING
+  SUCCEEDED
+  FAILED
+  CANCELED
+  REFUNDED
+}
+
+enum CommerceRefundStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+model ArtistStore {
+  id          String      @id @default(uuid()) @db.Uuid
+  artistId    String      @unique @map("artist_id") @db.Uuid
+  artist      Artist      @relation(fields: [artistId], references: [id], onDelete: Restrict)
+  name        String
+  description String?
+  status      StoreStatus @default(ACTIVE)
+  imageUrl    String?     @map("image_url")
+  bannerUrl   String?     @map("banner_url")
+  contactEmail String?    @map("contact_email")
+  contactUrl  String?     @map("contact_url")
+  /// ISO 4217. Fixed at creation; Phase 30 does not convert currencies.
+  currency    String      @default("USD") @db.Char(3)
+  /// Flat shipping fee in minor units; 0 = free/unset. Tax is not calculated
+  /// in Phase 30 (documented placeholder: taxCents = 0 on orders).
+  shippingFlatCents Int   @default(0) @map("shipping_flat_cents")
+  /// Per-store order number sequence, incremented atomically at checkout.
+  orderSequence Int       @default(0) @map("order_sequence")
+  createdAt   DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  products Product[]
+  orders   CommerceOrder[]
+
+  @@map("artist_stores")
+}
+
+model Product {
+  id          String        @id @default(uuid()) @db.Uuid
+  storeId     String        @map("store_id") @db.Uuid
+  store       ArtistStore   @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  artistId    String        @map("artist_id") @db.Uuid
+  artist      Artist        @relation(fields: [artistId], references: [id], onDelete: Restrict)
+  title       String
+  description String?
+  type        ProductType
+  status      ProductStatus @default(DRAFT)
+  /// Integer minor units. Never float.
+  priceCents  Int           @map("price_cents")
+  currency    String        @db.Char(3)
+  sku         String?
+  imageUrl    String?       @map("image_url")
+  /// Optional catalog references (IDs only, same-artist enforced in service).
+  trackId     String?       @map("track_id") @db.Uuid
+  track       Track?        @relation(fields: [trackId], references: [id], onDelete: SetNull)
+  albumId     String?       @map("album_id") @db.Uuid
+  album       Album?        @relation(fields: [albumId], references: [id], onDelete: SetNull)
+  createdAt   DateTime      @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime      @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  variants  ProductVariant[]
+  images    ProductImage[]
+  inventory InventoryItem[]
+  cartItems CartItem[]
+  orderItems CommerceOrderItem[]
+
+  @@index([storeId, status])
+  @@index([artistId, status])
+  @@map("products")
+}
+
+model ProductVariant {
+  id         String   @id @default(uuid()) @db.Uuid
+  productId  String   @map("product_id") @db.Uuid
+  product    Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  /// Controlled free text, e.g. "Large", "Black / XL". Not a generic
+  /// options engine — one flat variant list per product.
+  name       String
+  sku        String?
+  priceCents Int      @map("price_cents")
+  currency   String   @db.Char(3)
+  sortOrder  Int      @default(0) @map("sort_order")
+  createdAt  DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt  DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  inventory InventoryItem[]
+  cartItems CartItem[]
+  orderItems CommerceOrderItem[]
+
+  @@index([productId, sortOrder])
+  @@map("product_variants")
+}
+
+model ProductImage {
+  id        String   @id @default(uuid()) @db.Uuid
+  productId String   @map("product_id") @db.Uuid
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  imageUrl  String   @map("image_url")
+  altText   String?  @map("alt_text")
+  sortOrder Int      @default(0) @map("sort_order")
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([productId, sortOrder])
+  @@map("product_images")
+}
+
+/// One row per purchasable unit: the product itself (variantId NULL) or one
+/// row per variant. Partial unique indexes (see migration) enforce this.
+model InventoryItem {
+  id                String          @id @default(uuid()) @db.Uuid
+  productId         String          @map("product_id") @db.Uuid
+  product           Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId         String?         @map("variant_id") @db.Uuid
+  variant           ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  quantityAvailable Int             @default(0) @map("quantity_available")
+  quantityReserved  Int             @default(0) @map("quantity_reserved")
+  quantitySold      Int             @default(0) @map("quantity_sold")
+  updatedAt         DateTime        @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([productId])
+  @@map("inventory_items")
+}
+
+model Cart {
+  id        String     @id @default(uuid()) @db.Uuid
+  userId    String     @unique @map("user_id") @db.Uuid
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime   @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  items CartItem[]
+
+  @@map("carts")
+}
+
+/// Cart lines carry NO prices — prices are always re-read server-side at
+/// checkout. Partial unique indexes (see migration) prevent duplicate lines.
+model CartItem {
+  id        String          @id @default(uuid()) @db.Uuid
+  cartId    String          @map("cart_id") @db.Uuid
+  cart      Cart            @relation(fields: [cartId], references: [id], onDelete: Cascade)
+  productId String          @map("product_id") @db.Uuid
+  product   Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variantId String?         @map("variant_id") @db.Uuid
+  variant   ProductVariant? @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  quantity  Int
+  createdAt DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([cartId])
+  @@map("cart_items")
+}
+
+/// One store per order (multi-artist carts are checked out per store).
+/// Line items are immutable snapshots — product edits/archives never rewrite
+/// history. Shipping address is PII: restricted to buyer, store owner, ADMIN.
+model CommerceOrder {
+  id               String      @id @default(uuid()) @db.Uuid
+  orderNumber      String      @unique @map("order_number")
+  userId           String      @map("user_id") @db.Uuid
+  user             User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  storeId          String      @map("store_id") @db.Uuid
+  store            ArtistStore @relation(fields: [storeId], references: [id], onDelete: Restrict)
+  status           OrderStatus @default(PENDING_PAYMENT)
+  currency         String      @db.Char(3)
+  subtotalCents    Int         @map("subtotal_cents")
+  shippingCents    Int         @map("shipping_cents")
+  /// Phase 30: always 0. Production tax rules are jurisdiction-specific and
+  /// out of scope; the field exists so the snapshot shape is stable.
+  taxCents         Int         @default(0) @map("tax_cents")
+  totalCents       Int         @map("total_cents")
+  /// Client-supplied idempotency key, unique per user. Retried checkouts
+  /// with the same key return the original order instead of double-charging.
+  idempotencyKey   String      @map("idempotency_key")
+  shippingName     String?     @map("shipping_name")
+  shippingLine1    String?     @map("shipping_line1")
+  shippingLine2    String?     @map("shipping_line2")
+  shippingCity     String?     @map("shipping_city")
+  shippingRegion   String?     @map("shipping_region")
+  shippingPostal   String?     @map("shipping_postal")
+  shippingCountry  String?     @map("shipping_country")
+  shippingPhone    String?     @map("shipping_phone")
+  createdAt        DateTime    @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt        DateTime    @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  items    CommerceOrderItem[]
+  payments CommercePayment[]
+  refunds  CommerceRefund[]
+
+  @@unique([userId, idempotencyKey], map: "commerce_orders_user_idem_key")
+  @@index([userId, createdAt(sort: Desc)])
+  @@index([storeId, createdAt(sort: Desc)])
+  @@index([status])
+  @@map("commerce_orders")
+}
+
+model CommerceOrderItem {
+  id           String          @id @default(uuid()) @db.Uuid
+  orderId      String          @map("order_id") @db.Uuid
+  order        CommerceOrder   @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  productId    String          @map("product_id") @db.Uuid
+  product      Product         @relation(fields: [productId], references: [id], onDelete: Restrict)
+  variantId    String?         @map("variant_id") @db.Uuid
+  variant      ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+  /// Purchase-time snapshots. Never updated after creation.
+  productTitle String          @map("product_title")
+  variantName  String?         @map("variant_name")
+  sku          String?
+  quantity     Int
+  unitPriceCents Int           @map("unit_price_cents")
+  currency     String          @db.Char(3)
+
+  @@index([orderId])
+  @@map("commerce_order_items")
+}
+
+/// Provider-neutral payment record. Stores ONLY provider-safe references —
+/// never card numbers, CVV, or full credentials.
+model CommercePayment {
+  id                String                @id @default(uuid()) @db.Uuid
+  orderId           String                @unique @map("order_id") @db.Uuid
+  order             CommerceOrder         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  /// Provider id, e.g. 'mock'. Validated in code (provider-neutral String,
+  /// not an enum, so new providers need no migration).
+  provider          String
+  providerPaymentId String                @map("provider_payment_id")
+  status            CommercePaymentStatus @default(INITIATED)
+  amountCents       Int                   @map("amount_cents")
+  currency          String                @db.Char(3)
+  idempotencyKey    String                @unique @map("idempotency_key")
+  createdAt         DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt         DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  events CommercePaymentEvent[]
+  refunds CommerceRefund[]
+
+  @@index([provider, providerPaymentId])
+  @@map("commerce_payments")
+}
+
+/// Immutable provider event record. Webhook processing is idempotent via the
+/// unique providerEventId — the same event is never applied twice.
+model CommercePaymentEvent {
+  id              String          @id @default(uuid()) @db.Uuid
+  paymentId       String          @map("payment_id") @db.Uuid
+  payment         CommercePayment @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  providerEventId String          @unique @map("provider_event_id")
+  eventType       String          @map("event_type")
+  /// Sanitized provider payload (no secrets; mock payloads only in Phase 30).
+  payload         Json?
+  createdAt       DateTime        @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@index([paymentId])
+  @@map("commerce_payment_events")
+}
+
+/// Phase 30 supports full refunds only, through the provider abstraction.
+model CommerceRefund {
+  id              String               @id @default(uuid()) @db.Uuid
+  paymentId       String               @map("payment_id") @db.Uuid
+  payment         CommercePayment      @relation(fields: [paymentId], references: [id], onDelete: Restrict)
+  orderId         String               @map("order_id") @db.Uuid
+  order           CommerceOrder        @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  amountCents     Int                  @map("amount_cents")
+  currency        String               @db.Char(3)
+  reason          String?
+  status          CommerceRefundStatus @default(PENDING)
+  providerRefundId String?             @map("provider_refund_id")
+  idempotencyKey  String               @unique @map("idempotency_key")
+  createdBy       String               @map("created_by") @db.Uuid
+  createdAt       DateTime             @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime             @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([orderId])
+  @@map("commerce_refunds")
 }

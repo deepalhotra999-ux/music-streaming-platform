@@ -22,6 +22,38 @@ let config: Config;
 /** FK-safe cleanup, children before parents. */
 async function scopedClean(): Promise<void> {
   const userWhere = { user: { email: { endsWith: TEST_DOMAIN } } };
+  const storeWhere = { store: { artist: { owner: { email: { endsWith: TEST_DOMAIN } } } } };
+  // Phase 30 commerce tables (children before parents). commerce_payment_events
+  // is append-only (triggers reject DELETE); disable them for test cleanup.
+  await prisma.$executeRawUnsafe(
+    'ALTER TABLE commerce_payment_events DISABLE TRIGGER commerce_payment_events_no_update',
+  );
+  await prisma.$executeRawUnsafe(
+    'ALTER TABLE commerce_payment_events DISABLE TRIGGER commerce_payment_events_no_delete',
+  );
+  try {
+    await prisma.commercePaymentEvent.deleteMany({ where: { payment: { order: storeWhere } } });
+  } finally {
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE commerce_payment_events ENABLE TRIGGER commerce_payment_events_no_update',
+    );
+    await prisma.$executeRawUnsafe(
+      'ALTER TABLE commerce_payment_events ENABLE TRIGGER commerce_payment_events_no_delete',
+    );
+  }
+  await prisma.commerceRefund.deleteMany({ where: { order: storeWhere } });
+  await prisma.commercePayment.deleteMany({ where: { order: storeWhere } });
+  await prisma.commerceOrderItem.deleteMany({ where: { order: storeWhere } });
+  await prisma.commerceOrder.deleteMany({ where: storeWhere });
+  await prisma.cartItem.deleteMany({ where: { cart: userWhere } });
+  await prisma.cart.deleteMany({ where: userWhere });
+  await prisma.inventoryItem.deleteMany({ where: { product: storeWhere } });
+  await prisma.productImage.deleteMany({ where: { product: storeWhere } });
+  await prisma.productVariant.deleteMany({ where: { product: storeWhere } });
+  await prisma.product.deleteMany({ where: storeWhere });
+  await prisma.artistStore.deleteMany({
+    where: { artist: { owner: { email: { endsWith: TEST_DOMAIN } } } },
+  });
   await prisma.listeningHistory.deleteMany({ where: userWhere });
   await prisma.like.deleteMany({ where: userWhere });
   await prisma.follow.deleteMany({ where: userWhere });

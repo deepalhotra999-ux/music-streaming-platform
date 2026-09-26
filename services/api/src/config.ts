@@ -33,6 +33,15 @@ export interface RateLimitConfig {
   communityCommentCreate: number;
   communityReaction: number;
   communityReport: number;
+  /** Phase 30 — commerce write buckets. Per USER (authenticated server
+   *  identity), not per IP. */
+  commerceStoreCreate: number;
+  commerceProductCreate: number;
+  commerceVariantCreate: number;
+  commerceCartMutate: number;
+  commerceCheckout: number;
+  commerceRefundRequest: number;
+  commerceProductReport: number;
   /** window length in milliseconds */
   windowMs: number;
 }
@@ -45,6 +54,35 @@ export interface CommunityConfig {
   commentMaxLength: number;
   /** Identical posts by the same author inside this window are rejected. */
   duplicateWindowMs: number;
+}
+
+/** Phase 30 — artist commerce tunables. */
+export interface CommerceConfig {
+  /**
+   * Payment provider id. 'mock' is the deterministic development/test
+   * adapter and is rejected outside development/test (see parse below).
+   * Production providers (e.g. 'stripe') are future integration boundaries:
+   * selecting one without a configured adapter fails fast at startup.
+   */
+  paymentProvider: string;
+  /**
+   * Shared secret the mock provider uses to sign its webhook payloads.
+   * Demonstrates the signature-verification pattern; it is NOT a real
+   * payment credential and must never be treated as one.
+   */
+  mockWebhookSecret: string;
+  /** Maximum store name length in characters. */
+  storeNameMaxLength: number;
+  /** Maximum store description length in characters. */
+  storeDescriptionMaxLength: number;
+  /** Maximum product title length in characters. */
+  productTitleMaxLength: number;
+  /** Maximum product description length in characters. */
+  productDescriptionMaxLength: number;
+  /** Maximum variants per product. */
+  maxVariantsPerProduct: number;
+  /** Maximum quantity per cart line. */
+  maxCartLineQuantity: number;
 }
 
 /** Where audio bytes come from. 'local' is the development default and needs
@@ -178,6 +216,8 @@ export interface Config {
   discovery: DiscoveryConfig;
   /** Phase 29 — artist/fan community. */
   community: CommunityConfig;
+  /** Phase 30 — artist commerce. */
+  commerce: CommerceConfig;
 }
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
@@ -233,6 +273,13 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       communityCommentCreate: int(env, 'RATE_LIMIT_COMMUNITY_COMMENT_CREATE', 30),
       communityReaction: int(env, 'RATE_LIMIT_COMMUNITY_REACTION', 100),
       communityReport: int(env, 'RATE_LIMIT_COMMUNITY_REPORT', 20),
+      commerceStoreCreate: int(env, 'RATE_LIMIT_COMMERCE_STORE_CREATE', 5),
+      commerceProductCreate: int(env, 'RATE_LIMIT_COMMERCE_PRODUCT_CREATE', 30),
+      commerceVariantCreate: int(env, 'RATE_LIMIT_COMMERCE_VARIANT_CREATE', 120),
+      commerceCartMutate: int(env, 'RATE_LIMIT_COMMERCE_CART_MUTATE', 120),
+      commerceCheckout: int(env, 'RATE_LIMIT_COMMERCE_CHECKOUT', 20),
+      commerceRefundRequest: int(env, 'RATE_LIMIT_COMMERCE_REFUND_REQUEST', 20),
+      commerceProductReport: int(env, 'RATE_LIMIT_COMMERCE_PRODUCT_REPORT', 20),
       windowMs: int(env, 'RATE_LIMIT_WINDOW_MS', 60_000),
     },
     streaming: {
@@ -269,6 +316,16 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       commentMaxLength: int(env, 'COMMUNITY_COMMENT_MAX_LENGTH', 500),
       duplicateWindowMs: int(env, 'COMMUNITY_DUPLICATE_WINDOW_MS', 5 * 60 * 1000), // 5 min
     },
+    commerce: {
+      paymentProvider: parseCommercePaymentProvider(env),
+      mockWebhookSecret: env.COMMERCE_MOCK_WEBHOOK_SECRET ?? 'dev-mock-webhook-secret-change-me',
+      storeNameMaxLength: int(env, 'COMMERCE_STORE_NAME_MAX_LENGTH', 80),
+      storeDescriptionMaxLength: int(env, 'COMMERCE_STORE_DESCRIPTION_MAX_LENGTH', 2000),
+      productTitleMaxLength: int(env, 'COMMERCE_PRODUCT_TITLE_MAX_LENGTH', 120),
+      productDescriptionMaxLength: int(env, 'COMMERCE_PRODUCT_DESCRIPTION_MAX_LENGTH', 5000),
+      maxVariantsPerProduct: int(env, 'COMMERCE_MAX_VARIANTS_PER_PRODUCT', 50),
+      maxCartLineQuantity: int(env, 'COMMERCE_MAX_CART_LINE_QUANTITY', 99),
+    },
   };
 }
 
@@ -282,6 +339,31 @@ function parseDevSubscriptions(env: NodeJS.ProcessEnv): boolean {
     );
   }
   return enabled;
+}
+
+/**
+ * Phase 30 — payment provider selection. The mock adapter performs NO real
+ * payment processing and must be impossible to select outside local
+ * development and tests. Selecting a real provider id without a configured
+ * adapter fails fast at startup so production can never silently run on
+ * the mock.
+ */
+function parseCommercePaymentProvider(env: NodeJS.ProcessEnv): string {
+  const raw = (env.COMMERCE_PAYMENT_PROVIDER ?? 'mock').toLowerCase();
+  if (raw === 'mock') {
+    if (env.NODE_ENV !== 'development' && env.NODE_ENV !== 'test') {
+      throw new Error(
+        'COMMERCE_PAYMENT_PROVIDER=mock may only be used when NODE_ENV is development or test.',
+      );
+    }
+    return 'mock';
+  }
+  // Future provider ids (e.g. 'stripe') are recognized so configuration is
+  // explicit, but no adapter is implemented in Phase 30.
+  throw new Error(
+    `COMMERCE_PAYMENT_PROVIDER="${raw}" has no configured adapter in Phase 30. ` +
+      'Only "mock" is implemented; a production provider requires a new adapter implementation.',
+  );
 }
 
 function parseAudioStorageDriver(raw: string | undefined): AudioStorageDriver {

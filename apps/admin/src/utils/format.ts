@@ -39,3 +39,15 @@ export function formatDateOnly(iso: string | null | undefined): string {
 export function shortId(id: string): string {
   return id.length > 12 ? `${id.slice(0, 8)}…` : id;
 }
+
+/** Format integer minor units as currency, e.g. 2500 + "USD" -> "$25.00". */
+export function formatMoney(cents: number, currency: string): string {
+  try {
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency,
+    }).format(cents / 100);
+  } catch {
+    return `${(cents / 100).toFixed(2)} ${currency}`;
+  }
+}

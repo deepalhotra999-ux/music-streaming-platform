@@ -14,6 +14,7 @@ import { CatalogPage } from './pages/CatalogPage';
 import { AnalyticsPage } from './pages/AnalyticsPage';
 import { AuditLogPage } from './pages/AuditLogPage';
 import { ModerationPage } from './pages/ModerationPage';
+import { CommercePage } from './pages/CommercePage';
 
 export function App(): React.ReactNode {
   return (
@@ -35,6 +36,7 @@ export function App(): React.ReactNode {
             <Route path="catalog" element={<CatalogPage />} />
             <Route path="analytics" element={<AnalyticsPage />} />
             <Route path="moderation" element={<ModerationPage />} />
+            <Route path="commerce" element={<CommercePage />} />
             <Route path="audit" element={<AuditLogPage />} />
           </Route>
         </Routes>

@@ -358,12 +358,13 @@ export async function communityRoutes(app: FastifyInstance, config: Config): Pro
       preHandler: [app.authenticate],
       schema: {
         tags: ['Community'],
-        summary: 'Report a post or comment',
+        summary: 'Report a post, comment, product, or store',
         description:
-          'Authenticated. Files a report against an artist post or ' +
-          'comment into the existing Phase 17 moderation workflow — the ' +
-          'same queue admins review, the same audit trail. Per-user rate ' +
-          'limited. Catalog targets (ARTIST/ALBUM/TRACK) stay admin-only.',
+          'Authenticated. Files a report against an artist post, ' +
+          'comment, commerce product, or artist store into the existing ' +
+          'Phase 17 moderation workflow — the same queue admins review, ' +
+          'the same audit trail. Per-user rate limited. Catalog targets ' +
+          '(ARTIST/ALBUM/TRACK) stay admin-only.',
         security: [{ bearerAuth: [] }],
         body: createCommunityReportBody,
         response: { 201: moderationReportSchema, ...communityErrors },

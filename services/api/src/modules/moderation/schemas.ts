@@ -8,6 +8,9 @@ export const moderationTargetTypes = [
   // Phase 29 — community content report targets.
   'ARTIST_POST',
   'POST_COMMENT',
+  // Phase 30 — commerce report targets.
+  'PRODUCT',
+  'ARTIST_STORE',
 ] as const;
 export const moderationStatuses = ['OPEN', 'UNDER_REVIEW', 'RESOLVED', 'DISMISSED'] as const;
 

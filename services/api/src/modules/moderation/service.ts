@@ -33,7 +33,11 @@ export type ModerationTargetType =
   // user-facing POST /v1/moderation-reports endpoint; admins review them
   // in the same queue as catalog reports (no parallel moderation system).
   | 'ARTIST_POST'
-  | 'POST_COMMENT';
+  | 'POST_COMMENT'
+  // Phase 30 — commerce reports. Products and stores are reportable
+  // through the same queue; no second moderation system.
+  | 'PRODUCT'
+  | 'ARTIST_STORE';
 export type ModerationStatus = 'OPEN' | 'UNDER_REVIEW' | 'RESOLVED' | 'DISMISSED';
 
 export interface ModerationReportDto {
@@ -108,14 +112,22 @@ async function assertTargetExists(
           ? await db.track.findUnique({ where: { id: targetId }, select: { id: true } })
           : targetType === 'ARTIST_POST'
             ? await db.artistPost.findUnique({ where: { id: targetId }, select: { id: true } })
-            : await db.postComment.findUnique({ where: { id: targetId }, select: { id: true } });
+            : targetType === 'POST_COMMENT'
+              ? await db.postComment.findUnique({ where: { id: targetId }, select: { id: true } })
+              : targetType === 'PRODUCT'
+                ? await db.product.findUnique({ where: { id: targetId }, select: { id: true } })
+                : await db.artistStore.findUnique({ where: { id: targetId }, select: { id: true } });
   if (!found) {
     const label =
       targetType === 'ARTIST_POST'
         ? 'Post'
         : targetType === 'POST_COMMENT'
           ? 'Comment'
-          : targetType.charAt(0) + targetType.slice(1).toLowerCase();
+          : targetType === 'PRODUCT'
+            ? 'Product'
+            : targetType === 'ARTIST_STORE'
+              ? 'Store'
+              : targetType.charAt(0) + targetType.slice(1).toLowerCase();
     throw notFound(`${label} not found.`);
   }
 }

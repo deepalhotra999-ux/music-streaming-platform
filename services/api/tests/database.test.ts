@@ -10,6 +10,36 @@ import { prisma } from '../src/db.js';
 const db = new PrismaClient();
 
 async function clean(): Promise<void> {
+  // Phase 30 commerce tables first (FK: stores -> artists, orders -> users/stores).
+  // commerce_payment_events is append-only (trigger rejects DELETE); disable
+  // the trigger for test cleanup like phase4 does for admin_audit_logs.
+  await db.$executeRawUnsafe(
+    'ALTER TABLE commerce_payment_events DISABLE TRIGGER commerce_payment_events_no_update',
+  );
+  await db.$executeRawUnsafe(
+    'ALTER TABLE commerce_payment_events DISABLE TRIGGER commerce_payment_events_no_delete',
+  );
+  try {
+    await db.commercePaymentEvent.deleteMany();
+  } finally {
+    await db.$executeRawUnsafe(
+      'ALTER TABLE commerce_payment_events ENABLE TRIGGER commerce_payment_events_no_update',
+    );
+    await db.$executeRawUnsafe(
+      'ALTER TABLE commerce_payment_events ENABLE TRIGGER commerce_payment_events_no_delete',
+    );
+  }
+  await db.commerceRefund.deleteMany();
+  await db.commercePayment.deleteMany();
+  await db.commerceOrderItem.deleteMany();
+  await db.commerceOrder.deleteMany();
+  await db.cartItem.deleteMany();
+  await db.cart.deleteMany();
+  await db.inventoryItem.deleteMany();
+  await db.productImage.deleteMany();
+  await db.productVariant.deleteMany();
+  await db.product.deleteMany();
+  await db.artistStore.deleteMany();
   await db.listeningHistory.deleteMany();
   await db.like.deleteMany();
   await db.follow.deleteMany();
@@ -21,7 +51,18 @@ async function clean(): Promise<void> {
   await db.artistProfile.deleteMany();
   await db.artist.deleteMany();
   await db.subscription.deleteMany();
-  await db.user.deleteMany();
+  // admin_audit_logs is append-only (trigger rejects the FK's ON DELETE SET NULL
+  // maintenance update); disable it for test cleanup like phase4 does.
+  await db.$executeRawUnsafe(
+    'ALTER TABLE admin_audit_logs DISABLE TRIGGER admin_audit_logs_no_mutation',
+  );
+  try {
+    await db.user.deleteMany();
+  } finally {
+    await db.$executeRawUnsafe(
+      'ALTER TABLE admin_audit_logs ENABLE TRIGGER admin_audit_logs_no_mutation',
+    );
+  }
   await db.genre.deleteMany();
 }
 

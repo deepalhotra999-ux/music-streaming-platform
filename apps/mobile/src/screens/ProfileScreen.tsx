@@ -140,6 +140,18 @@ export function ProfileScreen() {
           accessibilityHint="Opens subscription details, plans, restore, and store billing management"
           onPress={() => router.push('/subscription')}
         />
+        <Button
+          title="Browse artist stores"
+          testID="browse-stores-button"
+          variant="secondary"
+          onPress={() => router.push('/(commerce)/stores')}
+        />
+        <Button
+          title="My orders"
+          testID="my-orders-button"
+          variant="secondary"
+          onPress={() => router.push('/(commerce)/orders')}
+        />
       </View>
 
       <Modal

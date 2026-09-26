@@ -227,6 +227,18 @@ export function ArtistDashboardScreen() {
             testID="view-royalties-button"
           />
           <Button
+            title="My store"
+            variant="secondary"
+            onPress={() => router.push('/(artist)/store')}
+            testID="manage-store-button"
+          />
+          <Button
+            title="Store orders"
+            variant="secondary"
+            onPress={() => router.push('/(artist)/orders')}
+            testID="manage-orders-button"
+          />
+          <Button
             title="Edit profile"
             variant="secondary"
             onPress={() => router.push('/(artist)/profile')}

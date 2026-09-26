@@ -28,6 +28,7 @@ import { analyticsRoutes } from '../modules/analytics/routes.js';
 import { auditRoutes } from '../modules/audit/routes.js';
 import { moderationRoutes } from '../modules/moderation/routes.js';
 import { communityRoutes } from '../modules/community/routes.js';
+import { commerceRoutes } from '../modules/commerce/routes.js';
 import { subscriptionRoutes } from '../modules/subscriptions/routes.js';
 import { royaltyArtistRoutes, royaltyAdminRoutes } from '../modules/royalties/index.js';
 import { roomsRoutes } from '../modules/rooms/routes.js';
@@ -121,6 +122,7 @@ export async function buildApp(config: Config): Promise<FastifyInstance> {
     await auditRoutes(instance, config);
     await moderationRoutes(instance, config);
     await communityRoutes(instance, config);
+    await commerceRoutes(instance, config);
     await subscriptionRoutes(instance, config);
     await royaltyArtistRoutes(instance, config);
     await royaltyAdminRoutes(instance, config);

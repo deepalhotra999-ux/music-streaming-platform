@@ -9,6 +9,7 @@ const NAV_ITEMS = [
   { to: '/artists', label: 'Artists' },
   { to: '/catalog', label: 'Catalog' },
   { to: '/moderation', label: 'Moderation' },
+  { to: '/commerce', label: 'Commerce' },
   { to: '/analytics', label: 'Analytics' },
   { to: '/audit', label: 'Audit Log' },
 ];
