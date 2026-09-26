@@ -7,8 +7,12 @@ import rateLimit from '@fastify/rate-limit';
 import websocket from '@fastify/websocket';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
+import helmet from '@fastify/helmet';
+import cors from '@fastify/cors';
 import type { Config } from '../config.js';
 import { registerErrorHandler } from './errors.js';
+import { registerCorrelation } from './correlation.js';
+import { metrics } from './metrics.js';
 import { authPlugin } from './auth.js';
 import { authRoutes } from '../modules/auth/routes.js';
 import { usersRoutes } from '../modules/users/routes.js';
@@ -44,6 +48,49 @@ export async function buildApp(config: Config): Promise<FastifyInstance> {
             // Structured JSON logs (Phase 1 observability baseline).
             formatters: { level: (label) => ({ level: label }) },
           },
+    // Phase 32 — bound JSON bodies globally (uploads use multipart with
+    // their own streaming limit). trustProxy is explicit: enable only
+    // behind a reverse proxy (ALB/CloudFront) so req.ip is the real client.
+    bodyLimit: config.http.bodyLimitBytes,
+    trustProxy: config.http.trustProxy,
+  });
+
+  // Phase 32 — security headers. Swagger UI needs inline scripts/styles,
+  // so CSP is relaxed to what the docs page requires; the API itself
+  // returns JSON and never executes browser scripts.
+  await app.register(helmet, {
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'", "'unsafe-inline'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", 'data:'],
+      },
+    },
+  });
+
+  // Phase 32 — CORS is deny-by-default. Browsers cannot call the API
+  // cross-origin unless CORS_ORIGIN names the admin console origin(s).
+  // Mobile apps are not browsers and do not need CORS.
+  if (config.http.corsOrigins.length > 0) {
+    await app.register(cors, {
+      origin: config.http.corsOrigins,
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      allowedHeaders: ['authorization', 'content-type', 'x-request-id'],
+      exposedHeaders: ['x-request-id'],
+      maxAge: 86400,
+    });
+  }
+
+  // Phase 32 — request correlation (x-request-id in/out, attached to logs).
+  await registerCorrelation(app);
+
+  // Phase 32 — observability: count requests by status class and note
+  // auth failures / rate-limit hits for the metrics snapshot.
+  app.addHook('onResponse', async (req, reply) => {
+    metrics.recordRequest(reply.statusCode);
+    if (reply.statusCode === 401 || reply.statusCode === 403) metrics.recordAuthFailure();
+    if (reply.statusCode === 429) metrics.recordRateLimitHit();
   });
 
   // Per-route limits only; no global limit (see ADR-002 consequences).
@@ -102,6 +149,37 @@ export async function buildApp(config: Config): Promise<FastifyInstance> {
   await authPlugin(app, config);
 
   app.get('/v1/health', async () => ({ status: 'ok' }));
+
+  // Phase 32 — readiness: liveness is "the process answers"; readiness is
+  // "the process can serve traffic" (DB reachable). Load balancers and
+  // orchestrators must use /v1/ready.
+  app.get('/v1/ready', async (_req, reply) => {
+    try {
+      const { prisma } = await import('../db.js');
+      await prisma.$queryRaw`SELECT 1`;
+      return { status: 'ready' };
+    } catch (err) {
+      reply.code(503);
+      return { status: 'not_ready', reason: 'database unreachable' };
+    }
+  });
+
+  // Phase 32 — observability snapshot. Gated: only reachable from loopback
+  // or with ADMIN credentials (defense in depth — counters contain no PII
+  // but traffic shape is still operationally sensitive).
+  app.get(
+    '/v1/metrics',
+    { preHandler: app.authenticateOptional },
+    async (req, reply) => {
+      const ip = req.ip;
+      const loopback = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+      if (!loopback && req.authUser?.role !== 'ADMIN') {
+        reply.code(404);
+        return { status: 404, title: 'Not Found' };
+      }
+      return metrics.snapshot();
+    },
+  );
 
   await app.register(async (instance) => {
     await authRoutes(instance, config);

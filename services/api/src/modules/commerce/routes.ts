@@ -14,6 +14,7 @@ import { Readable } from 'node:stream';
 import type { FastifyInstance, FastifyRequest } from 'fastify';
 import type { Config } from '../../config.js';
 import { badRequest, notFound, problemSchema, unauthorized } from '../../http/errors.js';
+import { metrics } from '../../http/metrics.js';
 import { pageOf, type PaginationQuery } from '../../http/pagination.js';
 import { requireRole } from '../../http/authorization.js';
 import { apiRateLimit } from '../../http/limits.js';
@@ -156,16 +157,21 @@ async function handleWebhookEvent(
   signature: string | undefined,
 ): Promise<WebhookResult> {
   if (!provider.verifyWebhookSignature(rawBody, signature)) {
+    metrics.recordCommerceWebhook('failed');
     throw unauthorized('Invalid webhook signature.');
   }
   let raw: unknown;
   try {
     raw = JSON.parse(rawBody);
   } catch {
+    metrics.recordCommerceWebhook('failed');
     throw badRequest('Webhook body must be JSON.');
   }
   const event: NormalizedPaymentEvent | null = await provider.normalizeWebhookEvent(raw);
-  if (!event) return { ok: true, applied: false, eventType: null };
+  if (!event) {
+    metrics.recordCommerceWebhook('received');
+    return { ok: true, applied: false, eventType: null };
+  }
 
   const payment = await prisma.commercePayment.findFirst({
     where: { provider: provider.id, providerPaymentId: event.providerPaymentId },
@@ -174,11 +180,13 @@ async function handleWebhookEvent(
   if (!payment) {
     // Unknown payment: acknowledge so the provider stops retrying, but
     // change nothing. Logged via audit for visibility.
+    metrics.recordCommerceWebhook('received');
     return { ok: true, applied: false, eventType: event.eventType };
   }
   const recorded = await recordPaymentEvent(payment.id, event);
 
   if (!recorded) {
+    metrics.recordCommerceWebhook('duplicates');
     return { ok: true, applied: false, eventType: event.eventType };
   }
   const verified = await provider.verifyPayment(event.providerPaymentId);
@@ -187,6 +195,7 @@ async function handleWebhookEvent(
     actorId: null,
     eventRecorded: true,
   });
+  metrics.recordCommerceWebhook('received');
   return { ok: true, applied: result.applied, eventType: event.eventType };
 }
 

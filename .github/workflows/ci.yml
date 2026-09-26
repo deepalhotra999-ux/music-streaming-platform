@@ -1,0 +1,148 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  NODE_VERSION: '22'
+
+jobs:
+  backend:
+    name: Backend (typecheck, lint, tests, build)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: music
+          POSTGRES_PASSWORD: music
+          POSTGRES_DB: musicdb_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: services/api/package-lock.json
+
+      - name: Install
+        working-directory: services/api
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: services/api
+        run: npx tsc --noEmit
+
+      - name: Lint
+        working-directory: services/api
+        run: npx eslint src --max-warnings 0
+
+      - name: Migrate test database
+        working-directory: services/api
+        env:
+          DATABASE_URL: postgresql://music:music@localhost:5432/musicdb_test
+        run: npx prisma migrate deploy
+
+      - name: Tests
+        working-directory: services/api
+        env:
+          DATABASE_URL: postgresql://music:music@localhost:5432/musicdb_test
+          NODE_ENV: test
+        run: npx vitest run
+
+      - name: Build
+        working-directory: services/api
+        run: npm run build
+
+  mobile:
+    name: Mobile (typecheck, lint, tests)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/mobile/package-lock.json
+
+      - name: Install
+        working-directory: apps/mobile
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: apps/mobile
+        run: npx tsc --noEmit
+
+      - name: Lint
+        working-directory: apps/mobile
+        run: npx eslint src --max-warnings 0
+
+      - name: Tests
+        working-directory: apps/mobile
+        run: npx jest --ci
+
+  admin:
+    name: Admin (typecheck, tests, build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: apps/admin/package-lock.json
+
+      - name: Install
+        working-directory: apps/admin
+        run: npm ci
+
+      - name: Typecheck
+        working-directory: apps/admin
+        run: npx tsc --noEmit
+
+      - name: Tests
+        working-directory: apps/admin
+        run: npm test -- --run
+
+      - name: Build
+        working-directory: apps/admin
+        run: npm run build
+
+  security:
+    name: Security (audit, secrets)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: npm audit (backend)
+        working-directory: services/api
+        run: npm audit --audit-level=high
+
+      - name: npm audit (mobile)
+        working-directory: apps/mobile
+        run: npm audit --audit-level=high
+
+      - name: npm audit (admin)
+        working-directory: apps/admin
+        run: npm audit --audit-level=high
+
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -7,6 +7,7 @@
 
 import type { Config } from '../../../config.js';
 import { MockPaymentProvider } from './mockProvider.js';
+import { StripePaymentProvider } from './stripeProvider.js';
 import type { CommercePaymentProvider } from './provider.js';
 
 export * from './provider.js';
@@ -17,11 +18,20 @@ export {
   resetMockPaymentState,
   setMockPaymentScenario,
 } from './mockProvider.js';
+export { StripePaymentProvider } from './stripeProvider.js';
 
 export function resolvePaymentProvider(config: Config): CommercePaymentProvider {
   const id = config.commerce.paymentProvider;
   if (id === 'mock') {
     return new MockPaymentProvider(config.commerce.mockWebhookSecret);
+  }
+  if (id === 'stripe') {
+    // Missing credentials throw here — startup fails fast rather than
+    // running commerce on a half-configured provider.
+    return new StripePaymentProvider({
+      secretKey: config.commerce.stripeSecretKey ?? '',
+      webhookSecret: config.commerce.stripeWebhookSecret ?? '',
+    });
   }
   // parseCommercePaymentProvider already rejects unknown ids at startup;
   // this is defense in depth.

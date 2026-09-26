@@ -35,6 +35,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify';
 import type { WebSocket } from 'ws';
 import type { Config } from '../../config.js';
 import { HttpProblem, unauthorized } from '../../http/errors.js';
+import { metrics } from '../../http/metrics.js';
 import { prisma } from '../../db.js';
 import {
   applyRoomCommand,
@@ -310,6 +311,8 @@ export async function roomsGateway(app: FastifyInstance, config: Config): Promis
       // registered immediately.
       const client = registerClient(socket, userId);
       app.log.info({ roomEvent: 'ws.connected', userId });
+      // Phase 32 — observability: track WebSocket connection counts.
+      metrics.wsConnected();
 
       // Serialize message processing per socket so commands from one
       // connection apply in send order; cross-connection ordering is
@@ -326,10 +329,12 @@ export async function roomsGateway(app: FastifyInstance, config: Config): Promis
 
       socket.on('close', () => {
         leaveAllRooms(socket);
+        metrics.wsDisconnected();
         app.log.info({ roomEvent: 'ws.disconnected', userId });
       });
 
       socket.on('error', (err: Error) => {
+        metrics.wsError();
         app.log.warn({ roomEvent: 'ws.socket_error', userId, err: err.message });
       });
     },

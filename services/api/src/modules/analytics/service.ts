@@ -409,7 +409,7 @@ export async function getArtistTrend(
   const rows = await db.$queryRawUnsafe<Row[]>(
     `${SESSION_STATS_CTE}
     SELECT
-      DATE_TRUNC('${trunc}', st.created_at)::date AS bucket,
+      DATE_TRUNC('${trunc}', st.created_at AT TIME ZONE 'UTC')::date AS bucket,
       ${TOTALS_LIST}
     FROM session_stats st
     GROUP BY 1

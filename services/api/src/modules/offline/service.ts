@@ -29,6 +29,7 @@ import {
 } from '../../http/errors.js';
 import { getEntitlement } from '../subscriptions/entitlements.js';
 import { checkPlaybackEntitlement } from '../streaming/entitlements.js';
+import { metrics } from '../../http/metrics.js';
 import { masterKey, type AudioStorage } from '../streaming/storage.js';
 
 export interface OfflineDeps {
@@ -223,6 +224,9 @@ export async function authorizeDownload(
         });
     authorizationId = row.id;
   }
+
+  // Phase 32 — observability: count successful download authorizations.
+  metrics.recordDownloadAuthorization();
 
   return {
     authorizationId,

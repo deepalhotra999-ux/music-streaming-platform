@@ -20,9 +20,9 @@
 // cannot be selected outside development/test (enforced in config.ts).
 
 /** Provider ids the platform knows about. Lowercase at the HTTP boundary. */
-export type CommerceProviderId = 'mock';
+export type CommerceProviderId = 'mock' | 'stripe';
 
-export const COMMERCE_PROVIDER_IDS: readonly string[] = ['mock'];
+export const COMMERCE_PROVIDER_IDS: readonly string[] = ['mock', 'stripe'];
 
 export interface CreateCommercePaymentInput {
   /** Our order id (server-generated). */

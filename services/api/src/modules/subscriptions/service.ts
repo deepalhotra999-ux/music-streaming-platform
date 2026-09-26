@@ -21,6 +21,7 @@ import type {
   SubscriptionStatus,
 } from '@prisma/client';
 import { conflict, notFound, unprocessableEntity } from '../../http/errors.js';
+import { metrics } from '../../http/metrics.js';
 import type { NormalizedProviderEvent } from './providers.js';
 
 /**
@@ -248,6 +249,8 @@ export async function applyProviderEvent(
       where: { id: existingEvent.subscriptionId },
       select: stateSelect,
     });
+    // Phase 32 — observability: count duplicate provider events.
+    metrics.recordSubscriptionWebhook('duplicates');
     return { state: toState(sub), duplicate: true };
   }
 
@@ -273,6 +276,7 @@ export async function applyProviderEvent(
           where: { id: dupe.subscriptionId },
           select: stateSelect,
         });
+        metrics.recordSubscriptionWebhook('duplicates');
         return { state: toState(sub), duplicate: true };
       }
 
@@ -383,6 +387,7 @@ export async function applyProviderEvent(
             },
           },
         });
+        metrics.recordSubscriptionWebhook('received');
         return { state: toState(sub), duplicate: false };
       }
 
@@ -403,6 +408,7 @@ export async function applyProviderEvent(
           },
         },
       });
+      metrics.recordSubscriptionWebhook('received');
       return { state: toState(sub), duplicate: false };
     });
   } catch (error) {

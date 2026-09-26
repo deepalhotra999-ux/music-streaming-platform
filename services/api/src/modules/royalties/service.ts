@@ -17,6 +17,7 @@ import { getEligibleStreams } from './eligibility.js';
 import { calculateRoyalties } from './calculation.js';
 import { toMinorUnits, toNumericString, fromMinorUnits } from './money.js';
 import { badRequest, conflict, notFound } from '../../http/errors.js';
+import { metrics } from '../../http/metrics.js';
 
 export interface RoyaltyDeps {
   db: PrismaClient;
@@ -250,11 +251,14 @@ export async function runRoyaltyCalculation(
       return completed;
     });
 
+    // Phase 32 — observability: count completed vs failed royalty runs.
+    metrics.recordRoyaltyRun('succeeded');
     return { runId: run.id, runKey, status: run.status, duplicate: false };
   } catch (err) {
     // Never leave the period stuck in CALCULATING: move it to FAILED so the
     // failure is visible and the period can be investigated. The run row (if
     // created) stays for audit; a retry uses a new runKey only if inputs change.
+    metrics.recordRoyaltyRun('failed');
     await db.royaltyPeriod
       .update({
         where: { id: periodId, status: 'CALCULATING' },

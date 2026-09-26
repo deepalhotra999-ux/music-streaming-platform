@@ -19,6 +19,7 @@ import type { PrismaClient, Track } from '@prisma/client';
 import type { AuthUser } from '../../http/auth.js';
 import { canManageArtist } from '../../http/authorization.js';
 import { conflict, forbidden, notFound, unsupportedMediaType, unprocessableEntity } from '../../http/errors.js';
+import { metrics } from '../../http/metrics.js';
 import {
   contentTypeForKey,
   masterKey,
@@ -389,10 +390,14 @@ export async function processTrackAudio(trackId: string, deps: IngestionDeps): P
       },
     });
     log(`ingestion: track ${trackId} READY`);
+    // Phase 32 — observability: count completed ingestion jobs.
+    metrics.recordIngestionJob('succeeded');
   } catch (err) {
     const message = isIngestionError(err)
       ? err.message
       : 'Audio processing failed unexpectedly. Please try again.';
+    // Phase 32 — observability: count failed ingestion jobs.
+    metrics.recordIngestionJob('failed');
     if (!isIngestionError(err)) log('ingestion: unexpected error', err);
     else if (err.cause_) log(`ingestion: track ${trackId} failed (${err.code})`, err.cause_);
     await markFailed(deps, trackId, track.status, message);

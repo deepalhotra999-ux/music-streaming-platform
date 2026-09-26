@@ -61,8 +61,8 @@ export interface CommerceConfig {
   /**
    * Payment provider id. 'mock' is the deterministic development/test
    * adapter and is rejected outside development/test (see parse below).
-   * Production providers (e.g. 'stripe') are future integration boundaries:
-   * selecting one without a configured adapter fails fast at startup.
+   * 'stripe' is the production adapter; selecting it without
+   * STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET fails fast at startup.
    */
   paymentProvider: string;
   /**
@@ -71,6 +71,12 @@ export interface CommerceConfig {
    * payment credential and must never be treated as one.
    */
   mockWebhookSecret: string;
+  /**
+   * Phase 32 — Stripe production credentials. Null unless configured;
+   * never logged, never committed. Required when paymentProvider='stripe'.
+   */
+  stripeSecretKey: string | null;
+  stripeWebhookSecret: string | null;
   /** Maximum store name length in characters. */
   storeNameMaxLength: number;
   /** Maximum store description length in characters. */
@@ -83,6 +89,25 @@ export interface CommerceConfig {
   maxVariantsPerProduct: number;
   /** Maximum quantity per cart line. */
   maxCartLineQuantity: number;
+}
+
+/** Phase 32 — production HTTP hardening tunables. */
+export interface HttpConfig {
+  /**
+   * Allowed CORS origins, comma-separated. Empty (default) means CORS is
+   * disabled and browsers cannot call the API cross-origin. Set to the
+   * admin console origin(s) in production, e.g.
+   * "https://admin.waveform.example".
+   */
+  corsOrigins: string[];
+  /**
+   * Trust X-Forwarded-* headers from a reverse proxy (ALB/CloudFront/nginx).
+   * Required in production behind a proxy so req.ip/rate limiting see the
+   * real client. Must be false when the API is directly exposed.
+   */
+  trustProxy: boolean;
+  /** Maximum JSON body size in bytes. Uploads use multipart with their own limit. */
+  bodyLimitBytes: number;
 }
 
 /** Where audio bytes come from. 'local' is the development default and needs
@@ -206,6 +231,8 @@ export interface Config {
   jwtAudience: string;
   accessTokenTtlSeconds: number;
   refreshTokenTtlSeconds: number;
+  /** Phase 32 — production HTTP hardening. */
+  http: HttpConfig;
   rateLimits: RateLimitConfig;
   streaming: StreamingConfig;
   ingestion: IngestionConfig;
@@ -257,6 +284,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     jwtAudience: env.JWT_AUDIENCE ?? 'music-streaming-api',
     accessTokenTtlSeconds: int(env, 'ACCESS_TOKEN_TTL_SECONDS', 900), // 15 min
     refreshTokenTtlSeconds: int(env, 'REFRESH_TOKEN_TTL_SECONDS', 30 * 24 * 3600), // 30 days
+    http: {
+      corsOrigins: (env.CORS_ORIGIN ?? '')
+        .split(',')
+        .map((s) => s.trim())
+        .filter((s) => s.length > 0),
+      trustProxy: env.TRUST_PROXY === 'true',
+      bodyLimitBytes: int(env, 'HTTP_BODY_LIMIT_BYTES', 1 * 1024 * 1024), // 1 MiB
+    },
     rateLimits: {
       login: int(env, 'RATE_LIMIT_LOGIN', 10),
       register: int(env, 'RATE_LIMIT_REGISTER', 20),
@@ -319,6 +354,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
     commerce: {
       paymentProvider: parseCommercePaymentProvider(env),
       mockWebhookSecret: env.COMMERCE_MOCK_WEBHOOK_SECRET ?? 'dev-mock-webhook-secret-change-me',
+      stripeSecretKey: env.STRIPE_SECRET_KEY ?? null,
+      stripeWebhookSecret: env.STRIPE_WEBHOOK_SECRET ?? null,
       storeNameMaxLength: int(env, 'COMMERCE_STORE_NAME_MAX_LENGTH', 80),
       storeDescriptionMaxLength: int(env, 'COMMERCE_STORE_DESCRIPTION_MAX_LENGTH', 2000),
       productTitleMaxLength: int(env, 'COMMERCE_PRODUCT_TITLE_MAX_LENGTH', 120),
@@ -344,9 +381,9 @@ function parseDevSubscriptions(env: NodeJS.ProcessEnv): boolean {
 /**
  * Phase 30 — payment provider selection. The mock adapter performs NO real
  * payment processing and must be impossible to select outside local
- * development and tests. Selecting a real provider id without a configured
- * adapter fails fast at startup so production can never silently run on
- * the mock.
+ * development and tests. 'stripe' (Phase 32) is the production adapter and
+ * requires STRIPE_SECRET_KEY + STRIPE_WEBHOOK_SECRET; missing credentials
+ * fail fast at startup so production can never silently run on the mock.
  */
 function parseCommercePaymentProvider(env: NodeJS.ProcessEnv): string {
   const raw = (env.COMMERCE_PAYMENT_PROVIDER ?? 'mock').toLowerCase();
@@ -358,11 +395,18 @@ function parseCommercePaymentProvider(env: NodeJS.ProcessEnv): string {
     }
     return 'mock';
   }
-  // Future provider ids (e.g. 'stripe') are recognized so configuration is
-  // explicit, but no adapter is implemented in Phase 30.
+  if (raw === 'stripe') {
+    if (!env.STRIPE_SECRET_KEY || !env.STRIPE_WEBHOOK_SECRET) {
+      throw new Error(
+        'COMMERCE_PAYMENT_PROVIDER=stripe requires STRIPE_SECRET_KEY and ' +
+          'STRIPE_WEBHOOK_SECRET to be set. See .env.example.',
+      );
+    }
+    return 'stripe';
+  }
   throw new Error(
-    `COMMERCE_PAYMENT_PROVIDER="${raw}" has no configured adapter in Phase 30. ` +
-      'Only "mock" is implemented; a production provider requires a new adapter implementation.',
+    `COMMERCE_PAYMENT_PROVIDER="${raw}" has no configured adapter. ` +
+      'Valid values: "mock" (development/test only), "stripe" (production).',
   );
 }
 

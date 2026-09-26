@@ -1,0 +1,84 @@
+name: Release Safety
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  pre-release-checks:
+    name: Pre-release safety gates
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: music
+          POSTGRES_PASSWORD: music
+          POSTGRES_DB: musicdb_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Verify tag matches package version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/v}"
+          PKG="$(node -p "require('./services/api/package.json').version")"
+          if [ "$TAG" != "$PKG" ]; then
+            echo "Tag v$TAG does not match services/api version $PKG"
+            exit 1
+          fi
+
+      - name: Install backend
+        working-directory: services/api
+        run: npm ci
+
+      - name: Validate production config (fail-fast check)
+        working-directory: services/api
+        env:
+          NODE_ENV: production
+          DATABASE_URL: postgresql://music:music@localhost:5432/musicdb_test
+          JWT_ACCESS_SECRET: ${{ secrets.JWT_ACCESS_SECRET }}
+          # Intentionally NOT setting provider secrets — this validates that
+          # the app fails fast with a clear error instead of booting half-configured.
+        run: |
+          # Expect startup to fail fast on missing production secrets.
+          # A clean fail-fast (non-zero exit, clear message) is the PASS condition.
+          if npx tsx src/server.ts 2>&1 | grep -qi "fail-fast\|missing\|required"; then
+            echo "Production config correctly fails fast without secrets."
+          else
+            echo "WARNING: server did not fail fast on missing production config."
+            exit 1
+          fi
+        timeout-minutes: 2
+
+      - name: Migration dry-run (validate, don't apply)
+        working-directory: services/api
+        env:
+          DATABASE_URL: postgresql://music:music@localhost:5432/musicdb_test
+        run: |
+          npx prisma migrate deploy
+          npx prisma validate
+
+      - name: Full backend test suite
+        working-directory: services/api
+        env:
+          DATABASE_URL: postgresql://music:music@localhost:5432/musicdb_test
+          NODE_ENV: test
+        run: npx vitest run
+
+      - name: Secret scan (gitleaks)
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

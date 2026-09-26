@@ -17,6 +17,7 @@ import type { Config } from '../../config.js';
 import { conflict, notFound, subscriptionRequired, unauthorized } from '../../http/errors.js';
 import { checkPlaybackEntitlement } from './entitlements.js';
 import { masterKey, type AudioStorage } from './storage.js';
+import { metrics } from '../../http/metrics.js';
 
 export interface StreamingDeps {
   db: PrismaClient;
@@ -110,6 +111,9 @@ export async function createPlaybackSession(
     },
     select: { id: true, expiresAt: true },
   });
+
+  // Phase 32 — observability: count successful session issuance.
+  metrics.recordPlaybackSessionCreated();
 
   return {
     id: session.id,
@@ -209,5 +213,7 @@ export async function recordPlayEvent(
     },
     select: { id: true },
   });
+  // Phase 32 — observability: count client-reported playback errors.
+  if (input.eventType === 'ERROR') metrics.recordPlaybackError();
   return { id: event.id };
 }
