@@ -28,3 +28,7 @@ export { SearchScreen } from './SearchScreen';
 export { SplashScreen } from './SplashScreen';
 export { TrackListScreen } from './TrackListScreen';
 export { DownloadsScreen } from './DownloadsScreen';
+export { CommunityFeedScreen } from './CommunityFeedScreen';
+export { PostDetailScreen } from './PostDetailScreen';
+export { ArtistPostsScreen } from './ArtistPostsScreen';
+export { ComposePostScreen } from './ComposePostScreen';

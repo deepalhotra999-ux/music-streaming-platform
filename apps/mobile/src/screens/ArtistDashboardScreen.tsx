@@ -192,14 +192,18 @@ export function ArtistDashboardScreen() {
               <Text style={styles.counts} testID="artist-counts">
                 {detail.counts.albums} {detail.counts.albums === 1 ? 'album' : 'albums'} ·{' '}
                 {detail.counts.tracks} {detail.counts.tracks === 1 ? 'track' : 'tracks'} ·{' '}
-                {detail.counts.followers}{' '}
-                {detail.counts.followers === 1 ? 'follower' : 'followers'}
+                {detail.counts.followers} {detail.counts.followers === 1 ? 'follower' : 'followers'}
               </Text>
             </View>
           </View>
         ) : null}
 
         <View style={styles.actions}>
+          <Button
+            title="New post"
+            onPress={() => router.push('/compose-post')}
+            testID="new-post-button"
+          />
           <Button
             title="View analytics"
             variant="secondary"

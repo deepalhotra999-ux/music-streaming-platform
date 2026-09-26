@@ -33,6 +33,9 @@ export default function CatalogLayout() {
       <Stack.Screen name="playlist/[id]" options={{ title: 'Playlist' }} />
       <Stack.Screen name="playlist/[id]/members" options={{ title: 'Members' }} />
       <Stack.Screen name="invitation" options={{ title: 'Join playlist' }} />
+      <Stack.Screen name="post/[id]" options={{ title: 'Post' }} />
+      <Stack.Screen name="artist-posts/[artistId]" options={{ title: 'Posts' }} />
+      <Stack.Screen name="compose-post" options={{ title: 'New post' }} />
     </Stack>
   );
 }

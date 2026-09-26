@@ -90,8 +90,51 @@ export interface AdminSubscriptionDetail {
   } | null;
 }
 
-export type ModerationTargetType = 'ARTIST' | 'ALBUM' | 'TRACK';
+export type ModerationTargetType =
+  | 'ARTIST'
+  | 'ALBUM'
+  | 'TRACK'
+  // Phase 29 — community content reports. Users file these through the
+  // user-facing reports endpoint; admins review them in the same queue.
+  | 'ARTIST_POST'
+  | 'POST_COMMENT';
 export type ModerationStatus = 'OPEN' | 'UNDER_REVIEW' | 'RESOLVED' | 'DISMISSED';
+
+/** Phase 29 — safe public author DTO shared with the community surfaces. */
+export interface CommunityAuthor {
+  id: string;
+  displayName: string;
+  avatarUrl: string | null;
+}
+
+export type CommunityContentStatus = 'ACTIVE' | 'DELETED' | 'REMOVED';
+
+/** Phase 29 — an artist post as seen by the admin review UI (any status). */
+export interface CommunityPost {
+  id: string;
+  artist: { id: string; name: string; verified: boolean };
+  author: CommunityAuthor;
+  body: string;
+  track: { id: string; title: string; artistName: string } | null;
+  album: { id: string; title: string; artistName: string } | null;
+  status: CommunityContentStatus;
+  reactionCount: number;
+  commentCount: number;
+  publishedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** Phase 29 — a post comment as seen by the admin review UI (any status). */
+export interface CommunityComment {
+  id: string;
+  postId: string;
+  author: CommunityAuthor;
+  body: string;
+  status: CommunityContentStatus;
+  createdAt: string;
+  updatedAt: string;
+}
 
 /** Phase 17 — one moderation report. History lives in the audit log. */
 export interface ModerationReport {

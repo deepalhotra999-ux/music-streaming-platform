@@ -119,6 +119,9 @@ enum ModerationTargetType {
   ARTIST
   ALBUM
   TRACK
+  // Phase 29 — community content report targets.
+  ARTIST_POST
+  POST_COMMENT
 }
 
 enum ModerationStatus {
@@ -168,6 +171,10 @@ model User {
   roomMemberships    ListeningRoomMember[]
   roomQueueItemsAdded ListeningRoomQueueItem[] @relation("RoomQueueItemAddedBy")
   roomInvitationsCreated ListeningRoomInvitation[] @relation("RoomInvitationCreatedBy")
+  // Phase 29 — artist/fan community.
+  authoredPosts      ArtistPost[] @relation("ArtistPostAuthor")
+  postComments       PostComment[] @relation("PostCommentAuthor")
+  postReactions      PostReaction[] @relation("PostReactionUser")
 
   @@index([role])
   @@map("users")
@@ -189,6 +196,8 @@ model Artist {
   albums    Album[]
   tracks    Track[]
   followers Follow[]
+  // Phase 29 — artist/fan community.
+  posts     ArtistPost[]
   royaltyEarnings   RoyaltyEarning[] @relation("ArtistRoyaltyEarnings")
   royaltyAdjustments RoyaltyAdjustment[] @relation("ArtistRoyaltyAdjustments")
   royaltyEligibleStreams RoyaltyEligibleStream[] @relation("ArtistRoyaltyEligibleStreams")
@@ -230,6 +239,9 @@ model Album {
   updatedBy   String?   @map("updated_by") @db.Uuid
 
   tracks Track[]
+
+  // Phase 29 — posts referencing this album (IDs only; catalog is the source of truth).
+  referencedInPosts ArtistPost[]
 
   @@index([artistId, releaseDate])
   @@map("albums")
@@ -278,6 +290,8 @@ model Track {
   // rooms reference their current track; no audio URLs are ever stored).
   roomQueueItems      ListeningRoomQueueItem[]
   roomsAsCurrentTrack ListeningRoom[]
+  // Phase 29 — posts referencing this track (IDs only; catalog is the source of truth).
+  referencedInPosts   ArtistPost[]
 
   @@index([artistId])
   @@index([albumId, trackNumber])
@@ -527,6 +541,76 @@ model ListeningRoomInvitation {
   @@index([roomId])
   @@index([expiresAt])
   @@map("listening_room_invitations")
+}
+
+// Phase 29 — artist/fan community. Deliberately minimal: artist-owned posts
+// with optional catalog references (track/album IDs only — no metadata copy),
+// flat comments, and a single idempotent reaction type.
+//
+// Moderation model follows Phase 17: REMOVED is an admin-only state,
+// DELETED is a user soft-delete; rows are never hard-deleted so the audit
+// trail and report targets stay resolvable. Only ACTIVE rows are served
+// through public/community surfaces.
+enum CommunityContentStatus {
+  ACTIVE
+  REMOVED
+  DELETED
+}
+
+model ArtistPost {
+  id           String                @id @default(uuid()) @db.Uuid
+  artistId     String                @map("artist_id") @db.Uuid
+  artist       Artist                @relation(fields: [artistId], references: [id], onDelete: Restrict)
+  authorUserId String                @map("author_user_id") @db.Uuid
+  author       User                  @relation("ArtistPostAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
+  body         String                @db.Text
+  // Optional catalog references — IDs only, resolved at read time so the
+  // catalog stays the single source of truth. Null = no attachment.
+  trackId      String?               @map("track_id") @db.Uuid
+  track        Track?                @relation(fields: [trackId], references: [id], onDelete: SetNull)
+  albumId      String?               @map("album_id") @db.Uuid
+  album        Album?                @relation(fields: [albumId], references: [id], onDelete: SetNull)
+  status       CommunityContentStatus @default(ACTIVE)
+  // publishedAt is the stable feed ordering key (set once at creation;
+  // edits bump updatedAt only, so edited posts do not jump the feed).
+  publishedAt  DateTime              @default(now()) @map("published_at") @db.Timestamptz(6)
+  createdAt    DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  comments  PostComment[]
+  reactions PostReaction[]
+
+  @@index([artistId, publishedAt(sort: Desc)])
+  @@index([status, publishedAt(sort: Desc)])
+  @@map("artist_posts")
+}
+
+model PostComment {
+  id           String                @id @default(uuid()) @db.Uuid
+  postId       String                @map("post_id") @db.Uuid
+  post         ArtistPost            @relation(fields: [postId], references: [id], onDelete: Cascade)
+  authorUserId String                @map("author_user_id") @db.Uuid
+  author       User                  @relation("PostCommentAuthor", fields: [authorUserId], references: [id], onDelete: Cascade)
+  body         String                @db.Text
+  status       CommunityContentStatus @default(ACTIVE)
+  createdAt    DateTime              @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt    DateTime              @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  @@index([postId, createdAt])
+  @@map("post_comments")
+}
+
+// Single reaction type ("like") on posts only. The composite PK makes
+// add/remove idempotent at the database level — no duplicate reactions.
+model PostReaction {
+  postId    String     @map("post_id") @db.Uuid
+  post      ArtistPost @relation(fields: [postId], references: [id], onDelete: Cascade)
+  userId    String     @map("user_id") @db.Uuid
+  user      User       @relation("PostReactionUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime   @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  @@id([postId, userId])
+  @@map("post_reactions")
 }
 
 model Like {

@@ -6,15 +6,11 @@ import { useCallback, useEffect, useState } from 'react';
 import { FlatList, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Stack, useRouter } from 'expo-router';
-import type {
-  AlbumListItem,
-  ApiClient,
-  ArtistDetail,
-  TrackListItem,
-} from '../api';
-import { apiErrorMessage, getArtist, listAlbums, listTracks } from '../api';
+import type { AlbumListItem, ApiClient, ArtistDetail, ArtistPost, TrackListItem } from '../api';
+import { apiErrorMessage, getArtist, listAlbums, listArtistPosts, listTracks } from '../api';
 import { useAuth } from '../auth';
 import { useQueueActions } from '../player';
+import { usePlayback } from '../playback';
 import { FollowButton } from '../library';
 import {
   AlbumCard,
@@ -24,6 +20,8 @@ import {
   formatFollowerCount,
   formatTrackCount,
 } from '../catalog';
+import { PostCard } from '../community/components/PostCard';
+import { useReactionToggle } from '../community/hooks/useReactionToggle';
 import { EmptyState, ErrorState, LoadingState, Screen } from '../components';
 import { colors, fontSize, fontWeight, spacing } from '../theme';
 
@@ -31,25 +29,32 @@ interface ArtistDetailData {
   artist: ArtistDetail;
   albums: AlbumListItem[];
   tracks: TrackListItem[];
+  posts: ArtistPost[];
+  postsTotal: number;
   relatedError: unknown;
 }
 
 async function loadArtistDetail(api: ApiClient, artistId: string): Promise<ArtistDetailData> {
   const artist = await getArtist(api, artistId);
-  const [albumsResult, tracksResult] = await Promise.allSettled([
+  const [albumsResult, tracksResult, postsResult] = await Promise.allSettled([
     listAlbums(api, { artistId, limit: 10 }).then((p) => p.data),
     listTracks(api, { artistId, limit: 5 }).then((p) => p.data),
+    listArtistPosts(api, artistId, { page: 1, limit: 3 }),
   ]);
   return {
     artist,
     albums: albumsResult.status === 'fulfilled' ? albumsResult.value : [],
     tracks: tracksResult.status === 'fulfilled' ? tracksResult.value : [],
+    posts: postsResult.status === 'fulfilled' ? postsResult.value.data : [],
+    postsTotal: postsResult.status === 'fulfilled' ? postsResult.value.pagination.total : 0,
     relatedError:
       albumsResult.status === 'rejected'
         ? albumsResult.reason
         : tracksResult.status === 'rejected'
           ? tracksResult.reason
-          : null,
+          : postsResult.status === 'rejected'
+            ? postsResult.reason
+            : null,
   };
 }
 
@@ -59,6 +64,9 @@ export function ArtistDetailScreen({ artistId }: { artistId: string }) {
   // Phase 9 — tapping a top track plays it (the visible tracks become the
   // queue); long-press appends it to the current queue.
   const { playTracks, addToQueue } = useQueueActions();
+  const { setQueue } = usePlayback();
+  // Phase 29 — reactions on the profile's post preview cards.
+  const { applyOverrides, pending, toggle } = useReactionToggle(api);
   const [data, setData] = useState<ArtistDetailData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<unknown>(null);
@@ -146,6 +154,48 @@ export function ArtistDetailScreen({ artistId }: { artistId: string }) {
           </View>
         ) : null}
 
+        {data.posts.length > 0 ? (
+          <View style={styles.section}>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionTitleBare}>Posts</Text>
+              {data.postsTotal > data.posts.length ? (
+                <Text
+                  style={styles.seeAll}
+                  onPress={() => router.push(`/artist-posts/${artist.id}`)}
+                >
+                  See all
+                </Text>
+              ) : null}
+            </View>
+            {data.posts.map((post) => (
+              <View key={post.id} style={styles.postCardWrap}>
+                <PostCard
+                  post={applyOverrides(post)}
+                  onOpen={(p) => router.push(`/post/${p.id}`)}
+                  onToggleReaction={toggle}
+                  onPlayTrack={(p) => {
+                    if (p.track) {
+                      void setQueue(
+                        [
+                          {
+                            trackId: p.track.id,
+                            title: p.track.title,
+                            artistName: p.track.artistName,
+                            albumTitle: p.track.albumTitle,
+                            durationMs: p.track.durationMs,
+                          },
+                        ],
+                        0,
+                      );
+                    }
+                  }}
+                  reactionPending={pending[post.id] === true}
+                />
+              </View>
+            ))}
+          </View>
+        ) : null}
+
         <View style={styles.section}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionTitleBare}>Tracks</Text>
@@ -225,6 +275,10 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   section: { marginTop: spacing.xl },
+  postCardWrap: {
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.lg,
+  },
   sectionHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',

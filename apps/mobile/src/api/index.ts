@@ -105,6 +105,35 @@ export {
 } from './collab';
 export type { CollaborativeMutation, RevisionedResult } from './collab';
 export {
+  addReaction,
+  createComment,
+  createPost,
+  deleteComment,
+  deletePost,
+  getPost,
+  listArtistPosts,
+  listComments,
+  listCommunityFeed,
+  removeReaction,
+  reportCommunityContent,
+  updatePost,
+} from './community';
+export type {
+  ArtistPost,
+  CommunityAuthor,
+  CommunityContentStatus,
+  CommunityQuery,
+  CreatePostInput,
+  ModerationReport,
+  PostAlbumRef,
+  PostArtistRef,
+  PostComment,
+  PostTrackRef,
+  ReactionResult,
+  ReportCommunityInput,
+  UpdatePostInput,
+} from './community';
+export {
   createRoom,
   createRoomInvitation,
   endRoom,

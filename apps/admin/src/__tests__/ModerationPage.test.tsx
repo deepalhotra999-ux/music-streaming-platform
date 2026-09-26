@@ -177,6 +177,157 @@ describe('ModerationPage', () => {
   });
 });
 
+// Phase 29 — community content review tests live in the same suite because
+// the report detail view now embeds the post/comment review card.
+
+function makeCommunityPost(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'post-1',
+    artist: { id: 'artist-1', name: 'The Band', verified: true },
+    author: { id: 'user-1', displayName: 'The Band', avatarUrl: null },
+    body: 'New single out Friday!',
+    track: null,
+    album: null,
+    status: 'ACTIVE',
+    reactionCount: 5,
+    commentCount: 2,
+    publishedAt: '2026-09-26T10:00:00.000Z',
+    createdAt: '2026-09-26T10:00:00.000Z',
+    updatedAt: '2026-09-26T10:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function makeCommunityComment(overrides: Record<string, unknown> = {}) {
+  return {
+    id: 'comment-1',
+    postId: 'post-1',
+    author: { id: 'user-2', displayName: 'Fan Person', avatarUrl: null },
+    body: 'Love this track!',
+    status: 'ACTIVE',
+    createdAt: '2026-09-26T11:00:00.000Z',
+    updatedAt: '2026-09-26T11:00:00.000Z',
+    ...overrides,
+  };
+}
+
+function renderModerationWithCommunity(reports: ModerationReport[]) {
+  return renderWithAuth(<ModerationPage />, {
+    user: adminUser(),
+    fetchHandler: (url) => {
+      if (url.endsWith('/v1/me')) return jsonResponse(adminUser());
+      const u = new URL(url);
+      if (u.pathname === '/v1/admin/moderation-reports') {
+        return jsonResponse(pageEnvelope(reports, 1, 20, reports.length));
+      }
+      if (u.pathname.startsWith('/v1/admin/moderation-reports/')) {
+        return jsonResponse(reports[0] ?? makeReport());
+      }
+      if (u.pathname === '/v1/admin/audit-logs') {
+        return jsonResponse(pageEnvelope([], 1, 50, 0));
+      }
+      const postMatch = u.pathname.match(
+        /^\/v1\/admin\/community\/posts\/([^/]+)(\/(moderate|restore))?$/,
+      );
+      if (postMatch) {
+        const action = postMatch[3];
+        const status = action === 'moderate' ? 'REMOVED' : 'ACTIVE';
+        return jsonResponse(makeCommunityPost({ status }));
+      }
+      const commentMatch = u.pathname.match(
+        /^\/v1\/admin\/community\/comments\/([^/]+)(\/(moderate|restore))?$/,
+      );
+      if (commentMatch) {
+        const action = commentMatch[3];
+        const status = action === 'moderate' ? 'REMOVED' : 'ACTIVE';
+        return jsonResponse(makeCommunityComment({ status }));
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    },
+  });
+}
+
+describe('community content moderation (Phase 29)', () => {
+  it('shows the reported post with safe author info and a Remove action', async () => {
+    renderModerationWithCommunity([
+      makeReport({ id: 'report-p1', targetType: 'ARTIST_POST', targetId: 'post-1' }),
+    ]);
+
+    expect(await screen.findByText('Suspected spam upload')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+
+    expect(await screen.findByRole('heading', { name: 'Reported post' })).toBeInTheDocument();
+    expect(await screen.findByText('New single out Friday!')).toBeInTheDocument();
+    expect(screen.getByText('The Band ✓')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove content' })).toBeInTheDocument();
+    // No private user data leaks into the review UI.
+    expect(screen.queryByText(/user-1/)).not.toBeInTheDocument();
+  });
+
+  it('removes a post after confirmation and offers Restore', async () => {
+    const { fetchMock } = renderModerationWithCommunity([
+      makeReport({ id: 'report-p1', targetType: 'ARTIST_POST', targetId: 'post-1' }),
+    ]);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove content' }));
+    await confirmDialog('Remove');
+
+    await waitFor(() => {
+      const calls = fetchMock.mock.calls.filter(([url]) =>
+        String(url).endsWith('/v1/admin/community/posts/post-1/moderate'),
+      );
+      expect(calls.length).toBe(1);
+      expect(calls[0][1]?.method).toBe('POST');
+    });
+
+    expect(await screen.findByRole('button', { name: 'Restore content' })).toBeInTheDocument();
+  });
+
+  it('shows the reported comment with a Remove action', async () => {
+    renderModerationWithCommunity([
+      makeReport({ id: 'report-c1', targetType: 'POST_COMMENT', targetId: 'comment-1' }),
+    ]);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+
+    expect(await screen.findByRole('heading', { name: 'Reported comment' })).toBeInTheDocument();
+    expect(await screen.findByText('Love this track!')).toBeInTheDocument();
+    expect(screen.getByText('Fan Person')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Remove content' })).toBeInTheDocument();
+  });
+
+  it('restores a removed comment after confirmation', async () => {
+    const { fetchMock } = renderModerationWithCommunity([
+      makeReport({ id: 'report-c1', targetType: 'POST_COMMENT', targetId: 'comment-1' }),
+    ]);
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+    // First remove it so the UI shows Restore.
+    fireEvent.click(await screen.findByRole('button', { name: 'Remove content' }));
+    await confirmDialog('Remove');
+    const restore = await screen.findByRole('button', { name: 'Restore content' });
+    fireEvent.click(restore);
+    await confirmDialog('Restore');
+
+    await waitFor(() => {
+      const calls = fetchMock.mock.calls.filter(([url]) =>
+        String(url).endsWith('/v1/admin/community/comments/comment-1/restore'),
+      );
+      expect(calls.length).toBe(1);
+    });
+  });
+
+  it('offers the new target types in the queue filter', async () => {
+    renderModeration([makeReport()]);
+
+    expect(await screen.findByText('Suspected spam upload')).toBeInTheDocument();
+    const filter = screen.getByLabelText('Target type');
+    expect(within(filter).getByRole('option', { name: 'Artist post' })).toBeInTheDocument();
+    expect(within(filter).getByRole('option', { name: 'Post comment' })).toBeInTheDocument();
+  });
+});
+
 describe('moderation badges', () => {
   it('renders all moderation statuses', async () => {
     const { ModerationStatusBadge } = await import('../components/Badges');

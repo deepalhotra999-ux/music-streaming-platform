@@ -25,8 +25,26 @@ export interface RateLimitConfig {
   roomsJoin: number;
   /** Phase 28 — invitation issuance per user. */
   roomsInvite: number;
+  /** Phase 29 — community write buckets. Per USER (authenticated server
+   *  identity), not per IP: a malicious client cannot dodge them by
+   *  rotating IPs, and shared-NAT users do not share a budget. */
+  communityPostCreate: number;
+  communityPostEdit: number;
+  communityCommentCreate: number;
+  communityReaction: number;
+  communityReport: number;
   /** window length in milliseconds */
   windowMs: number;
+}
+
+/** Phase 29 — artist/fan community tunables. */
+export interface CommunityConfig {
+  /** Maximum post body length in characters. */
+  postMaxLength: number;
+  /** Maximum comment body length in characters. */
+  commentMaxLength: number;
+  /** Identical posts by the same author inside this window are rejected. */
+  duplicateWindowMs: number;
 }
 
 /** Where audio bytes come from. 'local' is the development default and needs
@@ -158,6 +176,8 @@ export interface Config {
   offline: OfflineConfig;
   /** Phase 26 — AI music discovery & recommendations. */
   discovery: DiscoveryConfig;
+  /** Phase 29 — artist/fan community. */
+  community: CommunityConfig;
 }
 
 function required(env: NodeJS.ProcessEnv, name: string): string {
@@ -208,6 +228,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       roomsCreate: int(env, 'RATE_LIMIT_ROOMS_CREATE', 10),
       roomsJoin: int(env, 'RATE_LIMIT_ROOMS_JOIN', 30),
       roomsInvite: int(env, 'RATE_LIMIT_ROOMS_INVITE', 20),
+      communityPostCreate: int(env, 'RATE_LIMIT_COMMUNITY_POST_CREATE', 10),
+      communityPostEdit: int(env, 'RATE_LIMIT_COMMUNITY_POST_EDIT', 30),
+      communityCommentCreate: int(env, 'RATE_LIMIT_COMMUNITY_COMMENT_CREATE', 30),
+      communityReaction: int(env, 'RATE_LIMIT_COMMUNITY_REACTION', 100),
+      communityReport: int(env, 'RATE_LIMIT_COMMUNITY_REPORT', 20),
       windowMs: int(env, 'RATE_LIMIT_WINDOW_MS', 60_000),
     },
     streaming: {
@@ -238,6 +263,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       cacheTtlMs: int(env, 'DISCOVERY_CACHE_TTL_MS', 5 * 60 * 1000), // 5 min
       aiProvider: (env.DISCOVERY_AI_PROVIDER ?? 'none').toLowerCase(),
       aiTimeoutMs: int(env, 'DISCOVERY_AI_TIMEOUT_MS', 8000),
+    },
+    community: {
+      postMaxLength: int(env, 'COMMUNITY_POST_MAX_LENGTH', 2000),
+      commentMaxLength: int(env, 'COMMUNITY_COMMENT_MAX_LENGTH', 500),
+      duplicateWindowMs: int(env, 'COMMUNITY_DUPLICATE_WINDOW_MS', 5 * 60 * 1000), // 5 min
     },
   };
 }

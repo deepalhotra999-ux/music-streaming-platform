@@ -1,7 +1,14 @@
 // Phase 17 — moderation foundation. JSON Schemas for the admin moderation
 // surface. All endpoints are ADMIN-only; LISTENER/ARTIST get 403.
 
-export const moderationTargetTypes = ['ARTIST', 'ALBUM', 'TRACK'] as const;
+export const moderationTargetTypes = [
+  'ARTIST',
+  'ALBUM',
+  'TRACK',
+  // Phase 29 — community content report targets.
+  'ARTIST_POST',
+  'POST_COMMENT',
+] as const;
 export const moderationStatuses = ['OPEN', 'UNDER_REVIEW', 'RESOLVED', 'DISMISSED'] as const;
 
 export const moderationReportSchema = {

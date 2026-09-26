@@ -2,6 +2,8 @@
 
 import type { ApiClient } from './client';
 import type {
+  CommunityComment,
+  CommunityPost,
   ModerationReport,
   ModerationStatus,
   ModerationTargetType,
@@ -27,9 +29,7 @@ export function listModerationReports(
   if (query.targetType) params.set('targetType', query.targetType);
   if (query.targetId) params.set('targetId', query.targetId);
   const qs = params.toString();
-  return client.get<Page<ModerationReport>>(
-    `/v1/admin/moderation-reports${qs ? `?${qs}` : ''}`,
-  );
+  return client.get<Page<ModerationReport>>(`/v1/admin/moderation-reports${qs ? `?${qs}` : ''}`);
 }
 
 export function getModerationReport(client: ApiClient, id: string): Promise<ModerationReport> {
@@ -67,4 +67,41 @@ export function updateModerationReport(
   input: UpdateModerationReportInput,
 ): Promise<ModerationReport> {
   return client.patch<ModerationReport>(`/v1/admin/moderation-reports/${id}`, input);
+}
+
+/* ------------------------------------------------------------------ */
+/* Phase 29 — community content review. The same moderation queue shows */
+/* reports against artist posts and comments; these helpers let admins  */
+/* review the reported content (in any status) and remove or restore    */
+/* it. Every action writes an immutable audit row server-side.          */
+/* ------------------------------------------------------------------- */
+
+/** Returns an artist post regardless of moderation state (ADMIN-only). */
+export function getCommunityPost(client: ApiClient, id: string): Promise<CommunityPost> {
+  return client.get<CommunityPost>(`/v1/admin/community/posts/${id}`);
+}
+
+/** Returns a post comment regardless of moderation state (ADMIN-only). */
+export function getCommunityComment(client: ApiClient, id: string): Promise<CommunityComment> {
+  return client.get<CommunityComment>(`/v1/admin/community/comments/${id}`);
+}
+
+/** Removes an artist post: ACTIVE|DELETED → REMOVED. Idempotent. */
+export function moderateCommunityPost(client: ApiClient, id: string): Promise<CommunityPost> {
+  return client.post<CommunityPost>(`/v1/admin/community/posts/${id}/moderate`);
+}
+
+/** Restores a moderated post: REMOVED|DELETED → ACTIVE. Idempotent. */
+export function restoreCommunityPost(client: ApiClient, id: string): Promise<CommunityPost> {
+  return client.post<CommunityPost>(`/v1/admin/community/posts/${id}/restore`);
+}
+
+/** Removes a comment: ACTIVE|DELETED → REMOVED. Idempotent. */
+export function moderateCommunityComment(client: ApiClient, id: string): Promise<CommunityComment> {
+  return client.post<CommunityComment>(`/v1/admin/community/comments/${id}/moderate`);
+}
+
+/** Restores a moderated comment: REMOVED|DELETED → ACTIVE. Idempotent. */
+export function restoreCommunityComment(client: ApiClient, id: string): Promise<CommunityComment> {
+  return client.post<CommunityComment>(`/v1/admin/community/comments/${id}/restore`);
 }

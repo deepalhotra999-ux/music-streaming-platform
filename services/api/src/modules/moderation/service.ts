@@ -25,7 +25,15 @@ import {
 
 type Db = PrismaClient;
 
-export type ModerationTargetType = 'ARTIST' | 'ALBUM' | 'TRACK';
+export type ModerationTargetType =
+  | 'ARTIST'
+  | 'ALBUM'
+  | 'TRACK'
+  // Phase 29 — community content reports. Users file these through the
+  // user-facing POST /v1/moderation-reports endpoint; admins review them
+  // in the same queue as catalog reports (no parallel moderation system).
+  | 'ARTIST_POST'
+  | 'POST_COMMENT';
 export type ModerationStatus = 'OPEN' | 'UNDER_REVIEW' | 'RESOLVED' | 'DISMISSED';
 
 export interface ModerationReportDto {
@@ -89,14 +97,26 @@ async function assertTargetExists(
 ): Promise<void> {
   // Soft-deleted rows remain reportable (they may be under review), but the
   // target must exist at all — this also blocks typos and cross-type IDs.
+  // Phase 29: community targets are reportable in any status (a REMOVED
+  // post can still be reported for context); the row must simply exist.
   const found =
     targetType === 'ARTIST'
       ? await db.artist.findUnique({ where: { id: targetId }, select: { id: true } })
       : targetType === 'ALBUM'
         ? await db.album.findUnique({ where: { id: targetId }, select: { id: true } })
-        : await db.track.findUnique({ where: { id: targetId }, select: { id: true } });
+        : targetType === 'TRACK'
+          ? await db.track.findUnique({ where: { id: targetId }, select: { id: true } })
+          : targetType === 'ARTIST_POST'
+            ? await db.artistPost.findUnique({ where: { id: targetId }, select: { id: true } })
+            : await db.postComment.findUnique({ where: { id: targetId }, select: { id: true } });
   if (!found) {
-    throw notFound(`${targetType.charAt(0) + targetType.slice(1).toLowerCase()} not found.`);
+    const label =
+      targetType === 'ARTIST_POST'
+        ? 'Post'
+        : targetType === 'POST_COMMENT'
+          ? 'Comment'
+          : targetType.charAt(0) + targetType.slice(1).toLowerCase();
+    throw notFound(`${label} not found.`);
   }
 }
 

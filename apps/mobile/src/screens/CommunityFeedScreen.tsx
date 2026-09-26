@@ -1,0 +1,128 @@
+// Phase 29 — Community tab: chronological feed of ACTIVE posts from
+// artists the caller follows. No ranking, no algorithmic sorting —
+// publishedAt desc, id tie-break, exactly as the backend returns it.
+
+import { useCallback } from 'react';
+import { FlatList, RefreshControl, StyleSheet, View } from 'react-native';
+import { useRouter } from 'expo-router';
+import type { ArtistPost } from '../api';
+import { listCommunityFeed } from '../api';
+import { apiErrorMessage } from '../api';
+import { useAuth } from '../auth';
+import { usePaginatedList } from '../catalog';
+import { usePlayback } from '../playback';
+import { EmptyState, ErrorState, LoadingState, Screen } from '../components';
+import { colors, spacing } from '../theme';
+import { PostCard } from '../community/components/PostCard';
+import { useReactionToggle } from '../community/hooks/useReactionToggle';
+
+export function CommunityFeedScreen() {
+  const { api } = useAuth();
+  const router = useRouter();
+  const { setQueue } = usePlayback();
+
+  const fetchPage = useCallback(
+    (page: number) => listCommunityFeed(api, { page, limit: 20 }),
+    [api],
+  );
+  const list = usePaginatedList<ArtistPost>(fetchPage);
+  const { applyOverrides, pending, toggle } = useReactionToggle(api);
+
+  const openPost = useCallback((post: ArtistPost) => router.push(`/post/${post.id}`), [router]);
+
+  const playTrack = useCallback(
+    (post: ArtistPost) => {
+      // Referenced tracks play through the one shared PlaybackEngine —
+      // ordinary entitlement/session/event semantics, no special tokens.
+      if (post.track) {
+        void setQueue(
+          [
+            {
+              trackId: post.track.id,
+              title: post.track.title,
+              artistName: post.track.artistName,
+              albumTitle: post.track.albumTitle,
+              durationMs: post.track.durationMs,
+            },
+          ],
+          0,
+        );
+      }
+    },
+    [setQueue],
+  );
+
+  if (list.loading) {
+    return (
+      <Screen testID="community-feed-screen">
+        <LoadingState message="Loading posts…" />
+      </Screen>
+    );
+  }
+
+  if (list.error && list.items.length === 0) {
+    return (
+      <Screen testID="community-feed-screen">
+        <ErrorState message={apiErrorMessage(list.error)} onRetry={list.retry} />
+      </Screen>
+    );
+  }
+
+  return (
+    <Screen scrollable={false} padded={false} testID="community-feed-screen">
+      <FlatList
+        data={list.items}
+        keyExtractor={(item) => item.id}
+        contentContainerStyle={styles.list}
+        refreshControl={
+          <RefreshControl
+            refreshing={list.refreshing}
+            onRefresh={list.refresh}
+            tintColor={colors.primary}
+          />
+        }
+        onEndReached={list.loadMore}
+        onEndReachedThreshold={0.5}
+        ListEmptyComponent={
+          <EmptyState
+            title="No posts yet"
+            message="Follow artists to see their updates here."
+            actionTitle="Browse artists"
+            onAction={() => router.push('/artists')}
+          />
+        }
+        ListFooterComponent={
+          list.loadingMore ? (
+            <View style={styles.footer}>
+              <LoadingState message="Loading more…" />
+            </View>
+          ) : null
+        }
+        renderItem={({ item }) => (
+          <View style={styles.cardWrap}>
+            <PostCard
+              post={applyOverrides(item)}
+              onOpen={openPost}
+              onToggleReaction={toggle}
+              onPlayTrack={playTrack}
+              reactionPending={pending[item.id] === true}
+              testID={`post-card-${item.id}`}
+            />
+          </View>
+        )}
+      />
+    </Screen>
+  );
+}
+
+const styles = StyleSheet.create({
+  list: {
+    padding: spacing.md,
+  },
+  cardWrap: {
+    marginBottom: spacing.sm,
+  },
+  footer: {
+    paddingVertical: spacing.md,
+  },
+});
