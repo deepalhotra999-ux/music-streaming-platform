@@ -130,4 +130,29 @@ describe('FullPlayerView', () => {
     fireEvent.press(screen.getByTestId('full-player-minimize'));
     expect(props.onMinimize).toHaveBeenCalledTimes(1);
   });
+
+  // Phase 28 — room mode: the banner shows, participants get disabled
+  // transport and a read-only queue, hosts keep room-routed transport.
+  it('shows the room banner and disables transport for participants', () => {
+    const onOpenRoom = jest.fn();
+    renderView({
+      roomMode: { badge: 'Participant', canControl: false, onOpenRoom },
+    });
+    expect(screen.getByText('Listening room · Participant')).toBeTruthy();
+    expect(screen.getByTestId('controls-toggle').props.accessibilityState.disabled).toBe(true);
+    // Queue is read-only: no remove actions, no jumps.
+    expect(screen.queryByTestId('queue-remove-1')).toBeNull();
+    fireEvent.press(screen.getByTestId('full-player-room-banner'));
+    expect(onOpenRoom).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps transport enabled for the host in room mode', () => {
+    const props = renderView({
+      roomMode: { badge: 'Host', canControl: true, onOpenRoom: jest.fn() },
+    });
+    expect(screen.getByText('Listening room · Host')).toBeTruthy();
+    expect(screen.getByTestId('controls-toggle').props.accessibilityState.disabled).not.toBe(true);
+    fireEvent.press(screen.getByTestId('controls-toggle'));
+    expect(props.onToggle).toHaveBeenCalledTimes(1);
+  });
 });

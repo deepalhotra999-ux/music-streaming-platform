@@ -18,21 +18,24 @@ interface QueueRowProps {
   isCurrent: boolean;
   onPlayAt: () => void;
   onRemoveAt: () => void;
+  /** Phase 28 — room participants: no reordering, no removal, no jumping. */
+  readOnly?: boolean;
 }
 
 /** One queue row: position marker, artwork, titles, duration, remove. */
-export function QueueRow({ track, index, isCurrent, onPlayAt, onRemoveAt }: QueueRowProps) {
+export function QueueRow({ track, index, isCurrent, onPlayAt, onRemoveAt, readOnly = false }: QueueRowProps) {
+  const interactive = !isCurrent && !readOnly;
   return (
     <Pressable
       onPress={() => {
-        if (!isCurrent) {
+        if (interactive) {
           onPlayAt();
         }
       }}
-      disabled={isCurrent}
-      accessibilityRole={isCurrent ? undefined : 'button'}
+      disabled={!interactive}
+      accessibilityRole={interactive ? 'button' : undefined}
       accessibilityLabel={isCurrent ? `Now playing: ${track.title}` : `Play ${track.title}`}
-      style={({ pressed }) => [styles.row, pressed && !isCurrent && styles.pressed]}
+      style={({ pressed }) => [styles.row, pressed && interactive && styles.pressed]}
       testID={`queue-row-${index}`}
     >
       <View style={styles.marker}>
@@ -59,16 +62,18 @@ export function QueueRow({ track, index, isCurrent, onPlayAt, onRemoveAt }: Queu
       {track.durationMs ? (
         <Text style={styles.duration}>{formatDuration(track.durationMs)}</Text>
       ) : null}
-      <Pressable
-        onPress={onRemoveAt}
-        hitSlop={8}
-        accessibilityRole="button"
-        accessibilityLabel={`Remove ${track.title} from queue`}
-        style={({ pressed }) => [styles.remove, pressed && styles.pressed]}
-        testID={`queue-remove-${index}`}
-      >
-        <Ionicons name="close" size={18} color={colors.textFaint} />
-      </Pressable>
+      {!readOnly ? (
+        <Pressable
+          onPress={onRemoveAt}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={`Remove ${track.title} from queue`}
+          style={({ pressed }) => [styles.remove, pressed && styles.pressed]}
+          testID={`queue-remove-${index}`}
+        >
+          <Ionicons name="close" size={18} color={colors.textFaint} />
+        </Pressable>
+      ) : null}
     </Pressable>
   );
 }
@@ -78,9 +83,11 @@ interface QueueListProps {
   trackIndex: number;
   onPlayAt: (index: number) => void;
   onRemoveAt: (index: number) => void;
+  /** Phase 28 — room participants: rows render without actions. */
+  readOnly?: boolean;
 }
 
-export function QueueList({ queue, trackIndex, onPlayAt, onRemoveAt }: QueueListProps) {
+export function QueueList({ queue, trackIndex, onPlayAt, onRemoveAt, readOnly = false }: QueueListProps) {
   if (queue.length === 0) {
     return <EmptyState title="Queue is empty" message="Play a track to start the queue." />;
   }
@@ -94,6 +101,7 @@ export function QueueList({ queue, trackIndex, onPlayAt, onRemoveAt }: QueueList
           isCurrent={index === trackIndex}
           onPlayAt={() => onPlayAt(index)}
           onRemoveAt={() => onRemoveAt(index)}
+          readOnly={readOnly}
         />
       ))}
     </View>

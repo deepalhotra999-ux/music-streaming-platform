@@ -60,6 +60,13 @@ export const conflict = (detail: string) =>
     type: 'https://api.music-streaming.local/problems/conflict',
   });
 
+// Phase 28 — rooms. Dedicated 410 for ended rooms so clients can render a
+// terminal "room ended" state instead of a generic error.
+export const gone = (detail: string) =>
+  new HttpProblem(410, 'Gone', detail, {
+    type: 'https://api.music-streaming.local/problems/gone',
+  });
+
 export const tooManyRequests = (detail = 'Too many requests. Slow down and try again.') =>
   new HttpProblem(429, 'Too Many Requests', detail, {
     type: 'https://api.music-streaming.local/problems/rate-limited',

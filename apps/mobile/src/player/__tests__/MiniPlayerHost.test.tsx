@@ -17,6 +17,12 @@ jest.mock('../../playback', () => ({
   usePlayback: () => mockPlaybackState,
 }));
 
+// Phase 28 — MiniPlayer reads useRoom; outside a room it degrades to the
+// plain local toggle.
+jest.mock('../../rooms', () => ({
+  useRoom: () => ({ room: null, status: 'idle', isHost: false }),
+}));
+
 const track: QueueTrack = {
   trackId: 't1',
   title: 'First Light',

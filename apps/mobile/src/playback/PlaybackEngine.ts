@@ -129,6 +129,13 @@ export class PlaybackEngine {
   private readonly listeners = new Set<EngineListener>();
   private readonly offline?: OfflinePlaybackHooks;
   /**
+   * Phase 28 — when true, offline source resolution is skipped and every
+   * track load mints a fresh streaming session. Room mode sets this so
+   * each listener keeps ordinary Phase 7 session/event/royalty semantics;
+   * ordinary personal offline playback outside rooms is unchanged.
+   */
+  private forceOnline = false;
+  /**
    * Phase 25 — set when the current track plays from an offline download.
    * Replaces `session` for event attribution; cleared on teardown.
    */
@@ -263,6 +270,15 @@ export class PlaybackEngine {
       this.repeatMode = mode;
       this.emit();
     }
+  }
+
+  /**
+   * Phase 28 — force every track load to mint a streaming session instead
+   * of resolving a local offline download. Room mode enables this on join
+   * and disables it on leave; it never affects loads already in flight.
+   */
+  setForceOnline(force: boolean): void {
+    this.forceOnline = force;
   }
 
   /**
@@ -447,9 +463,12 @@ export class PlaybackEngine {
     // Phase 25 — offline first: a valid local download plays with no
     // network and no streaming session. The authorization gate lives in
     // resolveTrack (SecureStore record + file existence, fail-closed).
-    const offlineSource = this.offline
-      ? await this.offline.resolveTrack(track.trackId).catch(() => null)
-      : null;
+    // Phase 28 — forceOnline (room mode) skips this entirely so every
+    // listener mints an ordinary Phase 7 streaming session.
+    const offlineSource =
+      this.offline && !this.forceOnline
+        ? await this.offline.resolveTrack(track.trackId).catch(() => null)
+        : null;
     if (generation !== this.loadGeneration) {
       return; // superseded while resolving the offline source
     }

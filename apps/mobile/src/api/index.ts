@@ -104,6 +104,28 @@ export {
   setCollaborationEnabled,
 } from './collab';
 export type { CollaborativeMutation, RevisionedResult } from './collab';
+export {
+  createRoom,
+  createRoomInvitation,
+  endRoom,
+  getRoomState,
+  joinRoom,
+  leaveRoom,
+  listRoomInvitations,
+  listRoomMembers,
+  revokeRoomInvitation,
+} from './rooms';
+export type {
+  CreateRoomInput,
+  CreateRoomInvitationResult,
+  RoomInvitation,
+  RoomMember,
+  RoomPlaybackState,
+  RoomRole,
+  RoomState,
+  RoomStatus,
+  RoomTrack,
+} from './rooms';
 export type {
   AddTrackInput,
   AlbumDetail,

@@ -16,7 +16,40 @@ import {
   usePurchaseFlow,
   useSubscription,
 } from '../subscriptions';
+import { useRoom } from '../rooms';
 import { colors, fontSize, fontWeight, radii, spacing } from '../theme';
+
+/** Phase 28 — rooms entry on the profile screen. */
+function RoomProfileRow() {
+  const { room, status, isHost } = useRoom();
+  const active =
+    room != null &&
+    (status === 'live' || status === 'connecting' || status === 'reconnecting');
+  return (
+    <View style={styles.roomRow}>
+      <View style={styles.roomText}>
+        <Text style={styles.roomTitle}>
+          {active ? `In a room · ${isHost ? 'HOST' : 'LISTENER'}` : 'Listen together'}
+        </Text>
+        <Text style={styles.roomSubtitle}>
+          {active ? (room?.currentTrack?.title ?? 'Syncing…') : 'Private rooms synced in real time'}
+        </Text>
+      </View>
+      <Button
+        title={active ? 'Open room' : 'Rooms'}
+        testID="profile-rooms-button"
+        variant="secondary"
+        onPress={() => {
+          if (active && room) {
+            router.push(`/room/${room.roomId}`);
+          } else {
+            router.push('/room');
+          }
+        }}
+      />
+    </View>
+  );
+}
 
 export function ProfileScreen() {
   const { user, api, signOut } = useAuth();
@@ -74,8 +107,11 @@ export function ProfileScreen() {
         </View>
       ) : null}
 
-      <Text style={styles.sectionHeading}>Subscription</Text>
-      <SubscriptionCard
+      {/* Phase 28 — synchronized listening rooms. */}
+      <Text style={styles.sectionHeading}>Listening rooms</Text>
+      <RoomProfileRow />
+
+      <Text style={styles.sectionHeading}>Subscription</Text>      <SubscriptionCard
         data={subscription.data}
         loading={subscription.state === 'loading' || subscription.state === 'idle'}
         error={subscription.state === 'error' ? subscription.error : null}
@@ -184,4 +220,26 @@ const styles = StyleSheet.create({
   },
   signOut: { marginTop: spacing.xl },
   subscribeRow: { marginTop: spacing.md },
+  roomRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.surface,
+    borderRadius: radii.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
+  },
+  roomText: {
+    flex: 1,
+    marginRight: spacing.md,
+  },
+  roomTitle: {
+    color: colors.text,
+    fontSize: fontSize.md,
+    fontWeight: fontWeight.semibold,
+  },
+  roomSubtitle: {
+    color: colors.textMuted,
+    fontSize: fontSize.sm,
+    marginTop: 2,
+  },
 });

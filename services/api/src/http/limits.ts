@@ -19,3 +19,18 @@ export function streamingRateLimit(config: Config): { max: number; timeWindow: n
 export function offlineAuthorizeRateLimit(config: Config): { max: number; timeWindow: number } {
   return { max: config.rateLimits.offlineAuthorize, timeWindow: config.rateLimits.windowMs };
 }
+
+/** Phase 28 — room creation: bounded per caller so rooms cannot be spammed. */
+export function roomsCreateRateLimit(config: Config): { max: number; timeWindow: number } {
+  return { max: config.rateLimits.roomsCreate, timeWindow: config.rateLimits.windowMs };
+}
+
+/** Phase 28 — join attempts: tight enough to make token probing infeasible. */
+export function roomsJoinRateLimit(config: Config): { max: number; timeWindow: number } {
+  return { max: config.rateLimits.roomsJoin, timeWindow: config.rateLimits.windowMs };
+}
+
+/** Phase 28 — invitation issuance. */
+export function roomsInviteRateLimit(config: Config): { max: number; timeWindow: number } {
+  return { max: config.rateLimits.roomsInvite, timeWindow: config.rateLimits.windowMs };
+}

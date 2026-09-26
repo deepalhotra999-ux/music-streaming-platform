@@ -69,6 +69,9 @@ export interface PlayerControlsProps {
   onPrevious: () => void;
   onToggleShuffle: () => void;
   onCycleRepeat: () => void;
+  /** Phase 28 — room participants get a read-only player: every transport
+      button (including shuffle/repeat) is disabled. */
+  transportDisabled?: boolean;
 }
 
 export function PlayerControls({
@@ -82,10 +85,11 @@ export function PlayerControls({
   onPrevious,
   onToggleShuffle,
   onCycleRepeat,
+  transportDisabled = false,
 }: PlayerControlsProps) {
   const busy = state === 'loading';
   const playing = state === 'playing' || state === 'buffering';
-  const disabled = state === 'error' || state === 'idle';
+  const disabled = state === 'error' || state === 'idle' || transportDisabled;
   const repeatLabel =
     repeatMode === 'off' ? 'Repeat off' : repeatMode === 'all' ? 'Repeat all' : 'Repeat one';
 

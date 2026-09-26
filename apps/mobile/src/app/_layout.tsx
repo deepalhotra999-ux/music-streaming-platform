@@ -14,6 +14,7 @@ import { AuthProvider, useAuth } from '../auth';
 import { PlaybackProvider } from '../playback';
 import { OfflineProvider } from '../offline';
 import { LibraryProvider } from '../library';
+import { RoomProvider } from '../rooms';
 import { MiniPlayerHost } from '../player';
 import { CarPlayHost } from '../carplay/CarPlayHost';
 import { AndroidAutoHost } from '../androidauto/AndroidAutoHost';
@@ -31,7 +32,7 @@ import { colors } from '../theme';
  * per-user and must reset on sign-out, exactly like playback.
  */
 function PlaybackShell({ children }: { children: ReactNode }) {
-  const { status, api } = useAuth();
+  const { status, api, session } = useAuth();
   if (status !== 'authenticated') {
     return <>{children}</>;
   }
@@ -42,12 +43,17 @@ function PlaybackShell({ children }: { children: ReactNode }) {
           per-user and reset on sign-out, exactly like playback. */}
       <OfflineProvider api={api}>
         <LibraryProvider api={api}>
-          {children}
-          <MiniPlayerHost />
-        {/* Phase 23 — headless CarPlay controller: drives the native
-            CarPlay templates with the shared PlaybackEngine. No UI here,
-            no second player. Unmounts with the provider on sign-out. */}
-        <CarPlayHost />
+          {/* Phase 28 — synchronized listening rooms: one RoomSession
+              driving the shared PlaybackEngine from server-authoritative
+              room state. No second player; torn down on sign-out. */}
+          <RoomProvider api={api} getAccessToken={() => session?.tokens.accessToken ?? null}>
+            {children}
+            <MiniPlayerHost />
+          </RoomProvider>
+          {/* Phase 23 — headless CarPlay controller: drives the native
+              CarPlay templates with the shared PlaybackEngine. No UI here,
+              no second player. Unmounts with the provider on sign-out. */}
+          <CarPlayHost />
         {/* Phase 24 — headless Android Auto controller: serves the native
             MediaLibraryService from the shared PlaybackEngine. No UI here,
             no second player. Unmounts with the provider on sign-out. */}
@@ -81,6 +87,7 @@ function RootNavigator() {
           <Stack.Screen name="(tabs)" />
           <Stack.Screen name="(catalog)" />
           <Stack.Screen name="(artist)" />
+          <Stack.Screen name="room" />
           <Stack.Screen name="player" options={{ presentation: 'modal' }} />
           <Stack.Screen name="subscription" options={{ presentation: 'modal' }} />
         </Stack.Protected>

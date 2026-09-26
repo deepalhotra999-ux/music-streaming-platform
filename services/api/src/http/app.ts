@@ -4,6 +4,7 @@
 
 import Fastify, { type FastifyInstance } from 'fastify';
 import rateLimit from '@fastify/rate-limit';
+import websocket from '@fastify/websocket';
 import swagger from '@fastify/swagger';
 import swaggerUi from '@fastify/swagger-ui';
 import type { Config } from '../config.js';
@@ -28,6 +29,8 @@ import { auditRoutes } from '../modules/audit/routes.js';
 import { moderationRoutes } from '../modules/moderation/routes.js';
 import { subscriptionRoutes } from '../modules/subscriptions/routes.js';
 import { royaltyArtistRoutes, royaltyAdminRoutes } from '../modules/royalties/index.js';
+import { roomsRoutes } from '../modules/rooms/routes.js';
+import { roomsGateway } from '../modules/rooms/gateway.js';
 
 export async function buildApp(config: Config): Promise<FastifyInstance> {
   const app = Fastify({
@@ -43,6 +46,10 @@ export async function buildApp(config: Config): Promise<FastifyInstance> {
 
   // Per-route limits only; no global limit (see ADR-002 consequences).
   await app.register(rateLimit, { global: false });
+
+  // Phase 28 — WebSocket transport for synchronized listening rooms.
+  // Bound the inbound frame size; room messages are small JSON payloads.
+  await app.register(websocket, { options: { maxPayload: 64 * 1024 } });
 
   // OpenAPI 3.0 document, generated from the route schemas below.
   // Register before the routes so every route is captured. The import also
@@ -115,6 +122,8 @@ export async function buildApp(config: Config): Promise<FastifyInstance> {
     await subscriptionRoutes(instance, config);
     await royaltyArtistRoutes(instance, config);
     await royaltyAdminRoutes(instance, config);
+    await roomsRoutes(instance, config);
+    await roomsGateway(instance, config);
   });
 
   return app;

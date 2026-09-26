@@ -11,6 +11,7 @@ import { useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { PlaybackState, QueueTrack, RepeatMode } from '../playback';
 import { usePlayback } from '../playback';
+import { useRoom } from '../rooms';
 import { ArtworkImage, formatDuration } from '../catalog';
 import { Button } from '../components';
 import { colors, fontSize, fontWeight, radii, spacing } from '../theme';
@@ -42,6 +43,14 @@ export interface FullPlayerViewProps {
   onRemoveAt: (index: number) => void;
   onRetry: () => void;
   onMinimize: () => void;
+  /** Phase 28 — when set, the player is driven by a listening room:
+      transport routes through the room (host) or is read-only
+      (participant). The queue renders without edit actions. */
+  roomMode?: {
+    badge: string;
+    canControl: boolean;
+    onOpenRoom: () => void;
+  } | null;
 }
 
 const ARTWORK_SIZE = 280;
@@ -69,6 +78,7 @@ export function FullPlayerView({
   onRemoveAt,
   onRetry,
   onMinimize,
+  roomMode = null,
 }: FullPlayerViewProps) {
   const errored = state === 'error';
   const busy = state === 'loading' || state === 'buffering';
@@ -92,6 +102,22 @@ export function FullPlayerView({
           <Text style={styles.headerTitle}>Now playing</Text>
           <View style={styles.minimize} />
         </View>
+
+        {roomMode ? (
+          <Pressable
+            onPress={roomMode.onOpenRoom}
+            accessibilityRole="button"
+            accessibilityLabel={`Open listening room, you are ${roomMode.badge}`}
+            style={styles.roomBanner}
+            testID="full-player-room-banner"
+          >
+            <Ionicons name="people" size={16} color={colors.primary} />
+            <Text style={styles.roomBannerText} numberOfLines={1}>
+              Listening room · {roomMode.badge}
+            </Text>
+            <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+          </Pressable>
+        ) : null}
 
         <View style={styles.artworkWrap}>
           <ArtworkImage
@@ -120,7 +146,7 @@ export function FullPlayerView({
           <SeekBar
             positionMs={positionMs}
             durationMs={durationMs}
-            disabled={durationMs === 0 || errored}
+            disabled={durationMs === 0 || errored || (roomMode != null && !roomMode.canControl)}
             onSeek={onSeek}
             testID="full-player-seek"
           />
@@ -162,6 +188,7 @@ export function FullPlayerView({
           onPrevious={onPrevious}
           onToggleShuffle={onToggleShuffle}
           onCycleRepeat={onCycleRepeat}
+          transportDisabled={roomMode != null && !roomMode.canControl}
         />
 
         <Text style={styles.queueTitle}>Up next</Text>
@@ -171,6 +198,7 @@ export function FullPlayerView({
             trackIndex={trackIndex}
             onPlayAt={onPlayAt}
             onRemoveAt={onRemoveAt}
+            readOnly={roomMode != null}
           />
         </View>
       </ScrollView>
@@ -181,6 +209,12 @@ export function FullPlayerView({
 export function FullPlayer() {
   const playback = usePlayback();
   const router = useRouter();
+  // Phase 28 — when a room is active the shared player is driven by room
+  // state: the host's transport goes through room commands, participants
+  // get a read-only view. No second player.
+  const room = useRoom();
+  const roomActive = room.room != null && room.status !== 'ended';
+  const roomHost = roomActive && room.isHost;
 
   const minimize = useCallback(() => {
     if (router.canGoBack()) {
@@ -211,6 +245,11 @@ export function FullPlayer() {
     return null;
   }
 
+  // Phase 28 — room transport routing. The host drives the room; everyone
+  // in the room sees the room queue read-only in the player.
+  const roomPlaying = room.room?.playbackState === 'PLAYING';
+  const roomCanNav = (room.room?.queue.length ?? 0) > 1;
+
   return (
     <FullPlayerView
       track={playback.track}
@@ -219,17 +258,27 @@ export function FullPlayer() {
       durationMs={playback.durationMs}
       queue={playback.queue}
       trackIndex={playback.trackIndex}
-      canNext={playback.canNext}
-      canPrevious={playback.canPrevious}
+      canNext={roomActive ? roomCanNav : playback.canNext}
+      canPrevious={roomActive ? roomCanNav : playback.canPrevious}
       shuffle={playback.shuffle}
       repeatMode={playback.repeatMode}
       error={playback.error}
       locked={playback.locked}
-      onToggle={playback.toggle}
-      onNext={playback.next}
-      onPrevious={playback.previous}
+      onToggle={
+        roomActive
+          ? () => (roomHost ? (roomPlaying ? room.hostPause() : room.hostPlay()) : undefined)
+          : playback.toggle
+      }
+      onNext={roomActive ? () => (roomHost ? room.hostNext() : undefined) : playback.next}
+      onPrevious={
+        roomActive ? () => (roomHost ? room.hostPrevious() : undefined) : playback.previous
+      }
       onSeek={(ms) => {
-        void playback.seekTo(ms);
+        if (roomActive) {
+          if (roomHost) room.hostSeek(ms);
+        } else {
+          void playback.seekTo(ms);
+        }
       }}
       onToggleShuffle={toggleShuffle}
       onCycleRepeat={cycleRepeat}
@@ -239,6 +288,18 @@ export function FullPlayer() {
         void playback.retry();
       }}
       onMinimize={minimize}
+      roomMode={
+        roomActive
+          ? {
+              badge: roomHost ? 'HOST' : 'LISTENER',
+              canControl: roomHost,
+              onOpenRoom: () => {
+                minimize();
+                router.push(`/room/${room.room!.roomId}`);
+              },
+            }
+          : null
+      }
     />
   );
 }
@@ -262,6 +323,25 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.semibold,
     textTransform: 'uppercase',
     letterSpacing: 1.5,
+  },
+  roomBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.sm,
+    borderRadius: 10,
+    backgroundColor: colors.surfaceElevated,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  roomBannerText: {
+    flex: 1,
+    color: colors.text,
+    fontSize: fontSize.sm,
+    fontWeight: fontWeight.semibold,
   },
   artworkWrap: {
     alignItems: 'center',

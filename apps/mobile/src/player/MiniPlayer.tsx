@@ -10,6 +10,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import type { PlaybackState, QueueTrack } from '../playback';
 import { usePlayback } from '../playback';
+import { useRoom } from '../rooms';
 import { ArtworkImage } from '../catalog';
 import { colors, fontSize, fontWeight, radii, spacing } from '../theme';
 import { MINI_PLAYER_HEIGHT } from './constants';
@@ -21,6 +22,8 @@ export interface MiniPlayerViewProps {
   durationMs: number;
   /** Phase 25 — show the offline badge when playing a local download. */
   isOfflinePlayback?: boolean;
+  /** Phase 28 — show the room badge while synchronized in a room. */
+  inRoom?: boolean;
   onToggle: () => void;
   onClose: () => void;
   onExpand: () => void;
@@ -32,6 +35,7 @@ export function MiniPlayerView({
   positionMs,
   durationMs,
   isOfflinePlayback = false,
+  inRoom = false,
   onToggle,
   onClose,
   onExpand,
@@ -67,6 +71,7 @@ export function MiniPlayerView({
           <Text style={styles.artist} numberOfLines={1}>
             {track.artistName}
             {isOfflinePlayback ? ' · Offline' : ''}
+            {inRoom ? ' · Room' : ''}
           </Text>
         </View>
         {busy ? (
@@ -115,6 +120,14 @@ export function MiniPlayerView({
 export function MiniPlayer() {
   const playback = usePlayback();
   const router = useRouter();
+  // Phase 28 — in a room the mini player is an indicator + shortcut: the
+  // host's toggle drives the room, participants keep their local toggle
+  // as an escape hatch (the drift corrector leaves deliberate pauses
+  // alone; the room screen offers resync).
+  const room = useRoom();
+  const inRoom = room.room != null && room.status !== 'ended';
+  const roomHost = inRoom && room.isHost;
+  const roomPlaying = room.room?.playbackState === 'PLAYING';
   if (!playback.track) {
     return null;
   }
@@ -125,7 +138,10 @@ export function MiniPlayer() {
       positionMs={playback.positionMs}
       durationMs={playback.durationMs}
       isOfflinePlayback={playback.isOfflinePlayback}
-      onToggle={playback.toggle}
+      inRoom={inRoom}
+      onToggle={
+        inRoom && roomHost ? () => (roomPlaying ? room.hostPause() : room.hostPlay()) : playback.toggle
+      }
       onClose={playback.stop}
       onExpand={() => router.push('/player')}
     />

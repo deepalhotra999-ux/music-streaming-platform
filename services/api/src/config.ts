@@ -17,6 +17,14 @@ export interface RateLimitConfig {
   /** Phase 25 — download authorization issuance. Tight: authorizations are
    *  cheap to request but must not be farmable in bulk. */
   offlineAuthorize: number;
+  /** Phase 28 — room creation. Bounded per user: rooms are cheap but
+   *  spamming them pollutes the namespace. */
+  roomsCreate: number;
+  /** Phase 28 — room join attempts. Tight enough to make invitation-token
+   *  probing infeasible; generous enough for legitimate retries. */
+  roomsJoin: number;
+  /** Phase 28 — invitation issuance per user. */
+  roomsInvite: number;
   /** window length in milliseconds */
   windowMs: number;
 }
@@ -197,6 +205,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): Config {
       api: int(env, 'RATE_LIMIT_API', 300),
       streaming: int(env, 'RATE_LIMIT_STREAMING', 600),
       offlineAuthorize: int(env, 'RATE_LIMIT_OFFLINE_AUTHORIZE', 60),
+      roomsCreate: int(env, 'RATE_LIMIT_ROOMS_CREATE', 10),
+      roomsJoin: int(env, 'RATE_LIMIT_ROOMS_JOIN', 30),
+      roomsInvite: int(env, 'RATE_LIMIT_ROOMS_INVITE', 20),
       windowMs: int(env, 'RATE_LIMIT_WINDOW_MS', 60_000),
     },
     streaming: {
