@@ -36,7 +36,9 @@
     "typecheck": "tsc --noEmit -p tsconfig.check.json",
     "dev": "tsx src/server.ts",
     "start": "node dist/server.js",
-    "audio:generate": "tsx scripts/generate-dev-audio.ts"
+    "audio:generate": "tsx scripts/generate-dev-audio.ts",
+    "demo:seed": "prisma db seed && tsx prisma/demo-seed.ts",
+    "demo:setup": "tsx scripts/demo-setup.ts"
   },
   "type": "module",
   "version": "0.1.0"
