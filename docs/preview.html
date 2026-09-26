@@ -214,12 +214,32 @@
   .librow .s{font-size:13px;color:var(--muted);margin-top:3px}
   .hint{max-width:640px;text-align:center;color:var(--muted);font-size:13px;margin-top:26px;line-height:1.7}
   .hint b{color:var(--text)}
+  .theme-switch{display:inline-flex;background:#15151C;border:1px solid #2A2A35;border-radius:999px;padding:4px;margin:4px 0 14px}
+  .theme-switch button{border:none;background:transparent;color:#A8A8B8;font-size:13px;font-weight:700;padding:8px 18px;border-radius:999px;cursor:pointer}
+  .theme-switch button.on{background:#7C5CFF;color:#fff}
+  .theme-switch button#btnSpotify.on{background:#1DB954;color:#04120a}
+  /* Compare theme: Spotify-style tokens (personal comparison only, not shipped) */
+  .phone[data-theme="spotify"]{
+    --primary:#1DB954; --filled:#1AA34A;
+    --bg:#121212; --surface:#181818; --elevated:#282828; --border:#2a2a2a; --tabbar:#0a0a0a;
+    --muted:#b3b3b3;
+    box-shadow:0 0 0 2px #2a2a2a,0 30px 80px rgba(29,185,84,.12);
+  }
+  .phone[data-theme="spotify"] .player .glow{background:radial-gradient(ellipse 80% 60% at 50% 0%,rgba(29,185,84,.28),transparent 70%)}
+  .phone[data-theme="spotify"] .bigplay{box-shadow:0 8px 30px rgba(29,185,84,.35)}
+  .phone[data-theme="spotify"] .player .bigart{box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  .phone[data-theme="spotify"] .dlbadge{color:#1DB954}
+  .phone[data-theme="spotify"] .dlbadge svg{stroke:#1DB954}
   @media(max-width:430px){.phone{width:340px;height:740px}}
 </style>
 </head>
 <body>
   <div class="page-head">
     <div class="badge">Interactive preview - v2</div>
+    <div class="theme-switch">
+      <button id="btnWaveform" class="on">Waveform</button>
+      <button id="btnSpotify">Spotify-style</button>
+    </div>
     <h1><span class="w">Waveform</span> - tap through the redesign</h1>
     <p>A clickable mock of the redesigned Waveform app: new Home / Search / Library / Profile navigation,
     a flagship player with waveform scrubbing, lyrics and queue, plus richer artist and album pages.
@@ -240,7 +260,8 @@
   </div>
   <p class="hint">Tip: tap any track to start playing, tap the mini-player to open the full player -
   try the waveform scrubber, Lyrics and the queue.<br>
-  This is a <b>design preview</b> generated from project specs - not a recording of the running app.</p>
+  This is a <b>design preview</b> generated from project specs - not a recording of the running app.<br>
+  The Spotify-style theme toggle is for personal comparison only.</p>
 <script>
 "use strict";
 /* design tokens and demo catalog (from the real project) */
@@ -699,6 +720,16 @@ function show(screen, param){
 }
 $("#sheetClose").addEventListener("click",closeSheet);
 $("#sheet .scrim").addEventListener("click",closeSheet);
+
+/* theme compare toggle (personal comparison only) */
+(function(){
+  const phone=document.querySelector(".phone");
+  const bw=document.getElementById("btnWaveform"), bs=document.getElementById("btnSpotify");
+  bw.addEventListener("click",()=>{ phone.removeAttribute("data-theme");
+    bw.classList.add("on"); bs.classList.remove("on"); });
+  bs.addEventListener("click",()=>{ phone.setAttribute("data-theme","spotify");
+    bs.classList.add("on"); bw.classList.remove("on"); });
+})();
 
 /* init */
 paintTab();
