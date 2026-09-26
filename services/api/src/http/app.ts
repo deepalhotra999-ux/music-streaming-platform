@@ -158,7 +158,7 @@ export async function buildApp(config: Config): Promise<FastifyInstance> {
       const { prisma } = await import('../db.js');
       await prisma.$queryRaw`SELECT 1`;
       return { status: 'ready' };
-    } catch (err) {
+    } catch {
       reply.code(503);
       return { status: 'not_ready', reason: 'database unreachable' };
     }
@@ -167,19 +167,15 @@ export async function buildApp(config: Config): Promise<FastifyInstance> {
   // Phase 32 — observability snapshot. Gated: only reachable from loopback
   // or with ADMIN credentials (defense in depth — counters contain no PII
   // but traffic shape is still operationally sensitive).
-  app.get(
-    '/v1/metrics',
-    { preHandler: app.authenticateOptional },
-    async (req, reply) => {
-      const ip = req.ip;
-      const loopback = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
-      if (!loopback && req.authUser?.role !== 'ADMIN') {
-        reply.code(404);
-        return { status: 404, title: 'Not Found' };
-      }
-      return metrics.snapshot();
-    },
-  );
+  app.get('/v1/metrics', { preHandler: app.authenticateOptional }, async (req, reply) => {
+    const ip = req.ip;
+    const loopback = ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+    if (!loopback && req.authUser?.role !== 'ADMIN') {
+      reply.code(404);
+      return { status: 404, title: 'Not Found' };
+    }
+    return metrics.snapshot();
+  });
 
   await app.register(async (instance) => {
     await authRoutes(instance, config);

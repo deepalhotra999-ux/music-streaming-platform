@@ -98,7 +98,12 @@ export class StripePaymentProvider implements CommercePaymentProvider {
   verifyWebhookSignature(rawBody: string, signature: string | undefined): boolean {
     if (!signature) return false;
     try {
-      Stripe.webhooks.constructEvent(rawBody, signature, this.webhookSecret, WEBHOOK_TOLERANCE_SECONDS);
+      Stripe.webhooks.constructEvent(
+        rawBody,
+        signature,
+        this.webhookSecret,
+        WEBHOOK_TOLERANCE_SECONDS,
+      );
       return true;
     } catch {
       return false;
@@ -144,8 +149,7 @@ export class StripePaymentProvider implements CommercePaymentProvider {
       }
       case 'charge.refunded': {
         const charge = event.data.object as Stripe.Charge;
-        const intentId =
-          typeof charge.payment_intent === 'string' ? charge.payment_intent : null;
+        const intentId = typeof charge.payment_intent === 'string' ? charge.payment_intent : null;
         if (!intentId) return null;
         return {
           providerEventId,
@@ -181,9 +185,7 @@ export class StripePaymentProvider implements CommercePaymentProvider {
   }
 }
 
-function mapIntentStatus(
-  status: Stripe.PaymentIntent.Status,
-): VerifiedPayment['status'] {
+function mapIntentStatus(status: Stripe.PaymentIntent.Status): VerifiedPayment['status'] {
   switch (status) {
     case 'succeeded':
       return 'SUCCEEDED';

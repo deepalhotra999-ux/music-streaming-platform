@@ -250,7 +250,7 @@ describe('IDOR: commerce', () => {
     }
   });
 
-  it('a user cannot read another user\'s cart by guessing', async () => {
+  it("a user cannot read another user's cart by guessing", async () => {
     // Carts are strictly caller-scoped: GET /v1/commerce/cart returns the
     // caller's own cart; there is no by-id cart endpoint to probe.
     const res = await app.inject({
@@ -285,7 +285,7 @@ describe('IDOR: admin isolation', () => {
     expect(res.statusCode).toBe(403);
   });
 
-  it('LISTENER cannot change another user\'s role', async () => {
+  it("LISTENER cannot change another user's role", async () => {
     const res = await app.inject({
       method: 'PATCH',
       url: `/v1/users/${bob.userId}/role`,
