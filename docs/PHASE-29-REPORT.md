@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-26
 **Baseline:** `9f39880` (Phase 28: Synchronized Listening Rooms)
-**Status:** Complete, verified, documented, cleaned up, committed (`<hash>`).
+**Status:** Complete, verified, documented, cleaned up, committed (`80d100d`).
 Stopped at the phase boundary — **Phase 30 was not started.**
 
 ## What was built
