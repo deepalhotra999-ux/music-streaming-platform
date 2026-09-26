@@ -2,7 +2,7 @@
 
 **Date:** 2026-09-26
 **Baseline:** `7b7e96d` (Phase 27: Collaborative Playlists)
-**Status:** Complete, verified, documented, cleaned up. Ready to commit.
+**Status:** Complete, verified, documented, cleaned up, committed (`4618aab`).
 Stopped at the phase boundary — **Phase 29 was not started.**
 
 ## What was built
