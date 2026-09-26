@@ -9,7 +9,8 @@ See `CLAUDE.md` (working rules), `docs/ARCHITECTURE.md` (stack & design),
 
 UI previews rendered from the project's real design system (`#7C5CFF` on `#0B0B0F`)
 and demo catalog data (Pixel Reverie, Neon Coastline, Paper Satellites).
-For a tappable click-through of Home, Search, Library, Artist, Album and the full
+These are design renders, not runtime captures.
+For a tappable click-through of Home, Search, Library, Profile, Artist, Album and the full
 Player, open [`docs/preview.html`](docs/preview.html) in a browser.
 
 | Home | Now Playing |
@@ -19,6 +20,20 @@ Player, open [`docs/preview.html`](docs/preview.html) in a browser.
 | Artist | Library |
 | ------ | ------- |
 | ![Waveform artist profile](docs/screenshots/03-artist.png) | ![Waveform library](docs/screenshots/04-library.png) |
+
+| Search | Album |
+| ------ | ----- |
+| ![Waveform search](docs/screenshots/05-search.png) | ![Waveform album detail](docs/screenshots/06-album.png) |
+
+### Admin console
+
+| Dashboard | Users |
+| --------- | ----- |
+| ![Admin dashboard](docs/screenshots/07-admin-dashboard.png) | ![Admin users](docs/screenshots/08-admin-users.png) |
+
+| Moderation | Audit log |
+| ---------- | --------- |
+| ![Admin moderation queue](docs/screenshots/09-admin-moderation.png) | ![Admin audit log](docs/screenshots/10-admin-audit-log.png) |
 
 ## Prerequisites
 
