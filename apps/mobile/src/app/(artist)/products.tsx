@@ -3,15 +3,7 @@
 
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import {
-  FlatList,
-  Modal,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { FlatList, Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useAuth } from '../../auth';
 import { listMyArtists } from '../../api/artist';
 import {
@@ -26,6 +18,7 @@ import {
 } from '../../api/commerce';
 import { colors, fontSize, fontWeight, spacing } from '../../theme';
 import { EmptyState, ErrorState, LoadingState, Price, StatusBadge } from '../../commerce/ui';
+import { modalAnimationFor, useReducedMotion } from '../../components';
 
 export default function ArtistProductsScreen() {
   const { api: client } = useAuth();
@@ -39,6 +32,7 @@ export default function ArtistProductsScreen() {
   const [saving, setSaving] = useState(false);
   const [stockFor, setStockFor] = useState<Product | null>(null);
   const [stockQty, setStockQty] = useState('');
+  const reducedMotion = useReducedMotion();
 
   const load = useCallback(async () => {
     setState('loading');
@@ -124,9 +118,7 @@ export default function ArtistProductsScreen() {
   if (state === 'loading') return <LoadingState />;
   if (state === 'error') return <ErrorState message={error} onRetry={() => void load()} />;
   if (!store) {
-    return (
-      <EmptyState label="Create your store first." />
-    );
+    return <EmptyState label="Create your store first." />;
   }
 
   return (
@@ -137,25 +129,31 @@ export default function ArtistProductsScreen() {
         contentContainerStyle={styles.list}
         ListEmptyComponent={<EmptyState label="No products yet." />}
         renderItem={({ item }) => (
-          <Pressable
-            style={styles.card}
-            onPress={() => router.push(`/(artist)/product/${item.id}`)}
-          >
-            <View style={styles.row}>
-              <Text style={styles.title} numberOfLines={2}>
-                {item.title}
-              </Text>
-              <StatusBadge status={item.status} />
-            </View>
-            <View style={styles.row}>
-              <Price cents={item.priceCents} currency={item.currency} />
-              <Text style={styles.muted}>
-                {item.variants.length} variant{item.variants.length === 1 ? '' : 's'}
-              </Text>
-            </View>
+          <View style={styles.card}>
+            <Pressable
+              onPress={() => router.push(`/(artist)/product/${item.id}`)}
+              accessibilityRole="button"
+              accessibilityLabel={`Open product ${item.title}`}
+              accessibilityHint="Opens product details, variants, and inventory"
+            >
+              <View style={styles.row}>
+                <Text style={styles.title} numberOfLines={2}>
+                  {item.title}
+                </Text>
+                <StatusBadge status={item.status} />
+              </View>
+              <View style={styles.row}>
+                <Price cents={item.priceCents} currency={item.currency} />
+                <Text style={styles.muted}>
+                  {item.variants.length} variant{item.variants.length === 1 ? '' : 's'}
+                </Text>
+              </View>
+            </Pressable>
             <View style={styles.actions}>
               <Pressable
                 style={styles.action}
+                accessibilityRole="button"
+                accessibilityLabel={`Set stock for ${item.title}`}
                 onPress={() => {
                   setStockFor(item);
                   setStockQty('');
@@ -164,26 +162,37 @@ export default function ArtistProductsScreen() {
                 <Text style={styles.actionLabel}>Stock</Text>
               </Pressable>
               {item.status !== 'ARCHIVED' && item.status !== 'REMOVED' ? (
-                <Pressable style={styles.action} onPress={() => void archive(item)}>
+                <Pressable
+                  style={styles.action}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Archive ${item.title}`}
+                  onPress={() => void archive(item)}
+                >
                   <Text style={styles.actionLabel}>Archive</Text>
                 </Pressable>
               ) : null}
             </View>
-          </Pressable>
+          </View>
         )}
       />
-      <Pressable style={styles.fab} onPress={() => setShowCreate(true)}>
+      <Pressable
+        style={styles.fab}
+        onPress={() => setShowCreate(true)}
+        accessibilityRole="button"
+        accessibilityLabel="Create new product"
+      >
         <Text style={styles.fabLabel}>+ New product</Text>
       </Pressable>
 
-      <Modal visible={showCreate} animationType="slide" transparent>
+      <Modal visible={showCreate} animationType={modalAnimationFor(reducedMotion)} transparent>
         <View style={styles.modalWrap}>
-          <View style={styles.modal}>
+          <View style={styles.modal} accessibilityViewIsModal accessibilityLabel="New product">
             <Text style={styles.modalTitle}>New product</Text>
             <TextInput
               style={styles.input}
               placeholder="Title"
               placeholderTextColor={colors.textMuted}
+              accessibilityLabel="Product title, required"
               value={title}
               onChangeText={setTitle}
             />
@@ -191,6 +200,8 @@ export default function ArtistProductsScreen() {
               style={styles.input}
               placeholder="Price (e.g. 25.00)"
               placeholderTextColor={colors.textMuted}
+              accessibilityLabel={`Price in ${store.currency}, required`}
+              accessibilityHint="Numbers only, for example 25.00"
               value={price}
               onChangeText={setPrice}
               keyboardType="decimal-pad"
@@ -200,10 +211,20 @@ export default function ArtistProductsScreen() {
                 ? formatPrice(Math.round(parseFloat(price || '0') * 100) || 0, store.currency)
                 : ''}
             </Text>
-            {error ? <Text style={styles.error}>{error}</Text> : null}
+            {error ? (
+              <Text
+                style={styles.error}
+                accessibilityRole="alert"
+                accessibilityLiveRegion="assertive"
+              >
+                {error}
+              </Text>
+            ) : null}
             <View style={styles.modalActions}>
               <Pressable
                 style={styles.secondary}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel new product"
                 onPress={() => {
                   setShowCreate(false);
                   setError('');
@@ -215,6 +236,9 @@ export default function ArtistProductsScreen() {
                 style={[styles.primary, saving && styles.disabled]}
                 onPress={() => void create()}
                 disabled={saving}
+                accessibilityRole="button"
+                accessibilityLabel={saving ? 'Creating product' : 'Create product'}
+                accessibilityState={{ disabled: saving, busy: saving }}
               >
                 <Text style={styles.primaryLabel}>{saving ? 'Creating…' : 'Create'}</Text>
               </Pressable>
@@ -223,22 +247,37 @@ export default function ArtistProductsScreen() {
         </View>
       </Modal>
 
-      <Modal visible={!!stockFor} animationType="slide" transparent>
+      <Modal visible={!!stockFor} animationType={modalAnimationFor(reducedMotion)} transparent>
         <View style={styles.modalWrap}>
-          <View style={styles.modal}>
+          <View
+            style={styles.modal}
+            accessibilityViewIsModal
+            accessibilityLabel={`Set stock for ${stockFor?.title ?? 'product'}`}
+          >
             <Text style={styles.modalTitle}>Set stock — {stockFor?.title}</Text>
             <TextInput
               style={styles.input}
               placeholder="Quantity available"
               placeholderTextColor={colors.textMuted}
+              accessibilityLabel={`Quantity available for ${stockFor?.title ?? 'product'}, required`}
               value={stockQty}
               onChangeText={setStockQty}
               keyboardType="number-pad"
             />
-            {error ? <Text style={styles.error}>{error}</Text> : null}
+            {error ? (
+              <Text
+                style={styles.error}
+                accessibilityRole="alert"
+                accessibilityLiveRegion="assertive"
+              >
+                {error}
+              </Text>
+            ) : null}
             <View style={styles.modalActions}>
               <Pressable
                 style={styles.secondary}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel stock update"
                 onPress={() => {
                   setStockFor(null);
                   setError('');
@@ -246,7 +285,12 @@ export default function ArtistProductsScreen() {
               >
                 <Text style={styles.secondaryLabel}>Cancel</Text>
               </Pressable>
-              <Pressable style={styles.primary} onPress={() => void saveStock()}>
+              <Pressable
+                style={styles.primary}
+                onPress={() => void saveStock()}
+                accessibilityRole="button"
+                accessibilityLabel={`Save stock for ${stockFor?.title ?? 'product'}`}
+              >
                 <Text style={styles.primaryLabel}>Save</Text>
               </Pressable>
             </View>
@@ -289,13 +333,13 @@ const styles = StyleSheet.create({
   actionLabel: { color: colors.primary, fontSize: fontSize.sm },
   fab: {
     margin: spacing.md,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryFilled,
     borderRadius: 12,
     padding: spacing.md,
     alignItems: 'center',
   },
   fabLabel: {
-    color: colors.background,
+    color: colors.onPrimary,
     fontSize: fontSize.md,
     fontWeight: fontWeight.semibold,
   },
@@ -326,13 +370,13 @@ const styles = StyleSheet.create({
   modalActions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
   primary: {
     flex: 1,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryFilled,
     borderRadius: 12,
     padding: spacing.md,
     alignItems: 'center',
   },
   primaryLabel: {
-    color: colors.background,
+    color: colors.onPrimary,
     fontSize: fontSize.md,
     fontWeight: fontWeight.semibold,
   },

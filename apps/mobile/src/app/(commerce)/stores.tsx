@@ -2,18 +2,17 @@
 
 import { Link } from 'expo-router';
 import { useCallback, useState } from 'react';
-import {
-  FlatList,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-} from 'react-native';
+import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useAuth } from '../../auth';
 import { listStores, type Store } from '../../api/commerce';
 import { colors, fontSize, fontWeight, spacing } from '../../theme';
-import { EmptyState, ErrorState, LoadingState, StatusBadge, OfflineNotice } from '../../commerce/ui';
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  StatusBadge,
+  OfflineNotice,
+} from '../../commerce/ui';
 import { useOnline } from '../../commerce/useOnline';
 import { useFocusEffect } from 'expo-router';
 
@@ -55,6 +54,8 @@ export default function StoresScreen() {
         style={styles.search}
         placeholder="Search stores…"
         placeholderTextColor={colors.textMuted}
+        accessibilityLabel="Search stores"
+        accessibilityHint="Type a store name, then submit to search"
         value={query}
         onChangeText={setQuery}
         onSubmitEditing={() => void load()}
@@ -73,7 +74,11 @@ export default function StoresScreen() {
           contentContainerStyle={styles.list}
           renderItem={({ item }) => (
             <Link href={`/(commerce)/store/${item.id}`} asChild>
-              <Pressable style={styles.card}>
+              <Pressable
+                style={styles.card}
+                accessibilityRole="button"
+                accessibilityLabel={`Open store: ${item.name}`}
+              >
                 <View style={styles.row}>
                   <Text style={styles.name}>{item.name}</Text>
                   <StatusBadge status={item.status} />

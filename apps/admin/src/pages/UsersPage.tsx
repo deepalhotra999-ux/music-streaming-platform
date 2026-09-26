@@ -119,13 +119,13 @@ export function UsersPage(): React.ReactNode {
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>Display name</th>
-                      <th>Email</th>
-                      <th>Role</th>
-                      <th>Status</th>
-                      <th>Verified</th>
-                      <th>Created</th>
-                      <th>Actions</th>
+                      <th scope="col">Display name</th>
+                      <th scope="col">Email</th>
+                      <th scope="col">Role</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Verified</th>
+                      <th scope="col">Created</th>
+                      <th scope="col">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -145,6 +145,7 @@ export function UsersPage(): React.ReactNode {
                           <button
                             type="button"
                             className="link-button"
+                            aria-label={`View user ${user.displayName}`}
                             onClick={() => setSelectedId(user.id)}
                           >
                             View
@@ -311,9 +312,9 @@ function UserDetail({
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Verified</th>
-                  <th>Created</th>
+                  <th scope="col">Name</th>
+                  <th scope="col">Verified</th>
+                  <th scope="col">Created</th>
                 </tr>
               </thead>
               <tbody>
@@ -418,10 +419,10 @@ function UserDetail({
                   <table className="data-table">
                     <thead>
                       <tr>
-                        <th>Event</th>
-                        <th>From</th>
-                        <th>To</th>
-                        <th>At</th>
+                        <th scope="col">Event</th>
+                        <th scope="col">From</th>
+                        <th scope="col">To</th>
+                        <th scope="col">At</th>
                       </tr>
                     </thead>
                     <tbody>

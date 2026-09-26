@@ -75,7 +75,9 @@ export function CommercePage(): React.ReactNode {
     if (tab === 'stores') void stores.reload();
     else if (tab === 'products') void products.reload();
     else void orders.reload();
-    getCommerceStats(client).then(setStats).catch(() => {});
+    getCommerceStats(client)
+      .then(setStats)
+      .catch(() => {});
   }, [tab, stores, products, orders, client]);
 
   const onModerateStore = async (store: AdminStore) => {
@@ -147,10 +149,12 @@ export function CommercePage(): React.ReactNode {
 
       {actionError ? <div className="error-banner">{actionError}</div> : null}
 
-      <div className="tabs">
+      <div className="tabs" role="tablist" aria-label="Commerce sections">
         {(['stores', 'products', 'orders'] as const).map((t) => (
           <button
             key={t}
+            role="tab"
+            aria-selected={tab === t}
             className={tab === t ? 'tab active' : 'tab'}
             onClick={() => setTab(t)}
           >
@@ -159,17 +163,9 @@ export function CommercePage(): React.ReactNode {
         ))}
       </div>
 
-      {tab === 'stores' && (
-        <StoreTable
-          list={stores}
-          onModerate={(s) => void onModerateStore(s)}
-        />
-      )}
+      {tab === 'stores' && <StoreTable list={stores} onModerate={(s) => void onModerateStore(s)} />}
       {tab === 'products' && (
-        <ProductTable
-          list={products}
-          onModerate={(p) => void onModerateProduct(p)}
-        />
+        <ProductTable list={products} onModerate={(p) => void onModerateProduct(p)} />
       )}
       {tab === 'orders' && <OrderTable list={orders} />}
       {dialog}
@@ -185,30 +181,35 @@ function StoreTable({
   onModerate: (s: AdminStore) => void;
 }) {
   if (list.loading) return <LoadingState />;
-  if (list.error)
-    return <ErrorState error={list.error} onRetry={() => list.reload()} />;
+  if (list.error) return <ErrorState error={list.error} onRetry={() => list.reload()} />;
   if (list.data.length === 0) return <EmptyState message="No stores." />;
   return (
     <>
       <table className="data-table">
         <thead>
           <tr>
-            <th>Name</th>
-            <th>Status</th>
-            <th>Currency</th>
-            <th>Created</th>
-            <th>Actions</th>
+            <th scope="col">Name</th>
+            <th scope="col">Status</th>
+            <th scope="col">Currency</th>
+            <th scope="col">Created</th>
+            <th scope="col">Actions</th>
           </tr>
         </thead>
         <tbody>
           {list.data.map((s) => (
             <tr key={s.id}>
               <td>{s.name}</td>
-              <td><StatusBadge status={s.status} /></td>
+              <td>
+                <StatusBadge status={s.status} />
+              </td>
               <td>{s.currency}</td>
               <td>{formatDate(s.createdAt)}</td>
               <td>
-                <button className="link-button" onClick={() => onModerate(s)}>
+                <button
+                  className="link-button"
+                  onClick={() => onModerate(s)}
+                  aria-label={`${s.status === 'SUSPENDED' ? 'Reinstate' : 'Suspend'} store ${s.name}`}
+                >
                   {s.status === 'SUSPENDED' ? 'Reinstate' : 'Suspend'}
                 </button>
               </td>
@@ -216,9 +217,7 @@ function StoreTable({
           ))}
         </tbody>
       </table>
-      {list.pagination ? (
-        <Pagination pagination={list.pagination} onPage={list.setPage} />
-      ) : null}
+      {list.pagination ? <Pagination pagination={list.pagination} onPage={list.setPage} /> : null}
     </>
   );
 }
@@ -231,30 +230,35 @@ function ProductTable({
   onModerate: (p: AdminProduct) => void;
 }) {
   if (list.loading) return <LoadingState />;
-  if (list.error)
-    return <ErrorState error={list.error} onRetry={() => list.reload()} />;
+  if (list.error) return <ErrorState error={list.error} onRetry={() => list.reload()} />;
   if (list.data.length === 0) return <EmptyState message="No products." />;
   return (
     <>
       <table className="data-table">
         <thead>
           <tr>
-            <th>Title</th>
-            <th>Status</th>
-            <th>Price</th>
-            <th>Created</th>
-            <th>Actions</th>
+            <th scope="col">Title</th>
+            <th scope="col">Status</th>
+            <th scope="col">Price</th>
+            <th scope="col">Created</th>
+            <th scope="col">Actions</th>
           </tr>
         </thead>
         <tbody>
           {list.data.map((p) => (
             <tr key={p.id}>
               <td>{p.title}</td>
-              <td><StatusBadge status={p.status} /></td>
+              <td>
+                <StatusBadge status={p.status} />
+              </td>
               <td>{formatMoney(p.priceCents, p.currency)}</td>
               <td>{formatDate(p.createdAt)}</td>
               <td>
-                <button className="link-button" onClick={() => onModerate(p)}>
+                <button
+                  className="link-button"
+                  onClick={() => onModerate(p)}
+                  aria-label={`${p.status === 'REMOVED' ? 'Restore' : 'Remove'} product ${p.title}`}
+                >
                   {p.status === 'REMOVED' ? 'Restore' : 'Remove'}
                 </button>
               </td>
@@ -262,9 +266,7 @@ function ProductTable({
           ))}
         </tbody>
       </table>
-      {list.pagination ? (
-        <Pagination pagination={list.pagination} onPage={list.setPage} />
-      ) : null}
+      {list.pagination ? <Pagination pagination={list.pagination} onPage={list.setPage} /> : null}
     </>
   );
 }
@@ -275,34 +277,33 @@ function OrderTable({
   list: UseApiListResult<AdminOrder, { page?: number; limit?: number }>;
 }) {
   if (list.loading) return <LoadingState />;
-  if (list.error)
-    return <ErrorState error={list.error} onRetry={() => list.reload()} />;
+  if (list.error) return <ErrorState error={list.error} onRetry={() => list.reload()} />;
   if (list.data.length === 0) return <EmptyState message="No orders." />;
   return (
     <>
       <table className="data-table">
         <thead>
           <tr>
-            <th>Order #</th>
-            <th>Status</th>
-            <th>Total</th>
-            <th>Created</th>
+            <th scope="col">Order #</th>
+            <th scope="col">Status</th>
+            <th scope="col">Total</th>
+            <th scope="col">Created</th>
           </tr>
         </thead>
         <tbody>
           {list.data.map((o) => (
             <tr key={o.id}>
               <td>#{o.orderNumber}</td>
-              <td><StatusBadge status={o.status} /></td>
+              <td>
+                <StatusBadge status={o.status} />
+              </td>
               <td>{formatMoney(o.totalCents, o.currency)}</td>
               <td>{formatDate(o.createdAt)}</td>
             </tr>
           ))}
         </tbody>
       </table>
-      {list.pagination ? (
-        <Pagination pagination={list.pagination} onPage={list.setPage} />
-      ) : null}
+      {list.pagination ? <Pagination pagination={list.pagination} onPage={list.setPage} /> : null}
     </>
   );
 }

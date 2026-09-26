@@ -79,6 +79,67 @@ describe('ConfirmDialog', () => {
     expect(onCancel).toHaveBeenCalledTimes(2);
     expect(onConfirm).not.toHaveBeenCalled();
   });
+
+  // Phase 31 — dialog focus behavior.
+  it('focuses the safe (cancel) action on open, not the destructive button', () => {
+    render(
+      <ConfirmDialog
+        {...baseProps}
+        confirmLabel="Delete it"
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Cancel' }));
+  });
+
+  it('traps Tab within the dialog', () => {
+    render(
+      <ConfirmDialog
+        {...baseProps}
+        confirmLabel="Delete it"
+        onConfirm={vi.fn()}
+        onCancel={vi.fn()}
+      />,
+    );
+    const cancel = screen.getByRole('button', { name: 'Cancel' });
+    const confirm = screen.getByRole('button', { name: 'Delete it' });
+    // Shift+Tab from the first button wraps to the last.
+    cancel.focus();
+    fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+    expect(document.activeElement).toBe(confirm);
+    // Tab from the last button wraps to the first.
+    confirm.focus();
+    fireEvent.keyDown(window, { key: 'Tab' });
+    expect(document.activeElement).toBe(cancel);
+  });
+
+  it('returns focus to the trigger when closed', () => {
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <div>
+          <button type="button" onClick={() => setOpen(true)}>
+            Open dialog
+          </button>
+          <ConfirmDialog
+            {...baseProps}
+            open={open}
+            onConfirm={() => setOpen(false)}
+            onCancel={() => setOpen(false)}
+          />
+        </div>
+      );
+    }
+    render(<Harness />);
+    const trigger = screen.getByRole('button', { name: 'Open dialog' });
+    // jsdom does not move focus on click; a real browser focuses the button.
+    trigger.focus();
+    fireEvent.click(trigger);
+    expect(screen.getByRole('alertdialog')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+    expect(document.activeElement).toBe(trigger);
+  });
 });
 
 describe('useConfirm', () => {

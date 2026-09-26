@@ -54,7 +54,12 @@ export default function RoomLobbyScreen() {
       </View>
 
       {(startError || error) && (
-        <Text style={styles.error} testID="room-lobby-error">
+        <Text
+          style={styles.error}
+          testID="room-lobby-error"
+          accessibilityRole="alert"
+          accessibilityLiveRegion="assertive"
+        >
           {startError ?? error}
         </Text>
       )}
@@ -64,6 +69,16 @@ export default function RoomLobbyScreen() {
         onPress={startRoom}
         disabled={starting}
         testID="start-room-button"
+        accessibilityRole="button"
+        accessibilityLabel={
+          starting
+            ? 'Starting room'
+            : queueTrackIds.length === 0
+              ? 'Start a room. Needs at least one track — play something first'
+              : `Start a room with ${queueTrackIds.length} track${queueTrackIds.length === 1 ? '' : 's'}`
+        }
+        accessibilityState={{ disabled: starting, busy: starting }}
+        accessibilityHint="You become the host and control playback for everyone"
       >
         {starting ? (
           <ActivityIndicator color="#fff" />
@@ -80,8 +95,10 @@ export default function RoomLobbyScreen() {
         style={styles.secondaryButton}
         onPress={() => router.push('/room/join')}
         testID="join-room-button"
+        accessibilityRole="button"
+        accessibilityLabel="Join a room with an invite"
       >
-        <Ionicons name="ticket-outline" size={20} color={colors.primary} />
+        <Ionicons name="ticket-outline" size={20} color={colors.primary} accessible={false} />
         <Text style={styles.secondaryLabel}>Join with an invite</Text>
       </Pressable>
 

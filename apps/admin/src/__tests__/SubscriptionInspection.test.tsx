@@ -95,7 +95,7 @@ function renderWithSubscription(sub: AdminSubscriptionDetail | null) {
 async function openDetail() {
   renderWithSubscription(subscriptionDetail());
   expect(await screen.findByText('Leo Listener')).toBeInTheDocument();
-  fireEvent.click(screen.getByRole('button', { name: 'View' }));
+  fireEvent.click(screen.getByRole('button', { name: 'View user Leo Listener' }));
   expect(await screen.findByText('Subscription')).toBeInTheDocument();
 }
 
@@ -139,7 +139,7 @@ describe('admin subscription inspection', () => {
       latestEvent: null,
     });
     expect(await screen.findByText('Leo Listener')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'View' }));
+    fireEvent.click(screen.getByRole('button', { name: 'View user Leo Listener' }));
     expect(await screen.findByText('Subscription')).toBeInTheDocument();
     expect(await screen.findByText('No subscription on file.')).toBeInTheDocument();
   });

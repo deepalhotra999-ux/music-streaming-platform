@@ -40,14 +40,50 @@ export function ConfirmDialog({
   onConfirm: () => void;
   onCancel: () => void;
 }): React.ReactNode {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const previouslyFocused = useRef<HTMLElement | null>(null);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (event: KeyboardEvent): void => {
-      if (event.key === 'Escape') onCancel();
+      if (event.key === 'Escape') {
+        onCancel();
+        return;
+      }
+      // Phase 31 — focus trap: Tab cycles within the dialog.
+      if (event.key === 'Tab' && dialogRef.current) {
+        const focusables = dialogRef.current.querySelectorAll<HTMLElement>(
+          'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+        );
+        const items = Array.from(focusables).filter((el) => !el.hasAttribute('disabled'));
+        if (items.length === 0) return;
+        const first = items[0];
+        const last = items[items.length - 1];
+        if (event.shiftKey && document.activeElement === first) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [open, onCancel]);
+
+  useEffect(() => {
+    if (!open) return;
+    // Remember the trigger so focus returns to it on close.
+    previouslyFocused.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    // Focus the safe action (Cancel) first: keyboard users should not land
+    // on the destructive button, where a stray Enter would confirm.
+    dialogRef.current?.querySelector<HTMLElement>('[data-dialog-cancel]')?.focus();
+    return () => {
+      previouslyFocused.current?.focus();
+    };
+  }, [open]);
 
   if (!open) return null;
 
@@ -59,6 +95,7 @@ export function ConfirmDialog({
       data-testid="confirm-dialog-backdrop"
     >
       <div
+        ref={dialogRef}
         className="dialog"
         role="alertdialog"
         aria-modal="true"
@@ -69,10 +106,10 @@ export function ConfirmDialog({
         <h2 id="confirm-dialog-title">{title}</h2>
         <p id="confirm-dialog-message">{message}</p>
         <div className="dialog-actions">
-          <button type="button" className="btn" onClick={onCancel}>
+          <button type="button" className="btn" onClick={onCancel} data-dialog-cancel>
             {cancelLabel}
           </button>
-          <button type="button" className="btn btn-danger" onClick={onConfirm} autoFocus>
+          <button type="button" className="btn btn-danger" onClick={onConfirm}>
             {confirmLabel}
           </button>
         </div>

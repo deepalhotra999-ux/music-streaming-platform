@@ -14,7 +14,7 @@ export function Pagination({
   const from = total === 0 ? 0 : (page - 1) * limit + 1;
   const to = Math.min(page * limit, total);
   return (
-    <div className="pagination">
+    <nav className="pagination" aria-label="Pagination">
       <span className="muted" aria-live="polite">
         {from}–{to} of {total}
       </span>
@@ -41,6 +41,6 @@ export function Pagination({
           Next →
         </button>
       </div>
-    </div>
+    </nav>
   );
 }

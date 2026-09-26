@@ -135,7 +135,7 @@ describe('ModerationPage', () => {
     renderModeration([makeReport()]);
 
     expect(await screen.findByText('Suspected spam upload')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Review report report-1' }));
 
     // Detail view header + history section.
     expect(await screen.findByRole('heading', { name: /Report/ })).toBeInTheDocument();
@@ -148,7 +148,7 @@ describe('ModerationPage', () => {
     const { fetchMock } = renderModeration([makeReport()]);
 
     expect(await screen.findByText('Suspected spam upload')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Review report report-1' }));
 
     const resolveButton = await screen.findByRole('button', { name: 'Mark resolved' });
     fireEvent.click(resolveButton);
@@ -170,7 +170,7 @@ describe('ModerationPage', () => {
     renderModeration([makeReport({ id: 'report-9', status: 'DISMISSED' })]);
 
     expect(await screen.findByText('Suspected spam upload')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Review report report-9' }));
 
     expect(await screen.findByText(/This report is closed/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Mark resolved' })).not.toBeInTheDocument();
@@ -254,7 +254,7 @@ describe('community content moderation (Phase 29)', () => {
     ]);
 
     expect(await screen.findByText('Suspected spam upload')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Review' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Review report report-p1' }));
 
     expect(await screen.findByRole('heading', { name: 'Reported post' })).toBeInTheDocument();
     expect(await screen.findByText('New single out Friday!')).toBeInTheDocument();
@@ -269,7 +269,7 @@ describe('community content moderation (Phase 29)', () => {
       makeReport({ id: 'report-p1', targetType: 'ARTIST_POST', targetId: 'post-1' }),
     ]);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Review report report-p1' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Remove content' }));
     await confirmDialog('Remove');
 
@@ -289,7 +289,7 @@ describe('community content moderation (Phase 29)', () => {
       makeReport({ id: 'report-c1', targetType: 'POST_COMMENT', targetId: 'comment-1' }),
     ]);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Review report report-c1' }));
 
     expect(await screen.findByRole('heading', { name: 'Reported comment' })).toBeInTheDocument();
     expect(await screen.findByText('Love this track!')).toBeInTheDocument();
@@ -302,7 +302,7 @@ describe('community content moderation (Phase 29)', () => {
       makeReport({ id: 'report-c1', targetType: 'POST_COMMENT', targetId: 'comment-1' }),
     ]);
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Review' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Review report report-c1' }));
     // First remove it so the UI shows Restore.
     fireEvent.click(await screen.findByRole('button', { name: 'Remove content' }));
     await confirmDialog('Remove');

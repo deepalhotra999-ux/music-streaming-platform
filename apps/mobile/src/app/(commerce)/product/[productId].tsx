@@ -3,17 +3,11 @@
 
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useCallback, useState } from 'react';
-import {
-  Image,
-  Pressable,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../../../auth';
 import {
   addToCart,
+  formatPrice,
   getProduct,
   type Product,
   type ProductVariant,
@@ -87,7 +81,12 @@ export default function ProductDetailScreen() {
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
       {product.images[0] ? (
-        <Image source={{ uri: product.images[0].imageUrl }} style={styles.image} />
+        <Image
+          source={{ uri: product.images[0].imageUrl }}
+          style={styles.image}
+          accessibilityRole="image"
+          accessibilityLabel={`Product image: ${product.title}`}
+        />
       ) : null}
       <View style={styles.row}>
         <Text style={styles.title}>{product.title}</Text>
@@ -97,7 +96,7 @@ export default function ProductDetailScreen() {
       {product.description ? <Text style={styles.desc}>{product.description}</Text> : null}
 
       {product.variants.length > 0 ? (
-        <View style={styles.section}>
+        <View style={styles.section} accessibilityRole="radiogroup" accessibilityLabel="Variant">
           <Text style={styles.sectionTitle}>Variant</Text>
           <View style={styles.chips}>
             {product.variants.map((v) => (
@@ -105,20 +104,17 @@ export default function ProductDetailScreen() {
                 key={v.id}
                 style={[styles.chip, variant?.id === v.id && styles.chipActive]}
                 onPress={() => setVariant(v)}
+                accessibilityRole="radio"
+                accessibilityLabel={`${v.name}, ${formatPrice(v.priceCents, v.currency)}`}
+                accessibilityState={{ selected: variant?.id === v.id }}
               >
-                <Text
-                  style={[styles.chipLabel, variant?.id === v.id && styles.chipLabelActive]}
-                >
+                <Text style={[styles.chipLabel, variant?.id === v.id && styles.chipLabelActive]}>
                   {v.name}
                 </Text>
               </Pressable>
             ))}
           </View>
-          {variant ? (
-            <Text style={styles.muted}>
-              {variant.availableQuantity} available
-            </Text>
-          ) : null}
+          {variant ? <Text style={styles.muted}>{variant.availableQuantity} available</Text> : null}
         </View>
       ) : null}
 
@@ -128,25 +124,46 @@ export default function ProductDetailScreen() {
           <Pressable
             style={styles.qtyButton}
             onPress={() => setQuantity((q) => Math.max(1, q - 1))}
+            accessibilityRole="button"
+            accessibilityLabel={`Decrease quantity, currently ${quantity}`}
+            hitSlop={8}
           >
             <Text style={styles.qtyLabel}>−</Text>
           </Pressable>
-          <Text style={styles.qtyValue}>{quantity}</Text>
+          <Text style={styles.qtyValue} accessibilityLabel={`Quantity: ${quantity}`}>
+            {quantity}
+          </Text>
           <Pressable
             style={styles.qtyButton}
             onPress={() => setQuantity((q) => Math.min(Math.max(maxQty, 1), q + 1))}
+            accessibilityRole="button"
+            accessibilityLabel={`Increase quantity, currently ${quantity}`}
+            hitSlop={8}
           >
             <Text style={styles.qtyLabel}>+</Text>
           </Pressable>
         </View>
       </View>
 
-      {notice ? <Text style={styles.notice}>{notice}</Text> : null}
+      {notice ? (
+        <Text style={styles.notice} accessibilityRole="alert" accessibilityLiveRegion="assertive">
+          {notice}
+        </Text>
+      ) : null}
 
       <Pressable
         style={[styles.addButton, (!purchasable || adding) && styles.addButtonDisabled]}
         onPress={() => void onAdd()}
         disabled={!purchasable || adding}
+        accessibilityRole="button"
+        accessibilityLabel={
+          adding
+            ? 'Adding to cart'
+            : purchasable
+              ? `Add ${quantity} ${product.title} to cart`
+              : `${product.title} not available`
+        }
+        accessibilityState={{ disabled: !purchasable || adding, busy: adding }}
       >
         <Text style={styles.addLabel}>
           {adding ? 'Adding…' : purchasable ? 'Add to cart' : `Not available (${product.status})`}
@@ -187,9 +204,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.textMuted,
   },
-  chipActive: { borderColor: colors.primary, backgroundColor: colors.primary },
+  chipActive: { borderColor: colors.primary, backgroundColor: colors.primaryFilled },
   chipLabel: { color: colors.text, fontSize: fontSize.sm },
-  chipLabelActive: { color: colors.background, fontWeight: fontWeight.semibold },
+  chipLabelActive: { color: colors.onPrimary, fontWeight: fontWeight.semibold },
   muted: { color: colors.textMuted, fontSize: fontSize.sm },
   qtyRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   qtyButton: {
@@ -204,7 +221,7 @@ const styles = StyleSheet.create({
   qtyValue: { color: colors.text, fontSize: fontSize.lg, fontWeight: fontWeight.semibold },
   notice: { color: colors.warning, fontSize: fontSize.sm },
   addButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryFilled,
     borderRadius: 12,
     padding: spacing.md,
     alignItems: 'center',
@@ -212,7 +229,7 @@ const styles = StyleSheet.create({
   },
   addButtonDisabled: { opacity: 0.5 },
   addLabel: {
-    color: colors.background,
+    color: colors.onPrimary,
     fontSize: fontSize.md,
     fontWeight: fontWeight.semibold,
   },

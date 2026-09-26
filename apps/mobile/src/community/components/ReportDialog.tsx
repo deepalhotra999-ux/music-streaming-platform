@@ -4,7 +4,7 @@
 
 import { useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
-import { Button, TextInput } from '../../components';
+import { Button, TextInput, modalAnimationFor, useReducedMotion } from '../../components';
 import { colors } from '../../theme';
 import { spacing } from '../../theme/spacing';
 
@@ -30,6 +30,7 @@ export function ReportDialog({
 }: ReportDialogProps) {
   const [reason, setReason] = useState('');
   const canSubmit = reason.trim().length >= 3 && !submitting;
+  const reducedMotion = useReducedMotion();
 
   const close = () => {
     setReason('');
@@ -37,10 +38,31 @@ export function ReportDialog({
   };
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
-      <Pressable style={styles.backdrop} onPress={close}>
-        <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()} testID={testID}>
-          <Text style={styles.title}>Report {targetLabel}</Text>
+    <Modal
+      visible={visible}
+      transparent
+      animationType={modalAnimationFor(reducedMotion, 'fade')}
+      onRequestClose={close}
+    >
+      <View style={styles.container}>
+        {/* Dismiss backdrop: sibling of the sheet, not its parent, so the
+            modal content is not nested inside a button in the a11y tree. */}
+        <Pressable
+          style={styles.backdrop}
+          onPress={close}
+          accessibilityRole="button"
+          accessibilityLabel="Dismiss report dialog"
+        />
+        <View
+          style={styles.sheet}
+          testID={testID}
+          accessibilityViewIsModal
+          accessibilityLabel={`Report ${targetLabel}`}
+          accessibilityRole="none"
+        >
+          <Text style={styles.title} accessibilityRole="header">
+            Report {targetLabel}
+          </Text>
           <Text style={styles.hint}>
             Tell us what&apos;s wrong. Reports go to our moderation team; the author won&apos;t know
             who reported.
@@ -56,29 +78,41 @@ export function ReportDialog({
             editable={!submitting}
             testID={testID ? `${testID}-reason` : undefined}
           />
-          {error ? <Text style={styles.error}>{error}</Text> : null}
+          {error ? (
+            <Text
+              style={styles.error}
+              accessibilityRole="alert"
+              accessibilityLiveRegion="assertive"
+            >
+              {error}
+            </Text>
+          ) : null}
           <View style={styles.actions}>
             <Button title="Cancel" variant="secondary" onPress={close} disabled={submitting} />
             <Button
               title={submitting ? 'Sending…' : 'Send report'}
               onPress={() => onSubmit(reason.trim())}
               disabled={!canSubmit}
+              accessibilityLabel={submitting ? 'Sending report' : `Send report for ${targetLabel}`}
               testID={testID ? `${testID}-submit` : undefined}
             />
           </View>
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    alignItems: 'center',
-    backgroundColor: 'rgba(0,0,0,0.6)',
+  container: {
     flex: 1,
+    alignItems: 'center',
     justifyContent: 'center',
     padding: spacing.lg,
+  },
+  backdrop: {
+    ...StyleSheet.absoluteFill,
+    backgroundColor: 'rgba(0,0,0,0.6)',
   },
   sheet: {
     backgroundColor: colors.surface,

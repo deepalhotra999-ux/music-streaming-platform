@@ -7,16 +7,32 @@ import { colors, fontSize, fontWeight, radii, spacing } from '../theme';
 
 interface TextInputProps extends Omit<RNTextInputProps, 'style'> {
   label: string;
+  /** Phase 31 — marks the field required: visual "*" and "required" in the
+   * accessible name. */
+  required?: boolean;
   error?: string;
   testID?: string;
 }
 
-export function TextInput({ label, error, testID, secureTextEntry, ...rest }: TextInputProps) {
+export function TextInput({
+  label,
+  required = false,
+  error,
+  testID,
+  secureTextEntry,
+  ...rest
+}: TextInputProps) {
   const [hidden, setHidden] = useState(Boolean(secureTextEntry));
   const inputTestID = testID ?? `input-${label.toLowerCase().replace(/\s+/g, '-')}`;
+  // One coherent accessible name: label, required state, and current error.
+  // The error is also announced separately via the live region below.
+  const accessibleName = `${label}${required ? ', required' : ''}${error ? `. ${error}` : ''}`;
   return (
     <View>
-      <Text style={styles.label}>{label}</Text>
+      <Text style={styles.label}>
+        {label}
+        {required ? <Text style={styles.required}> *</Text> : null}
+      </Text>
       <View style={[styles.field, error ? styles.fieldError : null]}>
         <RNTextInput
           testID={inputTestID}
@@ -25,7 +41,7 @@ export function TextInput({ label, error, testID, secureTextEntry, ...rest }: Te
           secureTextEntry={secureTextEntry ? hidden : false}
           autoCapitalize="none"
           autoCorrect={false}
-          accessibilityLabel={label}
+          accessibilityLabel={accessibleName}
           {...rest}
         />
         {secureTextEntry ? (
@@ -42,7 +58,12 @@ export function TextInput({ label, error, testID, secureTextEntry, ...rest }: Te
         ) : null}
       </View>
       {error ? (
-        <Text testID={`${inputTestID}-error`} style={styles.error} accessibilityLiveRegion="polite">
+        <Text
+          testID={`${inputTestID}-error`}
+          style={styles.error}
+          accessibilityRole="alert"
+          accessibilityLiveRegion="assertive"
+        >
           {error}
         </Text>
       ) : null}
@@ -77,4 +98,5 @@ const styles = StyleSheet.create({
   toggle: { paddingLeft: spacing.sm },
   toggleLabel: { color: colors.primary, fontSize: fontSize.sm, fontWeight: fontWeight.medium },
   error: { color: colors.error, fontSize: fontSize.xs, marginTop: spacing.xs },
+  required: { color: colors.error, fontWeight: fontWeight.bold },
 });

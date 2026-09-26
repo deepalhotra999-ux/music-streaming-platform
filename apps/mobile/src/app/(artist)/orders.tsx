@@ -4,7 +4,8 @@
 import { useFocusEffect } from 'expo-router';
 import { randomUUID } from 'expo-crypto';
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { TextInput } from '../../components';
 import { useAuth } from '../../auth';
 import { listMyArtists } from '../../api/artist';
 import {
@@ -61,7 +62,9 @@ export default function ArtistOrdersScreen() {
   );
 
   const advanceFulfillment = async (order: Order) => {
-    const idx = FULFILLMENT_STEPS.indexOf(order.fulfillmentStatus as (typeof FULFILLMENT_STEPS)[number]);
+    const idx = FULFILLMENT_STEPS.indexOf(
+      order.fulfillmentStatus as (typeof FULFILLMENT_STEPS)[number],
+    );
     const next = FULFILLMENT_STEPS[idx + 1];
     if (!next) return;
     setActing(true);
@@ -102,7 +105,11 @@ export default function ArtistOrdersScreen() {
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      {actionError ? <Text style={styles.error}>{actionError}</Text> : null}
+      {actionError ? (
+        <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="assertive">
+          {actionError}
+        </Text>
+      ) : null}
       {orders.map((order) => {
         const expanded = expandedId === order.id;
         const idx = FULFILLMENT_STEPS.indexOf(
@@ -111,24 +118,28 @@ export default function ArtistOrdersScreen() {
         const nextStep = FULFILLMENT_STEPS[idx + 1];
         return (
           <View key={order.id} style={styles.card}>
-            <Pressable onPress={() => setExpandedId(expanded ? null : order.id)}>
+            <Pressable
+              onPress={() => setExpandedId(expanded ? null : order.id)}
+              accessibilityRole="button"
+              accessibilityLabel={`Order ${order.orderNumber}, ${expanded ? 'expanded' : 'collapsed'}`}
+              accessibilityState={{ expanded }}
+              accessibilityHint={
+                expanded ? 'Collapses order details' : 'Shows order details and actions'
+              }
+            >
               <View style={styles.row}>
                 <Text style={styles.title}>#{order.orderNumber}</Text>
                 <StatusBadge status={order.status} />
               </View>
               <View style={styles.row}>
-                <Text style={styles.muted}>
-                  {new Date(order.createdAt).toLocaleDateString()}
-                </Text>
-                <Text style={styles.total}>
-                  {formatPrice(order.totalCents, order.currency)}
-                </Text>
+                <Text style={styles.muted}>{new Date(order.createdAt).toLocaleDateString()}</Text>
+                <Text style={styles.total}>{formatPrice(order.totalCents, order.currency)}</Text>
               </View>
             </Pressable>
             {expanded ? (
               <View style={styles.detail}>
                 <Text style={styles.muted}>
-                  Fulfillment: {order.fulfillmentStatus}
+                  Fulfillment: {order.fulfillmentStatus.replace(/_/g, ' ').toLowerCase()}
                 </Text>
                 {order.items.map((item) => (
                   <Text key={item.id} style={styles.muted}>
@@ -142,17 +153,21 @@ export default function ArtistOrdersScreen() {
                       style={styles.button}
                       disabled={acting}
                       onPress={() => void advanceFulfillment(order)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Mark order ${order.orderNumber} as ${nextStep.toLowerCase()}`}
+                      accessibilityState={{ disabled: acting, busy: acting }}
                     >
                       <Text style={styles.buttonLabel}>Mark {nextStep.toLowerCase()}</Text>
                     </Pressable>
                   ) : null}
-                  {(order.status === 'PAID' || order.status === 'PROCESSING') &&
-                  !refundFor ? (
+                  {(order.status === 'PAID' || order.status === 'PROCESSING') && !refundFor ? (
                     <Pressable
                       style={[styles.button, styles.danger]}
                       onPress={() => setRefundFor(order)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Refund order ${order.orderNumber}, full refund of ${formatPrice(order.totalCents, order.currency)}`}
                     >
-                      <Text style={styles.buttonLabel}>Refund</Text>
+                      <Text style={styles.dangerLabel}>Refund</Text>
                     </Pressable>
                   ) : null}
                 </View>
@@ -162,9 +177,8 @@ export default function ArtistOrdersScreen() {
                       Full refund of {formatPrice(order.totalCents, order.currency)}
                     </Text>
                     <TextInput
-                      style={styles.input}
-                      placeholder="Reason (optional)"
-                      placeholderTextColor={colors.textMuted}
+                      label={`Refund reason for order ${order.orderNumber}`}
+                      placeholder="Optional"
                       value={refundReason}
                       onChangeText={setRefundReason}
                     />
@@ -173,12 +187,21 @@ export default function ArtistOrdersScreen() {
                         style={styles.button}
                         disabled={acting}
                         onPress={() => void doRefund()}
+                        accessibilityRole="button"
+                        accessibilityLabel={
+                          acting
+                            ? 'Issuing refund'
+                            : `Issue full refund for order ${order.orderNumber}`
+                        }
+                        accessibilityState={{ disabled: acting, busy: acting }}
                       >
                         <Text style={styles.buttonLabel}>Issue refund</Text>
                       </Pressable>
                       <Pressable
                         style={[styles.button, styles.secondary]}
                         onPress={() => setRefundFor(null)}
+                        accessibilityRole="button"
+                        accessibilityLabel="Cancel refund"
                       >
                         <Text style={styles.buttonLabel}>Cancel</Text>
                       </Pressable>
@@ -223,21 +246,16 @@ const styles = StyleSheet.create({
   detail: { marginTop: spacing.sm, gap: spacing.xs },
   actions: { flexDirection: 'row', gap: spacing.sm, marginTop: spacing.sm },
   button: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryFilled,
     borderRadius: 8,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
   },
   secondary: { backgroundColor: colors.background },
   danger: { backgroundColor: colors.error },
-  buttonLabel: { color: '#fff', fontSize: fontSize.sm, fontWeight: fontWeight.semibold },
-  input: {
-    backgroundColor: colors.background,
-    borderRadius: 8,
-    padding: spacing.sm,
-    color: colors.text,
-    fontSize: fontSize.md,
-  },
+  buttonLabel: { color: colors.onPrimary, fontSize: fontSize.sm, fontWeight: fontWeight.semibold },
+  // Phase 31 — white on the error background is 2.78:1; dark text is 7.08:1.
+  dangerLabel: { color: colors.background, fontSize: fontSize.sm, fontWeight: fontWeight.semibold },
   refundForm: { gap: spacing.sm, marginTop: spacing.sm },
   error: { color: colors.error, fontSize: fontSize.sm, marginBottom: spacing.sm },
 });

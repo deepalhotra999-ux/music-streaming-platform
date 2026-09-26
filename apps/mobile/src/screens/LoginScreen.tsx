@@ -68,7 +68,12 @@ export function LoginScreen() {
       </View>
 
       {apiError ? (
-        <View style={styles.banner} testID="login-error-banner">
+        <View
+          style={styles.banner}
+          testID="login-error-banner"
+          accessibilityRole="alert"
+          accessibilityLiveRegion="assertive"
+        >
           <Text style={styles.bannerText}>{apiError}</Text>
         </View>
       ) : null}
@@ -76,6 +81,7 @@ export function LoginScreen() {
       <View style={styles.field}>
         <TextInput
           label="Email"
+          required
           testID="login-email"
           value={email}
           onChangeText={updateEmail}
@@ -90,6 +96,7 @@ export function LoginScreen() {
       <View style={styles.field}>
         <TextInput
           label="Password"
+          required
           testID="login-password"
           value={password}
           onChangeText={updatePassword}

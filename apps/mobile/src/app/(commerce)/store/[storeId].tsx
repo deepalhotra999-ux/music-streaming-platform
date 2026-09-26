@@ -5,6 +5,7 @@ import { useCallback, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../../../auth';
 import {
+  formatPrice,
   getStore,
   listStoreProducts,
   type Product,
@@ -68,7 +69,11 @@ export default function StoreDetailScreen() {
           columnWrapperStyle={styles.columns}
           renderItem={({ item }) => (
             <Link href={`/(commerce)/product/${item.id}`} asChild>
-              <Pressable style={styles.card}>
+              <Pressable
+                style={styles.card}
+                accessibilityRole="button"
+                accessibilityLabel={`View product: ${item.title}, ${formatPrice(item.priceCents, item.currency)}`}
+              >
                 <Text style={styles.title} numberOfLines={2}>
                   {item.title}
                 </Text>

@@ -12,11 +12,18 @@ export const colors = {
   // Text
   text: '#FFFFFF',
   textMuted: '#A8A8B8',
-  textFaint: '#6E6E80',
+  // Phase 31 — lightened from #6E6E80 (3.9:1) to meet WCAG AA 4.5:1
+  // for secondary text and placeholders on the background.
+  textFaint: '#8E8EA0',
 
   // Brand
   primary: '#7C5CFF',
   primaryPressed: '#6847F2',
+  // Phase 31 — filled-button background. White text on `primary` is 4.35:1
+  // (just under AA); on `primaryFilled` it is 5.5:1. `primary` remains for
+  // text, links, and icons on dark surfaces (4.52:1).
+  primaryFilled: '#6A48F0',
+  primaryFilledPressed: '#5A3CE0',
   onPrimary: '#FFFFFF',
 
   // Secondary / ghost actions

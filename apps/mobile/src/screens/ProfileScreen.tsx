@@ -9,7 +9,7 @@ import { Modal, StyleSheet, Text, View } from 'react-native';
 import { router } from 'expo-router';
 import { apiErrorMessage } from '../api';
 import { useAuth } from '../auth';
-import { Button, Screen } from '../components';
+import { Button, Screen, modalAnimationFor, useReducedMotion } from '../components';
 import {
   PurchaseSheet,
   SubscriptionCard,
@@ -23,8 +23,7 @@ import { colors, fontSize, fontWeight, radii, spacing } from '../theme';
 function RoomProfileRow() {
   const { room, status, isHost } = useRoom();
   const active =
-    room != null &&
-    (status === 'live' || status === 'connecting' || status === 'reconnecting');
+    room != null && (status === 'live' || status === 'connecting' || status === 'reconnecting');
   return (
     <View style={styles.roomRow}>
       <View style={styles.roomText}>
@@ -58,6 +57,7 @@ export function ProfileScreen() {
   const [signOutError, setSignOutError] = useState<string | null>(null);
   // Phase 19 — purchase sheet visibility.
   const [purchaseVisible, setPurchaseVisible] = useState(false);
+  const reducedMotion = useReducedMotion();
   const purchaseFlow = usePurchaseFlow(api, () => {
     // After the backend verifies a purchase, refresh server state.
     // Entitlement is read from the server, never set locally.
@@ -87,7 +87,6 @@ export function ProfileScreen() {
   return (
     <Screen testID="profile-screen">
       <Text style={styles.heading}>Profile</Text>
-
       <View style={styles.card} testID="profile-card">
         <View style={styles.avatar}>
           <Text style={styles.avatarText}>
@@ -100,24 +99,21 @@ export function ProfileScreen() {
           <Text style={styles.roleText}>{user?.role ?? '—'}</Text>
         </View>
       </View>
-
       {signOutError ? (
         <View style={styles.banner} testID="signout-error-banner">
           <Text style={styles.bannerText}>{signOutError}</Text>
         </View>
       ) : null}
-
       {/* Phase 28 — synchronized listening rooms. */}
       <Text style={styles.sectionHeading}>Listening rooms</Text>
       <RoomProfileRow />
-
-      <Text style={styles.sectionHeading}>Subscription</Text>      <SubscriptionCard
+      <Text style={styles.sectionHeading}>Subscription</Text>{' '}
+      <SubscriptionCard
         data={subscription.data}
         loading={subscription.state === 'loading' || subscription.state === 'idle'}
         error={subscription.state === 'error' ? subscription.error : null}
         onRetry={subscription.retry}
       />
-
       {!hasActiveSubscription && subscription.state === 'ready' && (
         <View style={styles.subscribeRow}>
           <Button
@@ -127,7 +123,6 @@ export function ProfileScreen() {
           />
         </View>
       )}
-
       {/* Phase 20 — full subscription management (plans, restore, refresh,
           store billing). The screen reads server state; it never decides
           entitlement. */}
@@ -153,18 +148,16 @@ export function ProfileScreen() {
           onPress={() => router.push('/(commerce)/orders')}
         />
       </View>
-
       <Modal
         visible={purchaseVisible}
-        animationType="slide"
+        animationType={modalAnimationFor(reducedMotion)}
         presentationStyle="pageSheet"
         onRequestClose={() => setPurchaseVisible(false)}
       >
-        <Screen testID="purchase-modal">
+        <Screen testID="purchase-modal" modal>
           <PurchaseSheet flow={purchaseFlow} onClose={() => setPurchaseVisible(false)} />
         </Screen>
       </Modal>
-
       <View style={styles.signOut}>
         <Button
           title="Sign out"

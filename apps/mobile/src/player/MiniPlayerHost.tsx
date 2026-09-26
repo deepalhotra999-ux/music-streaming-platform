@@ -10,6 +10,7 @@ import { useSegments } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { PlaybackState, QueueTrack } from '../playback';
 import { usePlayback } from '../playback';
+import { usePlaybackAnnouncements } from './usePlaybackAnnouncements';
 import { spacing } from '../theme';
 import { TAB_BAR_CONTENT_HEIGHT } from './constants';
 import { MiniPlayer } from './MiniPlayer';
@@ -33,6 +34,8 @@ export function MiniPlayerHost() {
   const segments = useSegments();
   const insets = useSafeAreaInsets();
   const { track, state } = usePlayback();
+  // Phase 31 — announce track changes and playback errors to screen readers.
+  usePlaybackAnnouncements();
 
   if (!shouldShowMiniPlayer(track, state, segments as string[])) {
     return null;

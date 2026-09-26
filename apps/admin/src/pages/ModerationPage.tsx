@@ -166,11 +166,11 @@ export function ModerationPage(): React.ReactNode {
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>Status</th>
-                      <th>Target</th>
-                      <th>Reason</th>
-                      <th>Filed</th>
-                      <th>Actions</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Target</th>
+                      <th scope="col">Reason</th>
+                      <th scope="col">Filed</th>
+                      <th scope="col">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -190,6 +190,7 @@ export function ModerationPage(): React.ReactNode {
                           <button
                             type="button"
                             className="link-button"
+                            aria-label={`Review report ${report.id}`}
                             onClick={() => setSelectedId(report.id)}
                           >
                             Review
@@ -482,9 +483,9 @@ function ReportDetailView({
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Action</th>
-                  <th>Details</th>
-                  <th>When</th>
+                  <th scope="col">Action</th>
+                  <th scope="col">Details</th>
+                  <th scope="col">When</th>
                 </tr>
               </thead>
               <tbody>

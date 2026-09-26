@@ -119,7 +119,10 @@ export function PlayerControls({
         accessibilityRole="button"
         accessibilityLabel={playing ? 'Pause' : 'Play'}
         accessibilityState={{ disabled: busy || disabled }}
-        style={({ pressed }) => [styles.playButton, pressed && !busy && !disabled && styles.pressed]}
+        style={({ pressed }) => [
+          styles.playButton,
+          pressed && !busy && !disabled && styles.pressed,
+        ]}
         testID="controls-toggle"
       >
         {busy ? (
@@ -170,7 +173,7 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 36,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryFilled,
     alignItems: 'center',
     justifyContent: 'center',
   },

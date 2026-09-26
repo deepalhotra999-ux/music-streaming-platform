@@ -65,7 +65,12 @@ export function RegisterScreen() {
       </View>
 
       {apiError ? (
-        <View style={styles.banner} testID="register-error-banner">
+        <View
+          style={styles.banner}
+          testID="register-error-banner"
+          accessibilityRole="alert"
+          accessibilityLiveRegion="assertive"
+        >
           <Text style={styles.bannerText}>{apiError}</Text>
         </View>
       ) : null}
@@ -73,6 +78,7 @@ export function RegisterScreen() {
       <View style={styles.field}>
         <TextInput
           label="Display name"
+          required
           testID="register-display-name"
           value={displayName}
           onChangeText={(value) => {
@@ -89,6 +95,7 @@ export function RegisterScreen() {
       <View style={styles.field}>
         <TextInput
           label="Email"
+          required
           testID="register-email"
           value={email}
           onChangeText={(value) => {
@@ -106,6 +113,7 @@ export function RegisterScreen() {
       <View style={styles.field}>
         <TextInput
           label="Password"
+          required
           testID="register-password"
           value={password}
           onChangeText={(value) => {

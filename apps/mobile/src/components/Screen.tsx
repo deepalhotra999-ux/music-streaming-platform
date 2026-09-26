@@ -16,16 +16,30 @@ interface ScreenProps {
    * double top inset; tab screens keep the default ['top', 'bottom']. */
   edges?: Edge[];
   testID?: string;
+  /** Phase 31 — set when the Screen is the root of a Modal so screen
+   * readers treat it as a modal dialog. */
+  modal?: boolean;
 }
 
-export function Screen({ children, scrollable = true, padded = true, edges, testID }: ScreenProps) {
+export function Screen({
+  children,
+  scrollable = true,
+  padded = true,
+  edges,
+  testID,
+  modal = false,
+}: ScreenProps) {
   const content = (
     <View style={[styles.inner, padded && styles.padded]} testID={testID}>
       {children}
     </View>
   );
   return (
-    <SafeAreaView style={styles.safe} edges={edges ?? ['top', 'bottom']}>
+    <SafeAreaView
+      style={styles.safe}
+      edges={edges ?? ['top', 'bottom']}
+      accessibilityViewIsModal={modal}
+    >
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}

@@ -4,9 +4,16 @@ import { Link, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../../auth';
-import { listOrders, type Order } from '../../api/commerce';
+import { listOrders, formatPrice, type Order } from '../../api/commerce';
 import { colors, fontSize, fontWeight, spacing } from '../../theme';
-import { EmptyState, ErrorState, LoadingState, Price, StatusBadge, OfflineNotice } from '../../commerce/ui';
+import {
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  Price,
+  StatusBadge,
+  OfflineNotice,
+} from '../../commerce/ui';
 import { useOnline } from '../../commerce/useOnline';
 
 export default function OrdersScreen() {
@@ -47,7 +54,11 @@ export default function OrdersScreen() {
       contentContainerStyle={styles.list}
       renderItem={({ item }) => (
         <Link href={`/(commerce)/order/${item.id}`} asChild>
-          <Pressable style={styles.card}>
+          <Pressable
+            style={styles.card}
+            accessibilityRole="button"
+            accessibilityLabel={`Order ${item.orderNumber}, ${item.status.replace(/_/g, ' ').toLowerCase()}, ${item.items.length} item${item.items.length === 1 ? '' : 's'}, ${formatPrice(item.totalCents, item.currency)}`}
+          >
             <View style={styles.row}>
               <Text style={styles.number}>#{item.orderNumber}</Text>
               <StatusBadge status={item.status} />

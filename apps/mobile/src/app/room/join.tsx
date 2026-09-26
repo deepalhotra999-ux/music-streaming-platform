@@ -54,32 +54,45 @@ export default function JoinRoomScreen() {
         Paste the invite your host shared, or enter the room ID and token separately.
       </Text>
 
-      <Text style={styles.label}>Room ID</Text>
+      <Text style={styles.label} nativeID="join-room-id-label">
+        Room ID
+      </Text>
       <TextInput
         style={styles.input}
         value={roomId}
         onChangeText={setRoomId}
         placeholder="00000000-0000-0000-0000-000000000000"
         placeholderTextColor={colors.textFaint}
+        accessibilityLabelledBy="join-room-id-label"
+        accessibilityHint="The room ID from your host's invite"
         autoCapitalize="none"
         autoCorrect={false}
         testID="join-room-id"
       />
 
-      <Text style={styles.label}>Invite token</Text>
+      <Text style={styles.label} nativeID="join-room-token-label">
+        Invite token
+      </Text>
       <TextInput
         style={styles.input}
         value={token}
         onChangeText={setToken}
         placeholder="Paste the invite token"
         placeholderTextColor={colors.textFaint}
+        accessibilityLabelledBy="join-room-token-label"
+        accessibilityHint="Single-use token from your host, expires in 7 days"
         autoCapitalize="none"
         autoCorrect={false}
         testID="join-room-token"
       />
 
       {error && (
-        <Text style={styles.error} testID="join-error">
+        <Text
+          style={styles.error}
+          testID="join-error"
+          accessibilityRole="alert"
+          accessibilityLiveRegion="assertive"
+        >
           {error}
         </Text>
       )}
@@ -89,6 +102,9 @@ export default function JoinRoomScreen() {
         onPress={join}
         disabled={busy}
         testID="join-submit"
+        accessibilityRole="button"
+        accessibilityLabel={busy || status === 'joining' ? 'Joining room' : 'Join room'}
+        accessibilityState={{ disabled: busy, busy: busy || status === 'joining' }}
       >
         {busy || status === 'joining' ? (
           <ActivityIndicator color="#fff" />

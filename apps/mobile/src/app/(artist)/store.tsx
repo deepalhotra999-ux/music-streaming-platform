@@ -3,15 +3,10 @@
 
 import { Link, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { TextInput } from '../../components';
 import { useAuth } from '../../auth';
-import {
-  createStore,
-  formatPrice,
-  getMyStore,
-  updateStore,
-  type Store,
-} from '../../api/commerce';
+import { createStore, formatPrice, getMyStore, updateStore, type Store } from '../../api/commerce';
 import { listMyArtists } from '../../api/artist';
 import { colors, fontSize, fontWeight, spacing } from '../../theme';
 import { ErrorState, LoadingState, StatusBadge } from '../../commerce/ui';
@@ -111,30 +106,36 @@ export default function ArtistStoreScreen() {
   if (missing || !store) {
     return (
       <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-        <Text style={styles.title}>Open your store</Text>
-        <Text style={styles.muted}>
-          One store per artist. You can add products once it exists.
+        <Text style={styles.title} accessibilityRole="header">
+          Open your store
         </Text>
+        <Text style={styles.muted}>One store per artist. You can add products once it exists.</Text>
         <TextInput
-          style={styles.input}
+          label="Store name"
+          required
           placeholder="Store name"
-          placeholderTextColor={colors.textMuted}
           value={name}
           onChangeText={setName}
         />
         <TextInput
-          style={[styles.input, styles.multiline]}
-          placeholder="Description (optional)"
-          placeholderTextColor={colors.textMuted}
+          label="Store description"
+          placeholder="Optional"
           value={description}
           onChangeText={setDescription}
           multiline
         />
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? (
+          <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="assertive">
+            {error}
+          </Text>
+        ) : null}
         <Pressable
           style={[styles.primary, (!name.trim() || saving) && styles.disabled]}
           onPress={() => void save()}
           disabled={!name.trim() || saving}
+          accessibilityRole="button"
+          accessibilityLabel={saving ? 'Creating store' : 'Create store'}
+          accessibilityState={{ disabled: !name.trim() || saving, busy: saving }}
         >
           <Text style={styles.primaryLabel}>{saving ? 'Creating…' : 'Create store'}</Text>
         </Pressable>
@@ -152,33 +153,52 @@ export default function ArtistStoreScreen() {
         {formatPrice(store.shippingFlatCents, store.currency)} flat shipping · {store.currency}
       </Text>
 
-      <Text style={styles.sectionTitle}>Settings</Text>
+      <Text style={styles.sectionTitle} accessibilityRole="header">
+        Settings
+      </Text>
       <TextInput
-        style={styles.input}
+        label="Store name"
+        required
         placeholder="Store name"
-        placeholderTextColor={colors.textMuted}
         value={name}
         onChangeText={setName}
       />
       <TextInput
-        style={[styles.input, styles.multiline]}
-        placeholder="Description"
-        placeholderTextColor={colors.textMuted}
+        label="Store description"
+        placeholder="Optional"
         value={description}
         onChangeText={setDescription}
         multiline
       />
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? (
+        <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="assertive">
+          {error}
+        </Text>
+      ) : null}
       <Pressable
         style={[styles.primary, saving && styles.disabled]}
         onPress={() => void save()}
         disabled={saving}
+        accessibilityRole="button"
+        accessibilityLabel={saving ? 'Saving changes' : 'Save changes'}
+        accessibilityState={{ disabled: saving, busy: saving }}
       >
         <Text style={styles.primaryLabel}>{saving ? 'Saving…' : 'Save changes'}</Text>
       </Pressable>
 
       {(store.status === 'ACTIVE' || store.status === 'PAUSED') && (
-        <Pressable style={styles.secondary} onPress={() => void togglePause()} disabled={saving}>
+        <Pressable
+          style={styles.secondary}
+          onPress={() => void togglePause()}
+          disabled={saving}
+          accessibilityRole="button"
+          accessibilityLabel={
+            store.status === 'ACTIVE'
+              ? 'Pause store, hides it from buyers'
+              : 'Activate store, makes it visible to buyers'
+          }
+          accessibilityState={{ disabled: saving }}
+        >
           <Text style={styles.secondaryLabel}>
             {store.status === 'ACTIVE' ? 'Pause store' : 'Activate store'}
           </Text>
@@ -186,7 +206,11 @@ export default function ArtistStoreScreen() {
       )}
 
       <Link href="/(artist)/products" asChild>
-        <Pressable style={styles.secondary}>
+        <Pressable
+          style={styles.secondary}
+          accessibilityRole="button"
+          accessibilityLabel="Manage products"
+        >
           <Text style={styles.secondaryLabel}>Manage products</Text>
         </Pressable>
       </Link>
@@ -216,23 +240,15 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.semibold,
     marginTop: spacing.sm,
   },
-  input: {
-    backgroundColor: colors.surface,
-    borderRadius: 8,
-    padding: spacing.sm,
-    color: colors.text,
-    fontSize: fontSize.md,
-  },
-  multiline: { minHeight: 80, textAlignVertical: 'top' },
   error: { color: colors.error, fontSize: fontSize.sm },
   primary: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryFilled,
     borderRadius: 12,
     padding: spacing.md,
     alignItems: 'center',
   },
   primaryLabel: {
-    color: colors.background,
+    color: colors.onPrimary,
     fontSize: fontSize.md,
     fontWeight: fontWeight.semibold,
   },

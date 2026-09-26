@@ -3,7 +3,8 @@
 
 import { useLocalSearchParams, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { TextInput } from '../../../components';
 import { useAuth } from '../../../auth';
 import {
   addProductImage,
@@ -52,7 +53,9 @@ export default function ArtistProductDetailScreen() {
   const [imageAlt, setImageAlt] = useState('');
 
   // Inventory form
-  const [stockFor, setStockFor] = useState<{ variantId: string | null; label: string } | null>(null);
+  const [stockFor, setStockFor] = useState<{ variantId: string | null; label: string } | null>(
+    null,
+  );
   const [stockQty, setStockQty] = useState('');
 
   const load = useCallback(async () => {
@@ -177,7 +180,11 @@ export default function ArtistProductDetailScreen() {
     [images[index], images[j]] = [images[j], images[index]];
     setActing(true);
     try {
-      await reorderProductImages(client, product.id, images.map((i) => i.id));
+      await reorderProductImages(
+        client,
+        product.id,
+        images.map((i) => i.id),
+      );
       await refresh();
     } catch (e) {
       setActionError(e instanceof Error ? e.message : 'Could not reorder images.');
@@ -217,43 +224,60 @@ export default function ArtistProductDetailScreen() {
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      {actionError ? <Text style={styles.error}>{actionError}</Text> : null}
+      {actionError ? (
+        <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="assertive">
+          {actionError}
+        </Text>
+      ) : null}
 
       <View style={styles.card}>
         <View style={styles.row}>
-          <Text style={styles.sectionTitle}>Details</Text>
+          <Text style={styles.sectionTitle} accessibilityRole="header">
+            Details
+          </Text>
           <StatusBadge status={product.status} />
         </View>
         {editing ? (
           <>
             <TextInput
-              style={styles.input}
+              label="Product title"
+              required
               value={title}
               onChangeText={setTitle}
               placeholder="Title"
-              placeholderTextColor={colors.textMuted}
             />
             <TextInput
-              style={[styles.input, styles.multiline]}
+              label="Product description"
               value={description}
               onChangeText={setDescription}
               placeholder="Description"
-              placeholderTextColor={colors.textMuted}
               multiline
             />
             <TextInput
-              style={styles.input}
+              label={`Price (${product.currency})`}
+              required
               value={price}
               onChangeText={setPrice}
-              placeholder="Price"
-              placeholderTextColor={colors.textMuted}
+              placeholder="0.00"
               keyboardType="decimal-pad"
             />
             <View style={styles.actions}>
-              <Pressable style={styles.button} disabled={acting} onPress={() => void saveProduct()}>
+              <Pressable
+                style={styles.button}
+                disabled={acting}
+                onPress={() => void saveProduct()}
+                accessibilityRole="button"
+                accessibilityLabel={acting ? 'Saving product' : 'Save product details'}
+                accessibilityState={{ disabled: acting, busy: acting }}
+              >
                 <Text style={styles.buttonLabel}>Save</Text>
               </Pressable>
-              <Pressable style={[styles.button, styles.secondary]} onPress={() => setEditing(false)}>
+              <Pressable
+                style={[styles.button, styles.secondary]}
+                onPress={() => setEditing(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel editing product details"
+              >
                 <Text style={styles.buttonLabel}>Cancel</Text>
               </Pressable>
             </View>
@@ -261,11 +285,14 @@ export default function ArtistProductDetailScreen() {
         ) : (
           <>
             <Text style={styles.title}>{product.title}</Text>
-            {product.description ? (
-              <Text style={styles.muted}>{product.description}</Text>
-            ) : null}
+            {product.description ? <Text style={styles.muted}>{product.description}</Text> : null}
             <Text style={styles.price}>{formatPrice(product.priceCents, product.currency)}</Text>
-            <Pressable style={styles.linkButton} onPress={() => setEditing(true)}>
+            <Pressable
+              style={styles.linkButton}
+              onPress={() => setEditing(true)}
+              accessibilityRole="button"
+              accessibilityLabel="Edit product details"
+            >
               <Text style={styles.link}>Edit details</Text>
             </Pressable>
           </>
@@ -273,7 +300,9 @@ export default function ArtistProductDetailScreen() {
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Variants</Text>
+        <Text style={styles.sectionTitle} accessibilityRole="header">
+          Variants
+        </Text>
         {product.variants.length === 0 ? (
           <Text style={styles.muted}>No variants. Simple product.</Text>
         ) : null}
@@ -283,7 +312,14 @@ export default function ArtistProductDetailScreen() {
               <Text style={styles.title}>{v.name}</Text>
               <Text style={styles.muted}>{formatPrice(v.priceCents, product.currency)}</Text>
             </View>
-            <Pressable disabled={acting} onPress={() => void removeVariant(v)}>
+            <Pressable
+              disabled={acting}
+              onPress={() => void removeVariant(v)}
+              accessibilityRole="button"
+              accessibilityLabel={`Delete variant ${v.name}`}
+              accessibilityState={{ disabled: acting }}
+              hitSlop={8}
+            >
               <Text style={styles.danger}>Delete</Text>
             </Pressable>
           </View>
@@ -291,66 +327,100 @@ export default function ArtistProductDetailScreen() {
         {showVariantForm ? (
           <View style={styles.form}>
             <TextInput
-              style={styles.input}
+              label="Variant name"
+              required
               value={variantName}
               onChangeText={setVariantName}
-              placeholder="Variant name (e.g. Large)"
-              placeholderTextColor={colors.textMuted}
+              placeholder="e.g. Large"
+              accessibilityHint="For example Large, or Blue"
             />
             <TextInput
-              style={styles.input}
+              label={`Variant price (${product.currency})`}
+              required
               value={variantPrice}
               onChangeText={setVariantPrice}
-              placeholder="Price"
-              placeholderTextColor={colors.textMuted}
+              placeholder="0.00"
               keyboardType="decimal-pad"
             />
             <TextInput
-              style={styles.input}
+              label="SKU"
               value={variantSku}
               onChangeText={setVariantSku}
-              placeholder="SKU (optional)"
-              placeholderTextColor={colors.textMuted}
+              placeholder="Optional"
             />
             <View style={styles.actions}>
-              <Pressable style={styles.button} disabled={acting} onPress={() => void saveVariant()}>
+              <Pressable
+                style={styles.button}
+                disabled={acting}
+                onPress={() => void saveVariant()}
+                accessibilityRole="button"
+                accessibilityLabel={acting ? 'Adding variant' : 'Add variant'}
+                accessibilityState={{ disabled: acting, busy: acting }}
+              >
                 <Text style={styles.buttonLabel}>Add variant</Text>
               </Pressable>
               <Pressable
                 style={[styles.button, styles.secondary]}
                 onPress={() => setShowVariantForm(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel adding variant"
               >
                 <Text style={styles.buttonLabel}>Cancel</Text>
               </Pressable>
             </View>
           </View>
         ) : (
-          <Pressable style={styles.linkButton} onPress={() => setShowVariantForm(true)}>
+          <Pressable
+            style={styles.linkButton}
+            onPress={() => setShowVariantForm(true)}
+            accessibilityRole="button"
+            accessibilityLabel="Add a new variant"
+          >
             <Text style={styles.link}>+ Add variant</Text>
           </Pressable>
         )}
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Images</Text>
+        <Text style={styles.sectionTitle} accessibilityRole="header">
+          Images
+        </Text>
         {product.images.map((img, i) => (
           <View key={img.id} style={styles.row}>
             <Text style={styles.muted} numberOfLines={1}>
-              {i + 1}. {img.imageUrl}
+              {i + 1}. {img.altText ?? img.imageUrl}
             </Text>
             <View style={styles.actions}>
               {i > 0 ? (
-                <Pressable disabled={acting} onPress={() => void moveImage(i, -1)}>
+                <Pressable
+                  disabled={acting}
+                  onPress={() => void moveImage(i, -1)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Move image ${i + 1} earlier`}
+                  accessibilityState={{ disabled: acting }}
+                  hitSlop={8}
+                >
                   <Text style={styles.link}>↑</Text>
                 </Pressable>
               ) : null}
               {i < product.images.length - 1 ? (
-                <Pressable disabled={acting} onPress={() => void moveImage(i, 1)}>
+                <Pressable
+                  disabled={acting}
+                  onPress={() => void moveImage(i, 1)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Move image ${i + 1} later`}
+                  accessibilityState={{ disabled: acting }}
+                  hitSlop={8}
+                >
                   <Text style={styles.link}>↓</Text>
                 </Pressable>
               ) : null}
               <Pressable
                 disabled={acting}
+                accessibilityRole="button"
+                accessibilityLabel={`Remove image ${i + 1}`}
+                accessibilityState={{ disabled: acting }}
+                hitSlop={8}
                 onPress={() =>
                   void removeProductImage(client, img.id)
                     .then(() => refresh())
@@ -366,28 +436,37 @@ export default function ArtistProductDetailScreen() {
         ))}
         <View style={styles.form}>
           <TextInput
-            style={styles.input}
+            label="Image URL"
+            required
             value={imageUrl}
             onChangeText={setImageUrl}
-            placeholder="Image URL"
-            placeholderTextColor={colors.textMuted}
+            placeholder="https://…"
             autoCapitalize="none"
           />
           <TextInput
-            style={styles.input}
+            label="Alt text"
             value={imageAlt}
             onChangeText={setImageAlt}
-            placeholder="Alt text (optional)"
-            placeholderTextColor={colors.textMuted}
+            placeholder="Optional"
+            accessibilityHint="Describes the image for screen reader users"
           />
-          <Pressable style={styles.button} disabled={acting} onPress={() => void addImage()}>
+          <Pressable
+            style={styles.button}
+            disabled={acting}
+            onPress={() => void addImage()}
+            accessibilityRole="button"
+            accessibilityLabel={acting ? 'Adding image' : 'Add image'}
+            accessibilityState={{ disabled: acting, busy: acting }}
+          >
             <Text style={styles.buttonLabel}>Add image</Text>
           </Pressable>
         </View>
       </View>
 
       <View style={styles.card}>
-        <Text style={styles.sectionTitle}>Inventory</Text>
+        <Text style={styles.sectionTitle} accessibilityRole="header">
+          Inventory
+        </Text>
         <InventoryRowView
           label="Base product"
           row={stockMap.get('base')}
@@ -411,20 +490,29 @@ export default function ArtistProductDetailScreen() {
           <View style={styles.form}>
             <Text style={styles.muted}>Set stock for {stockFor.label}</Text>
             <TextInput
-              style={styles.input}
+              label={`Quantity available for ${stockFor.label}`}
+              required
               value={stockQty}
               onChangeText={setStockQty}
-              placeholder="Quantity"
-              placeholderTextColor={colors.textMuted}
+              placeholder="0"
               keyboardType="number-pad"
             />
             <View style={styles.actions}>
-              <Pressable style={styles.button} disabled={acting} onPress={() => void saveStock()}>
+              <Pressable
+                style={styles.button}
+                disabled={acting}
+                onPress={() => void saveStock()}
+                accessibilityRole="button"
+                accessibilityLabel={acting ? 'Setting stock' : `Set stock for ${stockFor.label}`}
+                accessibilityState={{ disabled: acting, busy: acting }}
+              >
                 <Text style={styles.buttonLabel}>Set stock</Text>
               </Pressable>
               <Pressable
                 style={[styles.button, styles.secondary]}
                 onPress={() => setStockFor(null)}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel stock update"
               >
                 <Text style={styles.buttonLabel}>Cancel</Text>
               </Pressable>
@@ -450,10 +538,17 @@ function InventoryRowView({
       <View>
         <Text style={styles.title}>{label}</Text>
         <Text style={styles.muted}>
-          {row ? `${row.quantityAvailable} available, ${row.quantityReserved} reserved` : 'No stock set'}
+          {row
+            ? `${row.quantityAvailable} available, ${row.quantityReserved} reserved`
+            : 'No stock set'}
         </Text>
       </View>
-      <Pressable onPress={onSet}>
+      <Pressable
+        onPress={onSet}
+        accessibilityRole="button"
+        accessibilityLabel={`Set stock for ${label}`}
+        hitSlop={8}
+      >
         <Text style={styles.link}>Set stock</Text>
       </Pressable>
     </View>
@@ -492,23 +587,15 @@ const styles = StyleSheet.create({
   title: { color: colors.text, fontSize: fontSize.md, fontWeight: fontWeight.semibold },
   muted: { color: colors.textMuted, fontSize: fontSize.sm },
   price: { color: colors.text, fontSize: fontSize.md, fontWeight: fontWeight.semibold },
-  input: {
-    backgroundColor: colors.background,
-    borderRadius: 8,
-    padding: spacing.sm,
-    color: colors.text,
-    fontSize: fontSize.md,
-  },
-  multiline: { minHeight: 80, textAlignVertical: 'top' },
   actions: { flexDirection: 'row', gap: spacing.sm },
   button: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryFilled,
     borderRadius: 8,
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.md,
   },
   secondary: { backgroundColor: colors.background },
-  buttonLabel: { color: '#fff', fontSize: fontSize.sm, fontWeight: fontWeight.semibold },
+  buttonLabel: { color: colors.onPrimary, fontSize: fontSize.sm, fontWeight: fontWeight.semibold },
   linkButton: { marginTop: spacing.xs },
   link: { color: colors.primary, fontSize: fontSize.sm, fontWeight: fontWeight.semibold },
   danger: { color: colors.error, fontSize: fontSize.sm },

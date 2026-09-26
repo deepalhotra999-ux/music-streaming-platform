@@ -10,7 +10,16 @@ import { Ionicons } from '@expo/vector-icons';
 import type { AlbumListItem, ArtistListItem, TrackListItem } from '../api';
 import { apiErrorMessage, createPost, listAlbums, listMyArtists, listTracks } from '../api';
 import { useAuth } from '../auth';
-import { Button, EmptyState, ErrorState, LoadingState, Screen, TextInput } from '../components';
+import {
+  Button,
+  EmptyState,
+  ErrorState,
+  LoadingState,
+  Screen,
+  TextInput,
+  modalAnimationFor,
+  useReducedMotion,
+} from '../components';
 import { colors, spacing } from '../theme';
 
 const MAX_BODY = 2000;
@@ -20,6 +29,7 @@ type PickerKind = 'track' | 'album' | null;
 export function ComposePostScreen() {
   const { api } = useAuth();
   const router = useRouter();
+  const reducedMotion = useReducedMotion();
 
   const [artists, setArtists] = useState<ArtistListItem[]>([]);
   const [loadingArtists, setLoadingArtists] = useState(true);
@@ -152,6 +162,7 @@ export function ComposePostScreen() {
               setAlbumId(null);
             }}
             accessibilityRole="button"
+            accessibilityLabel={`Post as ${artist.name}`}
             accessibilityState={{ selected: artistId === artist.id }}
             testID={`compose-artist-${artist.id}`}
           >
@@ -187,12 +198,19 @@ export function ComposePostScreen() {
           style={[styles.attachButton, trackId != null && styles.attachButtonActive]}
           onPress={() => void openPicker('track')}
           accessibilityRole="button"
+          accessibilityLabel={
+            selectedTrack
+              ? `Attached track: ${selectedTrack.title}. Change track`
+              : 'Attach a track'
+          }
+          accessibilityState={{ selected: trackId != null }}
           testID="compose-attach-track"
         >
           <Ionicons
             name="musical-note"
             size={18}
             color={trackId != null ? colors.onPrimary : colors.primary}
+            accessible={false}
           />
           <Text style={[styles.attachButtonText, trackId != null && styles.attachButtonTextActive]}>
             {selectedTrack ? selectedTrack.title : 'Track'}
@@ -202,12 +220,19 @@ export function ComposePostScreen() {
           style={[styles.attachButton, albumId != null && styles.attachButtonActive]}
           onPress={() => void openPicker('album')}
           accessibilityRole="button"
+          accessibilityLabel={
+            selectedAlbum
+              ? `Attached album: ${selectedAlbum.title}. Change album`
+              : 'Attach an album'
+          }
+          accessibilityState={{ selected: albumId != null }}
           testID="compose-attach-album"
         >
           <Ionicons
             name="disc"
             size={18}
             color={albumId != null ? colors.onPrimary : colors.primary}
+            accessible={false}
           />
           <Text style={[styles.attachButtonText, albumId != null && styles.attachButtonTextActive]}>
             {selectedAlbum ? selectedAlbum.title : 'Album'}
@@ -224,7 +249,7 @@ export function ComposePostScreen() {
             hitSlop={12}
             testID="compose-attach-clear"
           >
-            <Ionicons name="close-circle" size={24} color={colors.textMuted} />
+            <Ionicons name="close-circle" size={24} color={colors.textMuted} accessible={false} />
           </Pressable>
         ) : null}
       </View>
@@ -249,11 +274,15 @@ export function ComposePostScreen() {
       <Modal
         visible={picker != null}
         transparent
-        animationType="slide"
+        animationType={modalAnimationFor(reducedMotion)}
         onRequestClose={() => setPicker(null)}
       >
         <View style={styles.pickerBackdrop}>
-          <View style={styles.pickerSheet}>
+          <View
+            style={styles.pickerSheet}
+            accessibilityViewIsModal
+            accessibilityLabel={picker === 'track' ? 'Attach a track' : 'Attach an album'}
+          >
             <View style={styles.pickerHeader}>
               <Text style={styles.pickerTitle}>
                 {picker === 'track' ? 'Attach a track' : 'Attach an album'}

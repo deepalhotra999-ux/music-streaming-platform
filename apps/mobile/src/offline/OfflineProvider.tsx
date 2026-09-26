@@ -22,6 +22,7 @@ import type { DownloadRecord } from './types';
 import { revalidateAll, type RevalidationSummary } from './revalidator';
 import { startOfflineSync } from './sync';
 import { offlineStorageUsage } from './storage';
+import { useDownloadAnnouncements } from './useDownloadAnnouncements';
 
 export interface OfflineContextValue {
   downloads: DownloadRecord[];
@@ -81,6 +82,9 @@ export function OfflineProvider({ children, api, baseUrl }: OfflineProviderProps
   }, [manager]);
   const refreshRef = useRef(refresh);
   refreshRef.current = refresh;
+
+  // Phase 31 — announce download completions/failures to screen readers.
+  useDownloadAnnouncements(downloads);
 
   useEffect(() => {
     let cancelled = false;

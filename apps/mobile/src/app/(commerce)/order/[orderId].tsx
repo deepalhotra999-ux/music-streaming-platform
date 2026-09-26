@@ -65,9 +65,7 @@ export default function OrderDetailScreen() {
         <Text style={styles.number}>#{order.orderNumber}</Text>
         <StatusBadge status={order.status} />
       </View>
-      <Text style={styles.muted}>
-        Placed {new Date(order.createdAt).toLocaleString()}
-      </Text>
+      <Text style={styles.muted}>Placed {new Date(order.createdAt).toLocaleString()}</Text>
 
       {order.items.map((item) => (
         <View key={item.id} style={styles.line}>
@@ -102,14 +100,27 @@ export default function OrderDetailScreen() {
         <Text style={styles.muted}>Tracking: {order.trackingNumber}</Text>
       ) : null}
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? (
+        <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="assertive">
+          {error}
+        </Text>
+      ) : null}
 
       {unpaid ? (
         <View style={styles.actions}>
           <Pressable
             style={[styles.primary, busy && styles.disabled]}
-            onPress={() => void act(() => retryPayment(client, order.id).then(() => confirmPayment(client, order.id)))}
+            onPress={() =>
+              void act(() =>
+                retryPayment(client, order.id).then(() => confirmPayment(client, order.id)),
+              )
+            }
             disabled={busy}
+            accessibilityRole="button"
+            accessibilityLabel={
+              busy ? 'Retrying payment' : `Retry payment for order ${order.orderNumber}`
+            }
+            accessibilityState={{ disabled: busy, busy }}
           >
             <Text style={styles.primaryLabel}>{busy ? 'Working…' : 'Retry payment'}</Text>
           </Pressable>
@@ -117,6 +128,9 @@ export default function OrderDetailScreen() {
             style={[styles.secondary, busy && styles.disabled]}
             onPress={() => void act(() => cancelOrder(client, order.id))}
             disabled={busy}
+            accessibilityRole="button"
+            accessibilityLabel={`Cancel order ${order.orderNumber}`}
+            accessibilityState={{ disabled: busy }}
           >
             <Text style={styles.secondaryLabel}>Cancel order</Text>
           </Pressable>
@@ -162,13 +176,13 @@ const styles = StyleSheet.create({
   error: { color: colors.error, fontSize: fontSize.sm },
   actions: { gap: spacing.sm, marginTop: spacing.md },
   primary: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryFilled,
     borderRadius: 12,
     padding: spacing.md,
     alignItems: 'center',
   },
   primaryLabel: {
-    color: colors.background,
+    color: colors.onPrimary,
     fontSize: fontSize.md,
     fontWeight: fontWeight.semibold,
   },

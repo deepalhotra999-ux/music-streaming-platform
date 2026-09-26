@@ -113,8 +113,8 @@ export function AnalyticsPage(): React.ReactNode {
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>Outcome</th>
-                      <th>Count</th>
+                      <th scope="col">Outcome</th>
+                      <th scope="col">Count</th>
                     </tr>
                   </thead>
                   <tbody>

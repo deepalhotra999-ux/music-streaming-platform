@@ -5,9 +5,21 @@ import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { colors, fontSize, fontWeight, spacing } from '../theme';
 import { Button } from './Button';
 
-export function LoadingState({ message = 'Loading…', testID }: { message?: string; testID?: string }) {
+export function LoadingState({
+  message = 'Loading…',
+  testID,
+}: {
+  message?: string;
+  testID?: string;
+}) {
   return (
-    <View style={styles.container} testID={testID ?? 'loading-state'}>
+    <View
+      style={styles.container}
+      testID={testID ?? 'loading-state'}
+      accessibilityRole="progressbar"
+      accessibilityLabel={message}
+      accessibilityLiveRegion="polite"
+    >
       <ActivityIndicator size="large" color={colors.primary} />
       <Text style={styles.message}>{message}</Text>
     </View>
@@ -43,9 +55,19 @@ interface ErrorStateProps {
   testID?: string;
 }
 
-export function ErrorState({ message, retryTitle = 'Try again', onRetry, testID }: ErrorStateProps) {
+export function ErrorState({
+  message,
+  retryTitle = 'Try again',
+  onRetry,
+  testID,
+}: ErrorStateProps) {
   return (
-    <View style={styles.container} testID={testID ?? 'error-state'}>
+    <View
+      style={styles.container}
+      testID={testID ?? 'error-state'}
+      accessibilityRole="alert"
+      accessibilityLiveRegion="assertive"
+    >
       <Text style={styles.title}>Something went wrong</Text>
       <Text style={styles.message}>{message}</Text>
       {onRetry ? (

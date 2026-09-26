@@ -19,7 +19,11 @@ export function AdminLayout(): React.ReactNode {
 
   return (
     <div className="app-shell">
-      <aside className="sidebar">
+      {/* Phase 31 — skip link for keyboard users. */}
+      <a href="#admin-main-content" className="skip-link">
+        Skip to main content
+      </a>
+      <aside className="sidebar" aria-label="Admin">
         <div className="brand">Waveform Admin</div>
         <nav aria-label="Admin sections">
           <ul>
@@ -53,7 +57,7 @@ export function AdminLayout(): React.ReactNode {
             Log out
           </button>
         </header>
-        <main className="content">
+        <main className="content" id="admin-main-content" tabIndex={-1}>
           <Outlet />
         </main>
       </div>

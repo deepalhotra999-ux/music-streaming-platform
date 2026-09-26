@@ -7,7 +7,12 @@ import { formatPrice } from '../api/commerce';
 
 export function LoadingState({ label = 'Loading…' }: { label?: string }) {
   return (
-    <View style={styles.center}>
+    <View
+      style={styles.center}
+      accessibilityRole="progressbar"
+      accessibilityLabel={label}
+      accessibilityLiveRegion="polite"
+    >
       <ActivityIndicator color={colors.primary} />
       <Text style={styles.muted}>{label}</Text>
     </View>
@@ -35,9 +40,14 @@ export function OfflineNotice() {
 
 export function ErrorState({ message, onRetry }: { message: string; onRetry: () => void }) {
   return (
-    <View style={styles.center}>
+    <View style={styles.center} accessibilityRole="alert" accessibilityLiveRegion="assertive">
       <Text style={styles.error}>{message}</Text>
-      <Pressable style={styles.retryButton} onPress={onRetry}>
+      <Pressable
+        style={styles.retryButton}
+        onPress={onRetry}
+        accessibilityRole="button"
+        accessibilityLabel="Retry"
+      >
         <Text style={styles.retryLabel}>Retry</Text>
       </Pressable>
     </View>
@@ -99,10 +109,10 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.sm,
     paddingHorizontal: spacing.lg,
     borderRadius: 8,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryFilled,
   },
   retryLabel: {
-    color: colors.background,
+    color: colors.onPrimary,
     fontSize: fontSize.md,
     fontWeight: fontWeight.semibold,
   },

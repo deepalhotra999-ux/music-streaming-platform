@@ -40,12 +40,23 @@ function StatusBanner() {
   const { status, resync, error } = useRoom();
   if (status === 'reconnecting' || status === 'connecting' || status === 'joining') {
     return (
-      <View style={[styles.banner, styles.bannerInfo]} testID="room-reconnecting">
+      <View
+        style={[styles.banner, styles.bannerInfo]}
+        testID="room-reconnecting"
+        accessibilityLiveRegion="polite"
+        accessibilityLabel={status === 'joining' ? 'Joining room' : 'Reconnecting to room'}
+      >
         <ActivityIndicator size="small" color={colors.primary} />
         <Text style={styles.bannerText}>
           {status === 'joining' ? 'Joining room…' : 'Reconnecting…'}
         </Text>
-        <Pressable onPress={() => void resync()} testID="room-resync">
+        <Pressable
+          onPress={() => void resync()}
+          testID="room-resync"
+          accessibilityRole="button"
+          accessibilityLabel="Retry connection"
+          hitSlop={8}
+        >
           <Text style={styles.bannerAction}>Retry</Text>
         </Pressable>
       </View>
@@ -53,15 +64,24 @@ function StatusBanner() {
   }
   if (status === 'ended') {
     return (
-      <View style={[styles.banner, styles.bannerEnded]} testID="room-ended">
-        <Ionicons name="flag-outline" size={16} color={colors.textMuted} />
+      <View
+        style={[styles.banner, styles.bannerEnded]}
+        testID="room-ended"
+        accessibilityLiveRegion="polite"
+      >
+        <Ionicons name="flag-outline" size={16} color={colors.textMuted} accessible={false} />
         <Text style={styles.bannerText}>This room has ended.</Text>
       </View>
     );
   }
   if (status === 'error' && error) {
     return (
-      <View style={[styles.banner, styles.bannerError]} testID="room-error">
+      <View
+        style={[styles.banner, styles.bannerError]}
+        testID="room-error"
+        accessibilityRole="alert"
+        accessibilityLiveRegion="assertive"
+      >
         <Text style={styles.bannerText}>{error}</Text>
       </View>
     );
@@ -81,7 +101,9 @@ function HostControls() {
       <Pressable
         onPress={hostPrevious}
         disabled={!live || !canNav}
+        accessibilityRole="button"
         accessibilityLabel="Previous track"
+        accessibilityState={{ disabled: !live || !canNav }}
         testID="room-previous"
         style={styles.controlButton}
       >
@@ -89,25 +111,30 @@ function HostControls() {
           name="play-skip-back"
           size={32}
           color={live && canNav ? colors.text : colors.textFaint}
+          accessible={false}
         />
       </Pressable>
       <Pressable
         onPress={playing ? hostPause : hostPlay}
         disabled={!live}
+        accessibilityRole="button"
         accessibilityLabel={playing ? 'Pause room' : 'Play room'}
+        accessibilityState={{ disabled: !live }}
         testID={playing ? 'room-pause' : 'room-play'}
         style={[styles.controlButton, styles.playButton]}
       >
         {playback.state === 'loading' || playback.state === 'buffering' ? (
           <ActivityIndicator color="#fff" />
         ) : (
-          <Ionicons name={playing ? 'pause' : 'play'} size={36} color="#fff" />
+          <Ionicons name={playing ? 'pause' : 'play'} size={36} color="#fff" accessible={false} />
         )}
       </Pressable>
       <Pressable
         onPress={hostNext}
         disabled={!live || !canNav}
+        accessibilityRole="button"
         accessibilityLabel="Next track"
+        accessibilityState={{ disabled: !live || !canNav }}
         testID="room-next"
         style={styles.controlButton}
       >
@@ -115,6 +142,7 @@ function HostControls() {
           name="play-skip-forward"
           size={32}
           color={live && canNav ? colors.text : colors.textFaint}
+          accessible={false}
         />
       </Pressable>
     </View>
@@ -202,7 +230,13 @@ export default function RoomScreen() {
     <View style={styles.container}>
       <StatusBanner />
 
-      <View style={styles.nowPlaying}>
+      <View
+        style={styles.nowPlaying}
+        accessible
+        accessibilityLabel={
+          track ? `Now playing: ${track.title} by ${track.artistName}` : 'No track playing yet'
+        }
+      >
         <ArtworkImage
           uri={track?.artworkUrl}
           title={track?.title ?? 'No track'}
@@ -233,10 +267,23 @@ export default function RoomScreen() {
         </View>
       </View>
 
-      {/* Progress: the engine position is the drift-corrected room position. */}
+      {/* Progress: the engine position is the drift-corrected room position.
+          Exposed as a progressbar with a static value (no live region: the
+          position updates every second and must not announce continuously). */}
       <View style={styles.progressRow}>
         <Text style={styles.time}>{formatDuration(positionMs)}</Text>
-        <View style={styles.progressBar} testID="room-progress">
+        <View
+          style={styles.progressBar}
+          testID="room-progress"
+          accessibilityRole="progressbar"
+          accessibilityLabel={`Playback progress: ${formatDuration(positionMs)} of ${formatDuration(durationMs)}`}
+          accessibilityValue={{
+            min: 0,
+            max: durationMs,
+            now: positionMs,
+            text: `${formatDuration(positionMs)} of ${formatDuration(durationMs)}`,
+          }}
+        >
           <View
             style={[
               styles.progressFill,
@@ -252,7 +299,7 @@ export default function RoomScreen() {
         <HostControls />
       ) : (
         <View style={styles.participantNote} testID="room-participant-note">
-          <Ionicons name="headset-outline" size={18} color={colors.textMuted} />
+          <Ionicons name="headset-outline" size={18} color={colors.textMuted} accessible={false} />
           <Text style={styles.participantText}>
             Sit back — {hostName} controls playback for everyone.
           </Text>
@@ -260,9 +307,19 @@ export default function RoomScreen() {
       )}
 
       <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>Up next</Text>
+        <Text style={styles.sectionTitle} accessibilityRole="header">
+          Up next
+        </Text>
         {isHost && status === 'live' && (
-          <Pressable onPress={invite} disabled={inviting} testID="room-invite">
+          <Pressable
+            onPress={invite}
+            disabled={inviting}
+            testID="room-invite"
+            accessibilityRole="button"
+            accessibilityLabel={inviting ? 'Creating invite' : 'Invite to room'}
+            accessibilityState={{ disabled: inviting, busy: inviting }}
+            hitSlop={8}
+          >
             <Text style={styles.inviteAction}>{inviting ? 'Creating…' : '+ Invite'}</Text>
           </Pressable>
         )}
@@ -288,15 +345,22 @@ export default function RoomScreen() {
                 name={room.playbackState === 'PLAYING' ? 'volume-high' : 'volume-mute'}
                 size={16}
                 color={colors.primary}
+                accessible={false}
               />
             )}
           </View>
         )}
         ListHeaderComponent={
           <View style={styles.membersBlock}>
-            <Text style={styles.sectionTitle}>In this room ({members.length})</Text>
+            <Text style={styles.sectionTitle} accessibilityRole="header">
+              In this room ({members.length})
+            </Text>
             {members.map((member) => (
-              <View key={member.userId} style={styles.memberRow}>
+              <View
+                key={member.userId}
+                style={styles.memberRow}
+                accessibilityLabel={`${member.displayName}${member.role === 'HOST' ? ', host' : ''}`}
+              >
                 <View style={styles.avatar}>
                   <Text style={styles.avatarText}>
                     {member.displayName.charAt(0).toUpperCase()}
@@ -306,7 +370,7 @@ export default function RoomScreen() {
                   {member.displayName}
                 </Text>
                 {member.role === 'HOST' && (
-                  <Ionicons name="star" size={14} color={colors.primary} />
+                  <Ionicons name="star" size={14} color={colors.primary} accessible={false} />
                 )}
               </View>
             ))}
@@ -316,7 +380,14 @@ export default function RoomScreen() {
 
       <View style={styles.footer}>
         {isHost && status !== 'ended' ? (
-          <Pressable style={styles.dangerButton} onPress={confirmEnd} testID="room-end">
+          <Pressable
+            style={styles.dangerButton}
+            onPress={confirmEnd}
+            testID="room-end"
+            accessibilityRole="button"
+            accessibilityLabel="End room for everyone"
+            accessibilityHint="Disconnects all listeners. This cannot be undone."
+          >
             <Text style={styles.dangerLabel}>End room for everyone</Text>
           </Pressable>
         ) : null}
@@ -325,6 +396,9 @@ export default function RoomScreen() {
           onPress={() => void doLeave()}
           disabled={leaving}
           testID="room-leave"
+          accessibilityRole="button"
+          accessibilityLabel={leaving ? 'Leaving room' : 'Leave room'}
+          accessibilityState={{ disabled: leaving, busy: leaving }}
         >
           <Text style={styles.leaveLabel}>{leaving ? 'Leaving…' : 'Leave room'}</Text>
         </Pressable>
@@ -402,7 +476,7 @@ const styles = StyleSheet.create({
     paddingVertical: 3,
   },
   hostBadge: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryFilled,
   },
   guestBadge: {
     backgroundColor: colors.surfaceElevated,
@@ -410,7 +484,7 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
   },
   roleText: {
-    color: '#fff',
+    color: colors.onPrimary,
     fontSize: fontSize.sm,
     fontWeight: fontWeight.bold,
   },
@@ -457,7 +531,7 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
   },
   playButton: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryFilled,
     borderRadius: 36,
     width: 72,
     height: 72,

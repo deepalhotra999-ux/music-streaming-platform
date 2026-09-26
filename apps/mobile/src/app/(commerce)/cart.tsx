@@ -63,13 +63,19 @@ export default function CartScreen() {
   return (
     <View style={styles.root}>
       <FlatList
-        data={cart.storeGroups.length > 0 ? cart.storeGroups : [{ storeId: '', storeName: '', items: cart.items }]}
+        data={
+          cart.storeGroups.length > 0
+            ? cart.storeGroups
+            : [{ storeId: '', storeName: '', items: cart.items }]
+        }
         keyExtractor={(g) => g.storeId || 'ungrouped'}
         contentContainerStyle={styles.list}
         renderItem={({ item: group }) => (
           <View>
             {group.storeName ? (
-              <Text style={styles.groupTitle}>{group.storeName}</Text>
+              <Text style={styles.groupTitle} accessibilityRole="header">
+                {group.storeName}
+              </Text>
             ) : null}
             {group.items.map((item) => (
               <View key={item.id} style={styles.card}>
@@ -77,25 +83,36 @@ export default function CartScreen() {
                   <Text style={styles.title} numberOfLines={2}>
                     {item.product.title}
                   </Text>
-                  <Pressable onPress={() => void setQty(item, 0)}>
+                  <Pressable
+                    onPress={() => void setQty(item, 0)}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove ${item.product.title} from cart`}
+                    hitSlop={8}
+                  >
                     <Text style={styles.remove}>Remove</Text>
                   </Pressable>
                 </View>
-                {item.variant ? (
-                  <Text style={styles.muted}>{item.variant.name}</Text>
-                ) : null}
+                {item.variant ? <Text style={styles.muted}>{item.variant.name}</Text> : null}
                 <View style={styles.row}>
                   <View style={styles.qtyRow}>
                     <Pressable
                       style={styles.qtyButton}
                       onPress={() => void setQty(item, item.quantity - 1)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Decrease quantity of ${item.product.title}`}
+                      hitSlop={8}
                     >
                       <Text style={styles.qtyLabel}>−</Text>
                     </Pressable>
-                    <Text style={styles.qtyValue}>{item.quantity}</Text>
+                    <Text style={styles.qtyValue} accessibilityLabel={`Quantity: ${item.quantity}`}>
+                      {item.quantity}
+                    </Text>
                     <Pressable
                       style={styles.qtyButton}
                       onPress={() => void setQty(item, item.quantity + 1)}
+                      accessibilityRole="button"
+                      accessibilityLabel={`Increase quantity of ${item.product.title}`}
+                      hitSlop={8}
                     >
                       <Text style={styles.qtyLabel}>+</Text>
                     </Pressable>
@@ -110,7 +127,12 @@ export default function CartScreen() {
           </View>
         )}
       />
-      <Pressable style={styles.checkout} onPress={() => router.push('/(commerce)/checkout')}>
+      <Pressable
+        style={styles.checkout}
+        onPress={() => router.push('/(commerce)/checkout')}
+        accessibilityRole="button"
+        accessibilityLabel="Proceed to checkout"
+      >
         <Text style={styles.checkoutLabel}>Checkout</Text>
       </Pressable>
     </View>
@@ -161,13 +183,13 @@ const styles = StyleSheet.create({
   qtyValue: { color: colors.text, fontSize: fontSize.md, fontWeight: fontWeight.semibold },
   checkout: {
     margin: spacing.md,
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryFilled,
     borderRadius: 12,
     padding: spacing.md,
     alignItems: 'center',
   },
   checkoutLabel: {
-    color: colors.background,
+    color: colors.onPrimary,
     fontSize: fontSize.md,
     fontWeight: fontWeight.semibold,
   },

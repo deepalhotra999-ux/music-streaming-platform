@@ -8,7 +8,7 @@ import { useEffect, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { PlaylistVisibility } from '../../api';
-import { Button, TextInput } from '../../components';
+import { Button, TextInput, modalAnimationFor, useReducedMotion } from '../../components';
 import { colors, fontSize, fontWeight, radii, spacing } from '../../theme';
 
 const VISIBILITY_OPTIONS: { value: PlaylistVisibility; label: string; hint: string }[] = [
@@ -48,6 +48,7 @@ export function PlaylistForm({
     initial?.visibility ?? 'PRIVATE',
   );
   const [titleError, setTitleError] = useState<string | undefined>(undefined);
+  const reducedMotion = useReducedMotion();
 
   // Reset fields whenever the modal opens (fresh create, or fresh edit of a
   // possibly-updated playlist).
@@ -76,12 +77,16 @@ export function PlaylistForm({
   return (
     <Modal
       visible={visible}
-      animationType="slide"
+      animationType={modalAnimationFor(reducedMotion)}
       presentationStyle="pageSheet"
       onRequestClose={onClose}
       testID="playlist-form-modal"
     >
-      <View style={styles.container}>
+      <View
+        style={styles.container}
+        accessibilityViewIsModal
+        accessibilityLabel={mode === 'create' ? 'New playlist' : 'Edit playlist'}
+      >
         <View style={styles.header}>
           <Text style={styles.heading}>{mode === 'create' ? 'New playlist' : 'Edit playlist'}</Text>
           <Pressable

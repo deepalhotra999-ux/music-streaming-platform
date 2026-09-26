@@ -5,7 +5,8 @@
 
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { TextInput } from '../../components';
 import { useAuth } from '../../auth';
 import {
   cancelOrder,
@@ -123,23 +124,29 @@ export default function CheckoutScreen() {
 
   return (
     <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <Text style={styles.sectionTitle}>Shipping address</Text>
+      <Text style={styles.sectionTitle} accessibilityRole="header">
+        Shipping address
+      </Text>
       {(
         [
-          ['name', 'Full name'],
-          ['line1', 'Street address'],
-          ['line2', 'Apt, suite, etc. (optional)'],
-          ['city', 'City'],
-          ['region', 'State / province'],
-          ['postalCode', 'Postal code'],
-          ['country', 'Country (2-letter code)'],
+          ['name', 'Full name', true],
+          ['line1', 'Street address', true],
+          ['line2', 'Apt, suite, etc. (optional)', false],
+          ['city', 'City', true],
+          ['region', 'State / province', true],
+          ['postalCode', 'Postal code', true],
+          ['country', 'Country (2-letter code)', true],
         ] as const
-      ).map(([key, label]) => (
+      ).map(([key, label, required]) => (
         <TextInput
           key={key}
-          style={styles.input}
+          label={label}
+          required={required}
           placeholder={label}
           placeholderTextColor={colors.textMuted}
+          accessibilityHint={
+            key === 'country' ? 'Two letter country code, for example US' : undefined
+          }
           value={address[key]}
           onChangeText={(v) => set(key, v)}
           autoCapitalize={key === 'country' ? 'characters' : 'words'}
@@ -161,16 +168,22 @@ export default function CheckoutScreen() {
         </View>
       ))}
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {error ? (
+        <Text style={styles.error} accessibilityRole="alert" accessibilityLiveRegion="assertive">
+          {error}
+        </Text>
+      ) : null}
 
       <Pressable
         style={[styles.pay, (!valid || phase === 'paying') && styles.disabled]}
         onPress={() => void pay()}
         disabled={!valid || phase === 'paying'}
+        accessibilityRole="button"
+        accessibilityLabel={phase === 'paying' ? 'Processing payment' : 'Pay now'}
+        accessibilityState={{ disabled: !valid || phase === 'paying', busy: phase === 'paying' }}
+        accessibilityHint="Completes the purchase for the items in your cart"
       >
-        <Text style={styles.payLabel}>
-          {phase === 'paying' ? 'Processing…' : 'Pay now'}
-        </Text>
+        <Text style={styles.payLabel}>{phase === 'paying' ? 'Processing…' : 'Pay now'}</Text>
       </Pressable>
       <Text style={styles.hint}>
         One order per store. Unpaid orders can be retried or canceled from the order screen.
@@ -178,6 +191,8 @@ export default function CheckoutScreen() {
       {failedOrder ? (
         <Pressable
           style={styles.secondary}
+          accessibilityRole="button"
+          accessibilityLabel="Cancel unpaid order"
           onPress={async () => {
             await cancelOrder(client, failedOrder.id);
             void load();
@@ -201,13 +216,6 @@ const styles = StyleSheet.create({
     fontWeight: fontWeight.semibold,
     marginTop: spacing.sm,
   },
-  input: {
-    backgroundColor: colors.surface,
-    borderRadius: 8,
-    padding: spacing.sm,
-    color: colors.text,
-    fontSize: fontSize.md,
-  },
   line: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -217,7 +225,7 @@ const styles = StyleSheet.create({
   lineTitle: { color: colors.text, fontSize: fontSize.sm, flex: 1 },
   error: { color: colors.error, fontSize: fontSize.sm },
   pay: {
-    backgroundColor: colors.primary,
+    backgroundColor: colors.primaryFilled,
     borderRadius: 12,
     padding: spacing.md,
     alignItems: 'center',
@@ -225,7 +233,7 @@ const styles = StyleSheet.create({
   },
   disabled: { opacity: 0.5 },
   payLabel: {
-    color: colors.background,
+    color: colors.onPrimary,
     fontSize: fontSize.md,
     fontWeight: fontWeight.semibold,
   },

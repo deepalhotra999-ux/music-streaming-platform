@@ -132,9 +132,9 @@ function ArtistOverviewList(): React.ReactNode {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Name</th>
-                  <th>Verified</th>
-                  <th>Followers</th>
+                  <th scope="col">Name</th>
+                  <th scope="col">Verified</th>
+                  <th scope="col">Followers</th>
                 </tr>
               </thead>
               <tbody>
@@ -236,12 +236,12 @@ function CatalogAlbumsTab(): React.ReactNode {
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>Title</th>
-                      <th>Artist</th>
-                      <th>Type</th>
-                      <th>Released</th>
-                      <th>Tracks</th>
-                      <th>Actions</th>
+                      <th scope="col">Title</th>
+                      <th scope="col">Artist</th>
+                      <th scope="col">Type</th>
+                      <th scope="col">Released</th>
+                      <th scope="col">Tracks</th>
+                      <th scope="col">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -257,6 +257,7 @@ function CatalogAlbumsTab(): React.ReactNode {
                             <button
                               type="button"
                               className="link-button"
+                              aria-label={`View album ${album.title}`}
                               onClick={() => setSelectedId(album.id)}
                             >
                               View
@@ -265,6 +266,7 @@ function CatalogAlbumsTab(): React.ReactNode {
                               type="button"
                               className="link-button"
                               style={{ color: '#ff9a9d' }}
+                              aria-label={`Delete album ${album.title}`}
                               onClick={() => void handleDelete(album)}
                             >
                               Delete
@@ -364,10 +366,10 @@ function AlbumDetailView({
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>#</th>
-                  <th>Title</th>
-                  <th>Duration</th>
-                  <th>Status</th>
+                  <th scope="col">#</th>
+                  <th scope="col">Title</th>
+                  <th scope="col">Duration</th>
+                  <th scope="col">Status</th>
                 </tr>
               </thead>
               <tbody>
@@ -498,12 +500,12 @@ function CatalogTracksTab(): React.ReactNode {
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>Title</th>
-                      <th>Artist</th>
-                      <th>Album</th>
-                      <th>Status</th>
-                      <th>Plays</th>
-                      <th>Actions</th>
+                      <th scope="col">Title</th>
+                      <th scope="col">Artist</th>
+                      <th scope="col">Album</th>
+                      <th scope="col">Status</th>
+                      <th scope="col">Plays</th>
+                      <th scope="col">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -521,6 +523,7 @@ function CatalogTracksTab(): React.ReactNode {
                             <button
                               type="button"
                               className="link-button"
+                              aria-label={`View track ${track.title}`}
                               onClick={() => setSelectedId(track.id)}
                             >
                               View
@@ -529,6 +532,7 @@ function CatalogTracksTab(): React.ReactNode {
                               type="button"
                               className="link-button"
                               style={{ color: '#ff9a9d' }}
+                              aria-label={`Delete track ${track.title}`}
                               onClick={() => void handleDelete(track)}
                             >
                               Delete
@@ -685,7 +689,12 @@ function TrackDetailView({
         </div>
         <div className="toolbar" style={{ marginTop: 16 }}>
           {track.status === 'TAKEDOWN' ? (
-            <button type="button" className="btn btn-primary" disabled={saving} onClick={() => void handleRestore()}>
+            <button
+              type="button"
+              className="btn btn-primary"
+              disabled={saving}
+              onClick={() => void handleRestore()}
+            >
               {saving ? 'Restoring…' : 'Restore track'}
             </button>
           ) : (
@@ -707,9 +716,8 @@ function TrackDetailView({
           </button>
         </div>
         <p className="muted" style={{ fontSize: 13 }}>
-          Takedown hides the track from the public catalog without deleting it. Delete is a
-          soft delete (the track is hidden and recoverable). Both actions are recorded in the
-          audit log.
+          Takedown hides the track from the public catalog without deleting it. Delete is a soft
+          delete (the track is hidden and recoverable). Both actions are recorded in the audit log.
         </p>
       </div>
       {dialog}

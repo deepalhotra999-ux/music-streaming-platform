@@ -9,6 +9,7 @@ import { useRef, useState } from 'react';
 import type { AccessibilityActionEvent, LayoutChangeEvent } from 'react-native';
 import { StyleSheet, View } from 'react-native';
 import { colors } from '../theme';
+import { formatDuration } from '../catalog';
 import { SEEK_STEP_MS } from './constants';
 
 /** Map a horizontal touch position to a seek target. Pure and unit-tested. */
@@ -77,7 +78,15 @@ export function SeekBar({
       onTouchCancel={() => setScrubMs(null)}
       accessibilityRole="adjustable"
       accessibilityLabel="Seek"
-      accessibilityValue={{ min: 0, max: Math.round(durationMs), now: Math.round(positionMs) }}
+      accessibilityValue={{
+        min: 0,
+        max: Math.round(durationMs),
+        now: Math.round(positionMs),
+        // Phase 31 — raw milliseconds are meaningless when announced;
+        // expose a human-readable position/duration instead.
+        text: `${formatDuration(positionMs)} of ${formatDuration(durationMs)}`,
+      }}
+      accessibilityState={{ disabled }}
       accessibilityActions={[{ name: 'increment' }, { name: 'decrement' }]}
       onAccessibilityAction={onAccessibilityAction}
       testID={testID ?? 'seek-bar'}

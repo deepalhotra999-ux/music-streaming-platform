@@ -56,7 +56,7 @@ describe('ArtistsPage', () => {
     const { patchCalls } = renderArtists();
 
     expect(await screen.findByText('Test Artist')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'View' }));
+    fireEvent.click(screen.getByRole('button', { name: 'View artist Test Artist' }));
 
     // Detail view loads with the artist unverified.
     expect(await screen.findByText('Unverified')).toBeInTheDocument();

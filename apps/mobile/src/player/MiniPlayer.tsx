@@ -54,7 +54,7 @@ export function MiniPlayerView({
       <Pressable
         onPress={onExpand}
         accessibilityRole="button"
-        accessibilityLabel={`Open player: ${track.title} by ${track.artistName}`}
+        accessibilityLabel={`Open player: ${track.title} by ${track.artistName}${errored ? ', playback error' : ''}`}
         style={({ pressed }) => [styles.info, pressed && styles.pressed]}
         testID="mini-player-expand"
       >
@@ -78,12 +78,7 @@ export function MiniPlayerView({
           <ActivityIndicator size="small" color={colors.primary} testID="mini-player-loading" />
         ) : null}
         {errored ? (
-          <Ionicons
-            name="alert-circle"
-            size={20}
-            color={colors.error}
-            testID="mini-player-error"
-          />
+          <Ionicons name="alert-circle" size={20} color={colors.error} testID="mini-player-error" />
         ) : null}
       </Pressable>
       <Pressable
@@ -140,7 +135,9 @@ export function MiniPlayer() {
       isOfflinePlayback={playback.isOfflinePlayback}
       inRoom={inRoom}
       onToggle={
-        inRoom && roomHost ? () => (roomPlaying ? room.hostPause() : room.hostPlay()) : playback.toggle
+        inRoom && roomHost
+          ? () => (roomPlaying ? room.hostPause() : room.hostPlay())
+          : playback.toggle
       }
       onClose={playback.stop}
       onExpand={() => router.push('/player')}

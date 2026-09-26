@@ -122,11 +122,11 @@ export function AuditLogPage(): React.ReactNode {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Time</th>
-                  <th>Action</th>
-                  <th>Actor</th>
-                  <th>Target</th>
-                  <th>Metadata</th>
+                  <th scope="col">Time</th>
+                  <th scope="col">Action</th>
+                  <th scope="col">Actor</th>
+                  <th scope="col">Target</th>
+                  <th scope="col">Metadata</th>
                 </tr>
               </thead>
               <tbody>

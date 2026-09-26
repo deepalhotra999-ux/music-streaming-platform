@@ -105,11 +105,11 @@ export function ArtistsPage(): React.ReactNode {
                 <table className="data-table">
                   <thead>
                     <tr>
-                      <th>Name</th>
-                      <th>Verified</th>
-                      <th>Followers</th>
-                      <th>Created</th>
-                      <th>Actions</th>
+                      <th scope="col">Name</th>
+                      <th scope="col">Verified</th>
+                      <th scope="col">Followers</th>
+                      <th scope="col">Created</th>
+                      <th scope="col">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -125,6 +125,7 @@ export function ArtistsPage(): React.ReactNode {
                           <button
                             type="button"
                             className="link-button"
+                            aria-label={`View artist ${artist.name}`}
                             onClick={() => setSelectedId(artist.id)}
                           >
                             View
@@ -298,8 +299,8 @@ function ArtistDetailView({
               <table className="data-table">
                 <thead>
                   <tr>
-                    <th>Action</th>
-                    <th>When</th>
+                    <th scope="col">Action</th>
+                    <th scope="col">When</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -346,8 +347,7 @@ function ArtistDetailView({
           </div>
         )}
         <p className="muted" style={{ fontSize: 13 }}>
-          Server-computed from the play events stream. A stream is a session with a completed
-          play.
+          Server-computed from the play events stream. A stream is a session with a completed play.
         </p>
       </div>
       {dialog}

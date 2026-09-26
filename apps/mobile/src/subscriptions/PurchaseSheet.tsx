@@ -45,15 +45,26 @@ export function PurchaseSheet({ flow, onClose }: PurchaseSheetProps) {
       </View>
 
       {state === 'loading-products' && (
-        <View style={styles.center} testID="purchase-loading">
+        <View
+          style={styles.center}
+          testID="purchase-loading"
+          accessibilityRole="progressbar"
+          accessibilityLabel="Loading subscription plans"
+          accessibilityLiveRegion="polite"
+        >
           <ActivityIndicator size="large" color={colors.primary} />
           <Text style={styles.muted}>Loading plans…</Text>
         </View>
       )}
 
       {state === 'failed' && !products && (
-        <View style={styles.center} testID="purchase-error">
-          <Ionicons name="alert-circle-outline" size={32} color={colors.error} />
+        <View
+          style={styles.center}
+          testID="purchase-error"
+          accessibilityRole="alert"
+          accessibilityLiveRegion="assertive"
+        >
+          <Ionicons name="alert-circle-outline" size={32} color={colors.error} accessible={false} />
           <Text style={styles.errorText}>Couldn&apos;t load plans.</Text>
           <Text style={styles.muted}>{error}</Text>
           <Button title="Retry" variant="secondary" onPress={load} testID="purchase-retry" />
@@ -73,7 +84,14 @@ export function PurchaseSheet({ flow, onClose }: PurchaseSheetProps) {
               const detail = sku ? storeDetails[sku] : undefined;
               const busy = state === 'purchasing' || state === 'verifying';
               return (
-                <View key={p.planCode} style={styles.productCard} testID={`product-${p.planCode}`}>
+                <View
+                  key={p.planCode}
+                  style={styles.productCard}
+                  testID={`product-${p.planCode}`}
+                  accessibilityLabel={`${p.planName}, ${PLAN_TYPE_LABEL[p.planType] ?? p.planType}${
+                    detail ? `, ${detail.displayPrice}` : ''
+                  }${sku ? '' : '. Not available on this platform'}`}
+                >
                   <View style={styles.productHeader}>
                     <Text style={styles.productName}>{p.planName}</Text>
                     <Text style={styles.productType}>
@@ -85,6 +103,11 @@ export function PurchaseSheet({ flow, onClose }: PurchaseSheetProps) {
                   {sku && (
                     <Button
                       title={busy ? 'Processing…' : `Subscribe`}
+                      accessibilityLabel={
+                        busy
+                          ? `Processing ${p.planName} subscription`
+                          : `Subscribe to ${p.planName}${detail ? `, ${detail.displayPrice}` : ''}`
+                      }
                       onPress={() => purchase(sku)}
                       disabled={busy}
                       testID={`purchase-${p.planCode}`}
@@ -95,7 +118,13 @@ export function PurchaseSheet({ flow, onClose }: PurchaseSheetProps) {
             })}
 
             {state === 'purchasing' && (
-              <View style={styles.statusRow} testID="purchase-pending">
+              <View
+                style={styles.statusRow}
+                testID="purchase-pending"
+                accessibilityRole="progressbar"
+                accessibilityLabel="Purchase in progress"
+                accessibilityLiveRegion="polite"
+              >
                 <ActivityIndicator size="small" color={colors.primary} />
                 <Text style={styles.muted}>
                   Waiting for the store… complete the purchase in the system sheet.
@@ -103,20 +132,45 @@ export function PurchaseSheet({ flow, onClose }: PurchaseSheetProps) {
               </View>
             )}
             {state === 'verifying' && (
-              <View style={styles.statusRow} testID="purchase-verifying">
+              <View
+                style={styles.statusRow}
+                testID="purchase-verifying"
+                accessibilityRole="progressbar"
+                accessibilityLabel="Verifying purchase with the server"
+                accessibilityLiveRegion="polite"
+              >
                 <ActivityIndicator size="small" color={colors.primary} />
                 <Text style={styles.muted}>Verifying with the server…</Text>
               </View>
             )}
             {state === 'canceled' && (
-              <View style={styles.statusRow} testID="purchase-canceled">
-                <Ionicons name="close-circle-outline" size={20} color={colors.textMuted} />
+              <View
+                style={styles.statusRow}
+                testID="purchase-canceled"
+                accessibilityLiveRegion="polite"
+              >
+                <Ionicons
+                  name="close-circle-outline"
+                  size={20}
+                  color={colors.textMuted}
+                  accessible={false}
+                />
                 <Text style={styles.muted}>Purchase canceled. No charge was made.</Text>
               </View>
             )}
             {state === 'failed' && error && (
-              <View style={styles.statusRow} testID="purchase-failed">
-                <Ionicons name="alert-circle-outline" size={20} color={colors.error} />
+              <View
+                style={styles.statusRow}
+                testID="purchase-failed"
+                accessibilityRole="alert"
+                accessibilityLiveRegion="assertive"
+              >
+                <Ionicons
+                  name="alert-circle-outline"
+                  size={20}
+                  color={colors.error}
+                  accessible={false}
+                />
                 <Text style={styles.errorText}>{error}</Text>
               </View>
             )}
@@ -131,7 +185,13 @@ export function PurchaseSheet({ flow, onClose }: PurchaseSheetProps) {
               />
             </View>
             {state === 'restoring' && (
-              <View style={styles.statusRow} testID="purchase-restoring">
+              <View
+                style={styles.statusRow}
+                testID="purchase-restoring"
+                accessibilityRole="progressbar"
+                accessibilityLabel="Restoring purchases"
+                accessibilityLiveRegion="polite"
+              >
                 <ActivityIndicator size="small" color={colors.primary} />
                 <Text style={styles.muted}>Checking for previous purchases…</Text>
               </View>
@@ -140,8 +200,13 @@ export function PurchaseSheet({ flow, onClose }: PurchaseSheetProps) {
         )}
 
       {state === 'success' && (
-        <View style={styles.center} testID="purchase-success">
-          <Ionicons name="checkmark-circle" size={48} color={colors.success} />
+        <View
+          style={styles.center}
+          testID="purchase-success"
+          accessibilityLiveRegion="polite"
+          accessibilityLabel="Subscription successful. Your purchase was verified and premium features are now unlocked."
+        >
+          <Ionicons name="checkmark-circle" size={48} color={colors.success} accessible={false} />
           <Text style={styles.successTitle}>You&apos;re subscribed!</Text>
           <Text style={styles.muted}>
             Your purchase was verified. Premium features are now unlocked.
