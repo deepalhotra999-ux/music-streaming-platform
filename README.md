@@ -27,27 +27,56 @@ Player, open [`docs/preview.html`](docs/preview.html) in a browser.
 
 ### Admin console (Admin Panel V2)
 
-Real runtime captures of the admin console running against the demo API —
+Real runtime captures of every admin feature, running against the demo API —
 signed in as SUPER_ADMIN, all figures server-computed from demo data.
 
 | Sign in | Command Center |
 | ------- | -------------- |
-| ![Admin sign in](docs/screenshots/admin-00-login.png) | ![Admin Command Center](docs/screenshots/admin-01-command-center.png) |
+| ![Admin sign in](docs/screenshots/admin-v2-login.png) | ![Admin Command Center](docs/screenshots/admin-v2-command-center.png) |
 
-| Users & governance | Artists & bulk track ops |
-| ------------------ | ------------------------ |
-| ![Admin users](docs/screenshots/admin-03-users.png) | ![Admin artists](docs/screenshots/admin-05-artists.png) |
+| Global search | Roles |
+| ------------- | ----- |
+| ![Admin global search](docs/screenshots/admin-v2-search.png) | ![Admin roles](docs/screenshots/admin-v2-roles.png) |
 
-| Finance | Security |
-| ------- | -------- |
-| ![Admin finance](docs/screenshots/admin-08-finance.png) | ![Admin security](docs/screenshots/admin-09-security.png) |
+| Users | User detail |
+| ----- | ----------- |
+| ![Admin users](docs/screenshots/admin-v2-users.png) | ![Admin user detail](docs/screenshots/admin-v2-user-detail.png) |
 
-| Platform config & emergency controls | Audit log |
-| ----------------------------------- | --------- |
-| ![Admin platform config](docs/screenshots/admin-11-config.png) | ![Admin audit log](docs/screenshots/admin-12-audit.png) |
+| User login history | User track (listening) history |
+| ------------------ | ------------------------------ |
+| ![Admin user login history](docs/screenshots/admin-v2-user-login-history.png) | ![Admin user track history](docs/screenshots/admin-v2-user-app-history.png) |
 
-More captures (global search, roles, catalog, moderation, operations) live in
-[`docs/screenshots/`](docs/screenshots/).
+| Ban user | Artists |
+| -------- | ------- |
+| ![Admin ban dialog](docs/screenshots/admin-v2-user-ban-dialog.png) | ![Admin artists](docs/screenshots/admin-v2-artists.png) |
+
+| Artist detail & analytics | Catalog |
+| ------------------------- | ------- |
+| ![Admin artist detail](docs/screenshots/admin-v2-artist-detail.png) | ![Admin catalog](docs/screenshots/admin-v2-catalog.png) |
+
+| Platform analytics | Moderation queue |
+| ------------------ | ---------------- |
+| ![Admin analytics](docs/screenshots/admin-v2-analytics.png) | ![Admin moderation](docs/screenshots/admin-v2-moderation.png) |
+
+| Commerce | Finance — subscriptions |
+| -------- | ----------------------- |
+| ![Admin commerce](docs/screenshots/admin-v2-commerce.png) | ![Admin finance subscriptions](docs/screenshots/admin-v2-finance-subscriptions.png) |
+
+| Finance — commerce | Finance — royalties |
+| ------------------ | ------------------- |
+| ![Admin finance commerce](docs/screenshots/admin-v2-finance-commerce.png) | ![Admin finance royalties](docs/screenshots/admin-v2-finance-royalties.png) |
+
+| Security | Operations |
+| -------- | ---------- |
+| ![Admin security](docs/screenshots/admin-v2-security.png) | ![Admin operations](docs/screenshots/admin-v2-operations.png) |
+
+| Platform config | Impersonation |
+| --------------- | ------------- |
+| ![Admin platform config](docs/screenshots/admin-v2-platform-config.png) | ![Admin impersonation](docs/screenshots/admin-v2-impersonate.png) |
+
+| Releases | Audit log |
+| -------- | --------- |
+| ![Admin releases](docs/screenshots/admin-v2-releases.png) | ![Admin audit log](docs/screenshots/admin-v2-audit-log.png) |
 
 ## Prerequisites
 

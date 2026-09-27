@@ -67,18 +67,33 @@ function CommerceContent(): React.ReactNode {
     };
   }, [client]);
 
-  const stores = useApiList<AdminStore, { page?: number; limit?: number }>(
-    (q) => listAdminStores(client, q),
-    { page: 1, limit: PAGE_SIZE },
+  // Memoized fetchers: useApiList re-fetches whenever the fetcher identity
+  // changes, so inline arrows would refetch on every render (three lists on
+  // one page = the tab content never leaves "Loading...").
+  const fetchStores = useCallback(
+    (q: { page?: number; limit?: number }) => listAdminStores(client, q),
+    [client],
   );
-  const products = useApiList<AdminProduct, { page?: number; limit?: number }>(
-    (q) => listAdminProducts(client, q),
-    { page: 1, limit: PAGE_SIZE },
+  const fetchProducts = useCallback(
+    (q: { page?: number; limit?: number }) => listAdminProducts(client, q),
+    [client],
   );
-  const orders = useApiList<AdminOrder, { page?: number; limit?: number }>(
-    (q) => listAdminOrders(client, q),
-    { page: 1, limit: PAGE_SIZE },
+  const fetchOrders = useCallback(
+    (q: { page?: number; limit?: number }) => listAdminOrders(client, q),
+    [client],
   );
+  const stores = useApiList<AdminStore, { page?: number; limit?: number }>(fetchStores, {
+    page: 1,
+    limit: PAGE_SIZE,
+  });
+  const products = useApiList<AdminProduct, { page?: number; limit?: number }>(fetchProducts, {
+    page: 1,
+    limit: PAGE_SIZE,
+  });
+  const orders = useApiList<AdminOrder, { page?: number; limit?: number }>(fetchOrders, {
+    page: 1,
+    limit: PAGE_SIZE,
+  });
 
   const refresh = useCallback(() => {
     if (tab === 'stores') void stores.reload();

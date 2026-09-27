@@ -52,7 +52,7 @@ const withDefaults = <T extends RangeQuery>(q: T): Required<Pick<T, 'range'>> & 
 export async function analyticsRoutes(app: FastifyInstance, config: Config): Promise<void> {
   const limit = apiRateLimit(config);
   const deps = { db: prisma };
-  const artistGuard = [app.authenticate, requireRole('ARTIST', 'ADMIN')] as const;
+  const artistGuard = [app.authenticate, requireRole('ARTIST', 'ADMIN', 'SUPER_ADMIN')] as const;
 
   app.get(
     '/v1/artists/:id/analytics/overview',

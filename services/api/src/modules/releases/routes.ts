@@ -46,7 +46,7 @@ export async function releaseRoutes(app: FastifyInstance, config: Config): Promi
   app.post(
     '/v1/admin/deploy',
     {
-      preHandler: [app.authenticate, requireRole('ADMIN')],
+      preHandler: [app.authenticate, requireRole('ADMIN', 'SUPER_ADMIN')],
       schema: {
         tags: ['Admin'],
         summary: 'Trigger a deployment',
@@ -94,7 +94,7 @@ export async function releaseRoutes(app: FastifyInstance, config: Config): Promi
   app.get(
     '/v1/admin/deploy/runs',
     {
-      preHandler: [app.authenticate, requireRole('ADMIN')],
+      preHandler: [app.authenticate, requireRole('ADMIN', 'SUPER_ADMIN')],
       schema: {
         tags: ['Admin'],
         summary: 'List recent deployment workflow runs',
