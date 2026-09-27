@@ -52,6 +52,23 @@ export const SETTING_DEFINITIONS: Record<string, SettingDefinition> = {
     default: true,
     description: 'Kill switch for new user registration.',
   },
+  'billing.subscriptions_enabled': {
+    type: 'boolean',
+    default: true,
+    description:
+      'Kill switch for new subscription purchases. When false, purchase ' +
+      'verification returns 503; existing subscribers and store webhooks are ' +
+      'unaffected.',
+  },
+  'billing.grace_period_days': {
+    type: 'integer',
+    default: 3,
+    min: 0,
+    max: 30,
+    description:
+      'Days a PAST_DUE subscription keeps premium access after the paid ' +
+      'period ends, before entitlement is cut. 0 disables the grace window.',
+  },
   'platform.maintenance_message': {
     type: 'string',
     default: 'The platform is undergoing maintenance. Please try again shortly.',
@@ -156,6 +173,21 @@ export async function emergencyActive(key: string): Promise<boolean> {
   }
 }
 
+/**
+ * Billing management — typed read of a known setting. Never throws;
+ * returns the definition default when the DB is unreachable.
+ */
+export async function getSettingValue<T>(key: string, db: Db = prisma): Promise<T> {
+  const def = SETTING_DEFINITIONS[key];
+  try {
+    const map = await cachedSettings(db);
+    const v = map.get(key);
+    return (v === undefined ? def?.default : v) as T;
+  } catch {
+    return def?.default as T;
+  }
+}
+
 export async function getMaintenanceMessage(): Promise<string> {
   try {
     const map = await cachedSettings();
@@ -186,9 +218,7 @@ export async function listSettings(db: Db = prisma): Promise<SettingDto[]> {
     return {
       key,
       value: (row ? (row.value as boolean | number | string) : def.default) as
-        | boolean
-        | number
-        | string,
+        boolean | number | string,
       type: def.type,
       default: def.default,
       description: def.description,
@@ -212,9 +242,7 @@ const FLAG_KEY_RE = /^[a-z0-9][a-z0-9._-]{1,98}[a-z0-9]$/;
 export function validateFlagKey(key: string): void {
   if (!FLAG_KEY_RE.test(key)) {
     throw Object.assign(
-      new Error(
-        'Flag key must be 3-100 chars: lowercase letters, digits, dot, dash, underscore.',
-      ),
+      new Error('Flag key must be 3-100 chars: lowercase letters, digits, dot, dash, underscore.'),
       { statusCode: 400 },
     );
   }

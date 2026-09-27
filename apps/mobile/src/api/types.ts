@@ -453,6 +453,14 @@ export interface StoreProduct {
   planType: 'INDIVIDUAL' | 'FAMILY' | 'STUDENT';
   appleProductId: string | null;
   googleProductId: string | null;
+  // Billing management — plan catalog pricing (additive; present on the
+  // server, optional here so existing mocks keep compiling).
+  priceCents?: number;
+  currency?: string;
+  billingInterval?: 'WEEK' | 'MONTH' | 'YEAR';
+  intervalCount?: number;
+  trialDays?: number;
+  features?: string[];
 }
 
 /** Phase 19 — GET /v1/subscriptions/products response. */
@@ -460,6 +468,9 @@ export interface StoreProductsResponse {
   products: StoreProduct[];
   appleConfigured: boolean;
   googleConfigured: boolean;
+  // Billing management — false when the purchase kill switch is off; the
+  // client should hide the paywall and show existing-subscriber state.
+  purchasesEnabled?: boolean;
 }
 
 /** Phase 19 — POST /v1/subscriptions/verify-purchase response. */

@@ -607,6 +607,12 @@ describe('POST /v1/offline/downloads/:id/revalidate', () => {
       externalSubscriptionId: ext,
     });
     expect(r.body.subscription.status).toBe('PAST_DUE');
+    // Push the period end beyond the default 3-day grace window: fail closed
+    // once the past-due state is known and grace has lapsed.
+    await prisma.subscription.updateMany({
+      where: { userId: user.id },
+      data: { currentPeriodEnd: new Date(Date.now() - 10 * 86400000) },
+    });
 
     const res = await revalidate(user, grant.authorizationId);
     expect(res.statusCode).toBe(200);

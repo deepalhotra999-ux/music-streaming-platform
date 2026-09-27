@@ -705,12 +705,69 @@ model Plan {
   googleProductId String?  @map("google_product_id")
   devProductId    String?  @map("dev_product_id")
   active          Boolean  @default(true)
+  // Billing management — plan pricing. Editable from the admin console.
+  priceCents      Int              @default(0) @map("price_cents")
+  currency        String           @default("USD") @db.VarChar(3)
+  billingInterval BillingInterval  @default(MONTH) @map("billing_interval")
+  intervalCount   Int              @default(1) @map("interval_count")
+  trialDays       Int              @default(0) @map("trial_days")
+  features        Json             @default("[]")
+  sortOrder       Int              @default(0) @map("sort_order")
   createdAt       DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt       DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   subscriptions Subscription[]
 
   @@map("plans")
+}
+
+// Billing management — recurring price cadence for a plan.
+enum BillingInterval {
+  WEEK
+  MONTH
+  YEAR
+}
+
+// Billing management — discount codes. Exactly one of percentOff /
+// amountOffCents is set (enforced by a DB check constraint).
+model PromoCode {
+  id              String    @id @default(uuid()) @db.Uuid
+  code            String    @unique @db.Citext
+  description     String    @default("")
+  percentOff      Int?      @map("percent_off")
+  amountOffCents  Int?      @map("amount_off_cents")
+  currency        String    @default("USD") @db.VarChar(3)
+  maxRedemptions  Int?      @map("max_redemptions")
+  redeemedCount   Int       @default(0) @map("redeemed_count")
+  startsAt        DateTime? @map("starts_at") @db.Timestamptz(6)
+  expiresAt       DateTime? @map("expires_at") @db.Timestamptz(6)
+  active          Boolean   @default(true)
+  // JSON array of plan ids this code applies to; empty = all plans.
+  applicablePlans Json      @default("[]") @map("applicable_plans")
+  createdBy       String?   @map("created_by") @db.Uuid
+  createdAt       DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt       DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  redemptions PromoRedemption[]
+
+  @@index([active])
+  @@map("promo_codes")
+}
+
+// Billing management — append-only promo redemption ledger. One redemption
+// per user per code (unique constraint).
+model PromoRedemption {
+  id             String       @id @default(uuid()) @db.Uuid
+  promoCodeId    String       @map("promo_code_id") @db.Uuid
+  promoCode      PromoCode    @relation(fields: [promoCodeId], references: [id], onDelete: Restrict)
+  userId         String       @map("user_id") @db.Uuid
+  subscriptionId String?      @map("subscription_id") @db.Uuid
+  redeemedAt     DateTime     @default(now()) @map("redeemed_at") @db.Timestamptz(6)
+
+  @@unique([promoCodeId, userId])
+  @@index([userId])
+  @@index([promoCodeId])
+  @@map("promo_redemptions")
 }
 
 model Subscription {

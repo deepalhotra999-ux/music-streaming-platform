@@ -30,6 +30,7 @@
 //   their token.
 
 import type { PrismaClient, SubscriptionStatus } from '@prisma/client';
+import { getSettingValue } from '../ops/settings.js';
 
 export type EntitlementDenyReason =
   | 'no_subscription'
@@ -58,6 +59,15 @@ export interface SubscriptionRow {
   currentPeriodEnd: Date | null;
 }
 
+export interface EntitlementOptions {
+  /**
+   * Billing management — days a PAST_DUE subscription keeps premium access
+   * after the paid period ends. 0 (default) preserves the fail-closed
+   * behavior: no grace window.
+   */
+  gracePeriodDays?: number;
+}
+
 /**
  * Pure entitlement decision over a subscription row. Pure so the rules are
  * trivially unit-testable; `getEntitlement` adds the DB lookup.
@@ -65,6 +75,7 @@ export interface SubscriptionRow {
 export function resolveEntitlement(
   sub: SubscriptionRow | null,
   now: Date = new Date(),
+  opts: EntitlementOptions = {},
 ): EntitlementResult {
   if (!sub) {
     return {
@@ -98,10 +109,22 @@ export function resolveEntitlement(
       }
       return { ...base, entitled: false, reason: 'access_period_ended' };
     }
-    case 'PAST_DUE':
-      // Fail-closed: no grace window. A past-due subscription denies new
-      // sessions until the provider reports recovery.
+    case 'PAST_DUE': {
+      // Billing management — configurable grace window: a past-due
+      // subscription keeps access for gracePeriodDays after the paid period
+      // ends, giving the store's retry logic time to recover. Missing period
+      // end or 0 grace days fail closed, exactly as before.
+      const graceDays = opts.gracePeriodDays ?? 0;
+      const end = sub.currentPeriodEnd;
+      if (
+        graceDays > 0 &&
+        end &&
+        now.getTime() < end.getTime() + graceDays * 86_400_000
+      ) {
+        return { ...base, entitled: true, reason: 'ok' };
+      }
       return { ...base, entitled: false, reason: 'subscription_past_due' };
+    }
     case 'CANCELED':
       // Denied immediately per the Phase 18 brief — cancellation ends new
       // sessions even inside the paid period.
@@ -115,7 +138,8 @@ export function resolveEntitlement(
 
 /**
  * Load the user's latest subscription and decide entitlement. The single
- * entry point every caller uses.
+ * entry point every caller uses. The grace window comes from the
+ * `billing.grace_period_days` platform setting (default 3).
  */
 export async function getEntitlement(
   userId: string,
@@ -127,5 +151,6 @@ export async function getEntitlement(
     orderBy: { createdAt: 'desc' },
     select: { status: true, planId: true, currentPeriodStart: true, currentPeriodEnd: true },
   });
-  return resolveEntitlement(sub, now);
+  const gracePeriodDays = await getSettingValue<number>('billing.grace_period_days', db);
+  return resolveEntitlement(sub, now, { gracePeriodDays });
 }

@@ -225,11 +225,19 @@ export const userIdParams = {
  */
 export const storeProductSchema = {
   type: 'object',
-  required: ['planCode', 'planName', 'planType'],
+  required: ['planCode', 'planName', 'planType', 'priceCents', 'currency', 'billingInterval'],
   properties: {
     planCode: { type: 'string' },
     planName: { type: 'string' },
     planType: { type: 'string', enum: ['INDIVIDUAL', 'FAMILY', 'STUDENT'] },
+    // Billing management — pricing for the paywall. The store is the
+    // source of truth at checkout; these are display values.
+    priceCents: { type: 'integer' },
+    currency: { type: 'string' },
+    billingInterval: { type: 'string', enum: ['WEEK', 'MONTH', 'YEAR'] },
+    intervalCount: { type: 'integer' },
+    trialDays: { type: 'integer' },
+    features: { type: 'array', items: { type: 'string' } },
     appleProductId: { type: ['string', 'null'] },
     googleProductId: { type: ['string', 'null'] },
   },
@@ -237,11 +245,14 @@ export const storeProductSchema = {
 
 export const storeProductsSchema = {
   type: 'object',
-  required: ['products', 'appleConfigured', 'googleConfigured'],
+  required: ['products', 'appleConfigured', 'googleConfigured', 'purchasesEnabled'],
   properties: {
     products: { type: 'array', items: storeProductSchema },
     appleConfigured: { type: 'boolean' },
     googleConfigured: { type: 'boolean' },
+    // Billing management — false when the purchase kill switch is off; the
+    // client should hide the paywall and show existing-subscriber state.
+    purchasesEnabled: { type: 'boolean' },
   },
 } as const;
 

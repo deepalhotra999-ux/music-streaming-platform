@@ -21,8 +21,9 @@ import type { FastifyInstance } from 'fastify';
 import type { SubscriptionEventType, SubscriptionProvider } from '@prisma/client';
 import type { Config } from '../../config.js';
 import { prisma } from '../../db.js';
-import { notFound, problemSchema, unprocessableEntity } from '../../http/errors.js';
+import { notFound, problemSchema, serviceUnavailable, unprocessableEntity } from '../../http/errors.js';
 import { requirePermission } from '../../http/authorization.js';
+import { getSettingValue } from '../ops/settings.js';
 import { apiRateLimit } from '../../http/limits.js';
 import { getEntitlement, type EntitlementResult } from './entitlements.js';
 import {
@@ -232,11 +233,17 @@ export async function subscriptionRoutes(app: FastifyInstance, config: Config): 
     async (_request, reply) => {
       const plans = await prisma.plan.findMany({
         where: { active: true },
-        orderBy: { id: 'asc' },
+        orderBy: [{ sortOrder: 'asc' }, { id: 'asc' }],
         select: {
           id: true,
           name: true,
           planType: true,
+          priceCents: true,
+          currency: true,
+          billingInterval: true,
+          intervalCount: true,
+          trialDays: true,
+          features: true,
           appleProductId: true,
           googleProductId: true,
         },
@@ -247,6 +254,12 @@ export async function subscriptionRoutes(app: FastifyInstance, config: Config): 
           planCode: p.id,
           planName: p.name,
           planType: p.planType,
+          priceCents: p.priceCents,
+          currency: p.currency,
+          billingInterval: p.billingInterval,
+          intervalCount: p.intervalCount,
+          trialDays: p.trialDays,
+          features: p.features,
           appleProductId: p.appleProductId,
           googleProductId: p.googleProductId,
         }));
@@ -254,6 +267,10 @@ export async function subscriptionRoutes(app: FastifyInstance, config: Config): 
         products,
         appleConfigured: config.subscriptions.apple.enabled,
         googleConfigured: config.subscriptions.google.enabled,
+        purchasesEnabled: await getSettingValue<boolean>(
+          'billing.subscriptions_enabled',
+          prisma,
+        ),
       });
     },
   );
@@ -289,6 +306,16 @@ export async function subscriptionRoutes(app: FastifyInstance, config: Config): 
     },
     async (request, reply) => {
       const userId = request.authUser!.id;
+      // Billing management — purchase kill switch. When disabled, new
+      // purchases are refused; existing subscribers and store webhooks
+      // keep working.
+      const purchasesEnabled = await getSettingValue<boolean>(
+        'billing.subscriptions_enabled',
+        prisma,
+      );
+      if (!purchasesEnabled) {
+        throw serviceUnavailable('New subscription purchases are temporarily disabled.');
+      }
       const adapter = getStoreAdapter(request.body.provider, {
         config: config.subscriptions,
         db: prisma,

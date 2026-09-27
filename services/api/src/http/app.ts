@@ -37,6 +37,7 @@ import { moderationRoutes } from '../modules/moderation/routes.js';
 import { communityRoutes } from '../modules/community/routes.js';
 import { commerceRoutes } from '../modules/commerce/routes.js';
 import { subscriptionRoutes } from '../modules/subscriptions/routes.js';
+import { billingRoutes } from '../modules/subscriptions/billingRoutes.js';
 import { royaltyArtistRoutes, royaltyAdminRoutes } from '../modules/royalties/index.js';
 import { roomsRoutes } from '../modules/rooms/routes.js';
 import { roomsGateway } from '../modules/rooms/gateway.js';
@@ -234,6 +235,7 @@ export async function buildApp(config: Config): Promise<FastifyInstance> {
     await communityRoutes(instance, config);
     await commerceRoutes(instance, config);
     await subscriptionRoutes(instance, config);
+    await billingRoutes(instance);
     await royaltyArtistRoutes(instance, config);
     await royaltyAdminRoutes(instance, config);
     await roomsRoutes(instance, config);

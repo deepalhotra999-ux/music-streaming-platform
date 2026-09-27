@@ -29,6 +29,8 @@ const SETTING_TYPES: Record<string, 'boolean' | 'integer' | 'string'> = {
   'emergency.maintenance_mode': 'boolean',
   'emergency.readonly_mode': 'boolean',
   'emergency.new_signups_enabled': 'boolean',
+  'billing.subscriptions_enabled': 'boolean',
+  'billing.grace_period_days': 'integer',
   'platform.maintenance_message': 'string',
   'platform.support_email': 'string',
 };

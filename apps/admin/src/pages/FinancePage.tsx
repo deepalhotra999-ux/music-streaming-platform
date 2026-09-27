@@ -21,10 +21,11 @@ import type { AdminOrder } from '../api/commerce';
 import { listAdminOrders as listCommerceOrders } from '../api/commerce';
 import { EmptyState, ErrorState, LoadingState } from '../components/DataStates';
 import { RequirePermission } from '../components/PermissionGate';
+import { BillingCenter } from './BillingPage';
 import { Pagination } from '../components/Pagination';
 import { formatDate, formatMoney } from '../utils/format';
 
-type Tab = 'subscriptions' | 'commerce' | 'royalties';
+type Tab = 'subscriptions' | 'commerce' | 'royalties' | 'billing';
 
 export function FinancePage(): React.ReactNode {
   const { can } = usePermissions();
@@ -35,6 +36,9 @@ export function FinancePage(): React.ReactNode {
     { id: 'subscriptions', label: 'Subscriptions', perm: 'finance.view' },
     { id: 'commerce', label: 'Commerce', perm: 'finance.view' },
     { id: 'royalties', label: 'Royalties', perm: 'finance.view' },
+    // Billing management — plan catalog + promo codes need
+    // `subscriptions.manage` (FINANCE_ADMIN, SUPPORT_ADMIN).
+    { id: 'billing', label: 'Plans & promos', perm: 'subscriptions.manage' },
   ];
   return (
     <div>
@@ -69,6 +73,11 @@ export function FinancePage(): React.ReactNode {
       {tab === 'royalties' && (
         <RequirePermission perm="finance.view">
           <RoyaltiesCenter />
+        </RequirePermission>
+      )}
+      {tab === 'billing' && (
+        <RequirePermission perm="subscriptions.manage">
+          <BillingCenter />
         </RequirePermission>
       )}
     </div>
