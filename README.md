@@ -66,17 +66,25 @@ signed in as SUPER_ADMIN, all figures server-computed from demo data.
 | ------------------ | ------------------- |
 | ![Admin finance commerce](docs/screenshots/admin-v2-finance-commerce.png) | ![Admin finance royalties](docs/screenshots/admin-v2-finance-royalties.png) |
 
+| Finance — plans & promos | Finance — new plan dialog |
+| ------------------------ | ------------------------- |
+| ![Admin finance plans and promos](docs/screenshots/admin-v2-finance-plans.png) | ![Admin new plan dialog](docs/screenshots/admin-v2-finance-plan-dialog.png) |
+
 | Security | Operations |
 | -------- | ---------- |
 | ![Admin security](docs/screenshots/admin-v2-security.png) | ![Admin operations](docs/screenshots/admin-v2-operations.png) |
 
-| Platform config | Impersonation |
-| --------------- | ------------- |
-| ![Admin platform config](docs/screenshots/admin-v2-platform-config.png) | ![Admin impersonation](docs/screenshots/admin-v2-impersonate.png) |
+| Platform config | Platform config — billing settings |
+| --------------- | ---------------------------------- |
+| ![Admin platform config](docs/screenshots/admin-v2-platform-config.png) | ![Admin platform config billing settings](docs/screenshots/admin-v2-platform-config-billing.png) |
 
-| Releases | Audit log |
-| -------- | --------- |
-| ![Admin releases](docs/screenshots/admin-v2-releases.png) | ![Admin audit log](docs/screenshots/admin-v2-audit-log.png) |
+| Impersonation | Releases |
+| ------------- | -------- |
+| ![Admin impersonation](docs/screenshots/admin-v2-impersonate.png) | ![Admin releases](docs/screenshots/admin-v2-releases.png) |
+
+| Audit log |
+| --------- |
+| ![Admin audit log](docs/screenshots/admin-v2-audit-log.png) |
 
 ## Prerequisites
 
